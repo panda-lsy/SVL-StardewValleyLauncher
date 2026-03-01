@@ -168,6 +168,18 @@
                             Foreground="{DynamicResource ColorBrush1}"
                             FontSize="14"
                             Cursor="Hand"/>
+
+                    <Button x:Name="TabAbout"
+                            Content="关于"
+                            Click="OnTabClick"
+                            Tag="4"
+                            Padding="16,12"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource ColorBrush1}"
+                            FontSize="14"
+                            Cursor="Hand"/>
                 </StackPanel>
             </Border>
 
@@ -1214,6 +1226,298 @@
                                 <CheckBox Content="启用调试模式"
                                           IsChecked="{Binding DebugMode}"
                                           Style="{StaticResource SettingCheckBoxStyle}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ===== 关于 ===== -->
+                    <StackPanel x:Name="PanelAbout" Visibility="Collapsed">
+                        <!-- 作者卡片 -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- 作者图标 -->
+                                <Border Grid.Column="0"
+                                        Width="56"
+                                        Height="56"
+                                        CornerRadius="28"
+                                        Margin="0,0,16,0"
+                                        Background="{DynamicResource ColorBrush7}">
+                                    <Border.Clip>
+                                        <RectangleGeometry Rect="0,0,56,56" RadiusX="28" RadiusY="28"/>
+                                    </Border.Clip>
+                                    <Image Source="/Images/author-icon.png"
+                                           Stretch="UniformToFill"
+                                           Width="56"
+                                           Height="56"/>
+                                </Border>
+
+                                <!-- 作者信息 -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="作者"
+                                               FontSize="12"
+                                               Foreground="{DynamicResource ColorBrushGray3}"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="盛夏de背影"
+                                               FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource ColorBrush1}"/>
+                                    <TextBlock Text="mc_shengxia"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource ColorBrushGray3}"
+                                               Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <!-- 赞助按钮 -->
+                                <Button Grid.Column="2"
+                                        Padding="16,10"
+                                        VerticalAlignment="Center"
+                                        Cursor="Hand"
+                                        Command="{Binding SponsorCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE8C7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                        <TextBlock Text="赞助支持" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="FontSize" Value="14"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                CornerRadius="8"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center"
+                                                                              VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush7}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- 启动器 SVL 卡片 -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Junimo 图标 -->
+                                <Border Grid.Column="0"
+                                        Width="56"
+                                        Height="56"
+                                        Margin="0,0,16,0"
+                                        Background="{DynamicResource ColorBrush3}"
+                                        CornerRadius="12">
+                                    <Image Source="/Images/Junimo.png"
+                                           Stretch="Uniform"
+                                           Width="48"
+                                           Height="48"/>
+                                </Border>
+
+                                <!-- 启动器信息 -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="启动器"
+                                               FontSize="12"
+                                               Foreground="{DynamicResource ColorBrushGray3}"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="Stardew Valley Launcher"
+                                               FontSize="18"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource ColorBrush1}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <TextBlock Text="版本 "
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                                        <TextBlock Text="{Binding AppVersion}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource ColorBrush2}"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- 查看源码按钮 -->
+                                <Button Grid.Column="2"
+                                        Padding="16,10"
+                                        VerticalAlignment="Center"
+                                        Cursor="Hand"
+                                        Command="{Binding ViewSourceCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE8F1;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                        <TextBlock Text="查看源码" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="FontSize" Value="14"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                CornerRadius="8"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center"
+                                                                              VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- 启动器更新卡片 -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="启动器更新"
+                                               Style="{StaticResource SettingTitleStyle}"
+                                               Margin="0,0,0,8"/>
+
+                                    <!-- 更新状态 -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="当前版本: "
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                                        <TextBlock Text="{Binding AppVersion}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource ColorBrush2}"/>
+                                    </StackPanel>
+
+                                    <!-- 最新版本 -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="最新版本: "
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                                        <TextBlock Text="{Binding LatestVersion}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource ColorBrush2}"/>
+                                    </StackPanel>
+
+                                    <!-- 更新源 -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="更新源: "
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                                        <TextBlock Text="{Binding UpdateSource}"
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource ColorBrush1}"/>
+                                    </StackPanel>
+
+                                    <!-- 更新状态消息 -->
+                                    <TextBlock Text="{Binding UpdateStatusMessage}"
+                                               FontSize="12"
+                                               Foreground="{DynamicResource ColorBrush2}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,4,0,0"/>
+                                </StackPanel>
+
+                                <!-- 检查更新按钮 -->
+                                <Button Grid.Column="1"
+                                        Padding="16,10"
+                                        VerticalAlignment="Center"
+                                        Cursor="Hand"
+                                        Command="{Binding CheckUpdateCommand}"
+                                        IsEnabled="{Binding IsCheckingUpdate, Converter={StaticResource InverseBoolConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                        <TextBlock Text="检查更新" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="FontSize" Value="14"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                CornerRadius="8"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center"
+                                                                              VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- 更新设置卡片 -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="更新设置"
+                                           Style="{StaticResource SettingTitleStyle}"
+                                           Margin="0,0,0,12"/>
+
+                                <!-- 自动下载更新 -->
+                                <CheckBox Content="有新版本时自动下载更新"
+                                          IsChecked="{Binding AutoDownloadUpdate}"
+                                          Foreground="{DynamicResource ColorBrush1}"
+                                          FontSize="13"
+                                          Margin="0,0,0,12"/>
+
+                                <!-- 显示更新提示 -->
+                                <CheckBox Content="有新版本时显示提示"
+                                          IsChecked="{Binding ShowUpdateNotification}"
+                                          Foreground="{DynamicResource ColorBrush1}"
+                                          FontSize="13"
+                                          Margin="0,0,0,12"/>
+
+                                <!-- 更新源选择 -->
+                                <TextBlock Text="首选更新源"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           Margin="0,0,0,8"/>
+                                <ComboBox SelectedIndex="{Binding PreferredUpdateSourceIndex, Mode=TwoWay}"
+                                          ItemsSource="{Binding UpdateSourceOptions}"
+                                          Style="{StaticResource SettingComboBoxStyle}"
+                                          Width="200"
+                                          HorizontalAlignment="Left"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

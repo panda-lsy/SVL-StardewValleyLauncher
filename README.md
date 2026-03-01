@@ -13,6 +13,10 @@
   <img src="https://img.shields.io/badge/WPF-Desktop-blue?logo=windows" alt="WPF">
   <img src="https://img.shields.io/badge/License-Apache_2.0-green" alt="License">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows" alt="Windows">
+  <img src="https://img.shields.io/github/v/release/panda-lsy/SVL-StardewValleyLauncher?include_prereleases" alt="Release">
+  <a href="https://ifdian.net/a/mcshengxia" target="_blank">
+    <img src="https://img.shields.io/badge/爱发电-赞助支持-FF6B6B?logo=love&logoColor=white" alt="Sponsor">
+  </a>
 </p>
 
 ---
@@ -50,9 +54,10 @@
 
 ### 📋 Modpack 管理
 
-- 创建自定义 Modpack（选择 Mod 打包导出）
-- 导入 `.svlmp` 格式 Modpack
-- CurseForge Modpack 格式兼容
+- 创建自定义 Modpack（选择 Mod 打包导出为 `.zip`）
+- 导入 SVL Modpack（`.zip` 格式，包含 `modpack.json`）
+- CurseForge Modpack 格式兼容（`.zip` / `.cfmodpack`）
+- Nexus Collection 格式兼容（`.7z`/包含  `collection.json`）
 - 拖放安装支持
 
 ### ⬇️ 下载管理

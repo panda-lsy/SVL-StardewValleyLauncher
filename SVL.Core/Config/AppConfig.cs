@@ -385,6 +385,23 @@ public class AppSettings
     /// 启用调试模式
     /// </summary>
     public bool DebugMode { get; set; } = false;
+
+    // ===== 启动器更新设置 =====
+
+    /// <summary>
+    /// 有新版本时自动下载更新
+    /// </summary>
+    public bool AutoDownloadUpdate { get; set; } = false;
+
+    /// <summary>
+    /// 有新版本时显示提示
+    /// </summary>
+    public bool ShowUpdateNotification { get; set; } = true;
+
+    /// <summary>
+    /// 首选更新源 (0=GitHub, 1=Gitee)
+    /// </summary>
+    public int PreferredUpdateSource { get; set; } = 0;
 }
 
 // ===== 枚举定义 =====

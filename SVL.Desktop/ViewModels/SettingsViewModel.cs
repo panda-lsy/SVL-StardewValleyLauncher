@@ -51,6 +51,13 @@ public partial class SettingsViewModel : ObservableObject
         "NexusMods"
     };
 
+    // 启动器更新源选项
+    public List<string> UpdateSourceOptions { get; } = new()
+    {
+        "GitHub (推荐)",
+        "Gitee (国内加速)"
+    };
+
     private System.Threading.CancellationTokenSource? _autoSaveCts;
 
     // 避免 LoadSettings 过程中触发“默认下载源立即保存”
@@ -103,6 +110,10 @@ public partial class SettingsViewModel : ObservableObject
 
         // 初始化 Material You 配色方案列表
         InitializeColorSchemes();
+
+        // 初始化应用版本号
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.0";
 
         // 加载设置
         LoadSettings();
@@ -564,7 +575,12 @@ public partial class SettingsViewModel : ObservableObject
                 MinimizeToTrayOnClose = MinimizeToTrayOnClose,
                 ShowNotifications = ShowNotifications,
                 LogLevel = (LogLevel)SelectedLogLevelIndex,
-                DebugMode = DebugMode
+                DebugMode = DebugMode,
+
+                // 启动器更新设置
+                AutoDownloadUpdate = AutoDownloadUpdate,
+                ShowUpdateNotification = ShowUpdateNotification,
+                PreferredUpdateSource = PreferredUpdateSourceIndex
             };
 
             var success = AppConfig.SaveSettings(settings);
@@ -1237,6 +1253,12 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
+    /// <summary>
+    /// 应用版本号
+    /// </summary>
+    [ObservableProperty]
+    private string _appVersion;
+
     [ObservableProperty]
     private string _nexusModsApiStatus = string.Empty;
 
@@ -1246,7 +1268,167 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _curseforgeApiStatus = string.Empty;
 
+    // ===== 启动器更新 =====
+
+    /// <summary>
+    /// 最新版本号
+    /// </summary>
+    [ObservableProperty]
+    private string _latestVersion = "检查中...";
+
+    /// <summary>
+    /// 更新源名称
+    /// </summary>
+    [ObservableProperty]
+    private string _updateSource = "GitHub";
+
+    /// <summary>
+    /// 更新状态消息
+    /// </summary>
+    [ObservableProperty]
+    private string _updateStatusMessage = string.Empty;
+
+    /// <summary>
+    /// 是否正在检查更新
+    /// </summary>
+    [ObservableProperty]
+    private bool _isCheckingUpdate = false;
+
+    /// <summary>
+    /// 有新版本时自动下载更新
+    /// </summary>
+    [ObservableProperty]
+    private bool _autoDownloadUpdate = false;
+
+    /// <summary>
+    /// 有新版本时显示提示
+    /// </summary>
+    [ObservableProperty]
+    private bool _showUpdateNotification = true;
+
+    /// <summary>
+    /// 首选更新源索引 (0=GitHub, 1=Gitee)
+    /// </summary>
+    [ObservableProperty]
+    private int _preferredUpdateSourceIndex = 0;
+
+    /// <summary>
+    /// 是否有可用更新
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasUpdateAvailable = false;
+
+    /// <summary>
+    /// 最新版本的下载 URL
+    /// </summary>
+    [ObservableProperty]
+    private string _latestReleaseUrl = string.Empty;
+
     // ===== 辅助方法 =====
+
+    /// <summary>
+    /// 打开赞助页面
+    /// </summary>
+    [RelayCommand]
+    private void Sponsor()
+    {
+        try
+        {
+            ProcessEx.OpenUrl("https://ifdian.net/a/mcshengxia");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[SettingsViewModel] 打开赞助页面失败");
+            StatusMessage = "打开赞助页面失败";
+        }
+    }
+
+    /// <summary>
+    /// 打开源码页面
+    /// </summary>
+    [RelayCommand]
+    private void ViewSource()
+    {
+        try
+        {
+            ProcessEx.OpenUrl("https://github.com/panda-lsy/SVL-StardewValleyLauncher");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[SettingsViewModel] 打开源码页面失败");
+            StatusMessage = "打开源码页面失败";
+        }
+    }
+
+    /// <summary>
+    /// 检查启动器更新
+    /// </summary>
+    [RelayCommand]
+    private async Task CheckUpdate()
+    {
+        if (IsCheckingUpdate) return;
+
+        try
+        {
+            IsCheckingUpdate = true;
+            UpdateStatusMessage = "正在检查更新...";
+
+            var preferGitee = PreferredUpdateSourceIndex == 1;
+            var result = await LauncherUpdateService.CheckForUpdateAsync(preferGitee);
+
+            if (result.Success)
+            {
+                LatestVersion = result.LatestVersion.ToString();
+                UpdateSource = result.Source;
+                HasUpdateAvailable = result.HasUpdate;
+
+                if (result.HasUpdate)
+                {
+                    UpdateStatusMessage = $"发现新版本 {result.LatestVersion}！";
+                    LatestReleaseUrl = result.ReleaseInfo?.HtmlUrl ?? "";
+
+                    // 如果设置了自动下载更新
+                    if (AutoDownloadUpdate && result.ReleaseInfo?.Assets.Count > 0)
+                    {
+                        UpdateStatusMessage = $"正在下载新版本 {result.LatestVersion}...";
+                        // TODO: 实现自动下载逻辑
+                    }
+                }
+                else
+                {
+                    UpdateStatusMessage = "已是最新版本";
+                }
+
+                Log.Info($"[SettingsViewModel] 检查更新完成: 当前={result.CurrentVersion}, 最新={result.LatestVersion}, 有更新={result.HasUpdate}");
+            }
+            else
+            {
+                UpdateStatusMessage = result.ErrorMessage ?? "检查更新失败";
+                Log.Warn($"[SettingsViewModel] 检查更新失败: {result.ErrorMessage}");
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusMessage = $"检查更新失败: {ex.Message}";
+            Log.Error(ex, "[SettingsViewModel] 检查更新异常");
+        }
+        finally
+        {
+            IsCheckingUpdate = false;
+        }
+    }
+
+    /// <summary>
+    /// 打开最新版本页面
+    /// </summary>
+    [RelayCommand]
+    private void OpenLatestRelease()
+    {
+        if (!string.IsNullOrEmpty(LatestReleaseUrl))
+        {
+            ProcessEx.OpenUrl(LatestReleaseUrl);
+        }
+    }
 
     /// <summary>
     /// 从配置文件加载设置
@@ -1301,6 +1483,11 @@ public partial class SettingsViewModel : ObservableObject
             ShowNotifications = settings.ShowNotifications;
             SelectedLogLevelIndex = (int)settings.LogLevel;
             DebugMode = settings.DebugMode;
+
+            // 启动器更新设置
+            AutoDownloadUpdate = settings.AutoDownloadUpdate;
+            ShowUpdateNotification = settings.ShowUpdateNotification;
+            PreferredUpdateSourceIndex = settings.PreferredUpdateSource;
 
             // 默认下载源（加载时不要触发立即保存）
             _suppressDefaultSourceImmediateSave = true;
@@ -1566,6 +1753,23 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnDebugModeChanged(bool value)
     {
+        AutoSave();
+    }
+
+    partial void OnAutoDownloadUpdateChanged(bool value)
+    {
+        AutoSave();
+    }
+
+    partial void OnShowUpdateNotificationChanged(bool value)
+    {
+        AutoSave();
+    }
+
+    partial void OnPreferredUpdateSourceIndexChanged(int value)
+    {
+        // 立即更新显示的更新源名称
+        UpdateSource = value == 1 ? "Gitee" : "GitHub";
         AutoSave();
     }
 

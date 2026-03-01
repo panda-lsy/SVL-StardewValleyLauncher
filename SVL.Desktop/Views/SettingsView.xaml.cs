@@ -70,6 +70,7 @@ public partial class SettingsView : UserControl
             1 => TabApi,
             2 => TabPersonalization,
             3 => TabOther,
+            4 => TabAbout,
             _ => TabBasic
         };
 
@@ -91,6 +92,7 @@ public partial class SettingsView : UserControl
         ResetTabStyle(TabApi);
         ResetTabStyle(TabPersonalization);
         ResetTabStyle(TabOther);
+        ResetTabStyle(TabAbout);
 
         // 设置活动标签页样式（使用主题强调色）
         var accentBrush = Application.Current.TryFindResource("ColorBrush2") as SolidColorBrush;
@@ -104,6 +106,7 @@ public partial class SettingsView : UserControl
         PanelApi.Visibility = Visibility.Collapsed;
         PanelPersonalization.Visibility = Visibility.Collapsed;
         PanelOther.Visibility = Visibility.Collapsed;
+        PanelAbout.Visibility = Visibility.Collapsed;
 
         // 显示选中的面板
         switch (activeTab.Tag.ToString())
@@ -119,6 +122,9 @@ public partial class SettingsView : UserControl
                 break;
             case "3":
                 PanelOther.Visibility = Visibility.Visible;
+                break;
+            case "4":
+                PanelAbout.Visibility = Visibility.Visible;
                 break;
         }
     }
