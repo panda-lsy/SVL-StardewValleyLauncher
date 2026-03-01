@@ -2,6 +2,15 @@
 
 All notable changes to SVL (Stardew Valley Launcher) will be documented in this file.
 
+## [1.1.1] - 2026-03-01
+
+### Fixed
+
+- **设置左侧栏主题响应** - 切换主题时高亮颜色现在会实时更新
+- **关于页面自动检查更新** - 切换到"关于"选项卡时自动检查更新，无需手动点击
+
+---
+
 ## [1.1.0] - 2026-03-01
 
 ### Added

@@ -113,7 +113,7 @@ public partial class SettingsViewModel : ObservableObject
 
         // 初始化应用版本号
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.0";
+        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.1";
 
         // 加载设置
         LoadSettings();

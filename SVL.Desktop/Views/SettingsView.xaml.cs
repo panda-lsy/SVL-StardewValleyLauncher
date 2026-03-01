@@ -94,10 +94,10 @@ public partial class SettingsView : UserControl
         ResetTabStyle(TabOther);
         ResetTabStyle(TabAbout);
 
-        // 设置活动标签页样式（使用主题强调色）
-        var accentBrush = Application.Current.TryFindResource("ColorBrush2") as SolidColorBrush;
-        var accentColor = accentBrush?.Color ?? Color.FromRgb(0x7C, 0x4D, 0xFF);
-        activeTab.Background = new SolidColorBrush(Color.FromArgb(0x33, accentColor.R, accentColor.G, accentColor.B));
+        // 设置活动标签页样式（使用 DynamicResource 保持主题响应）
+        // 使用半透明背景样式，通过 SetResourceReference 保持动态绑定
+        activeTab.SetResourceReference(Button.BackgroundProperty, "ColorBrush2");
+        activeTab.Opacity = 0.7; // 通过 Opacity 实现半透明效果
         activeTab.Foreground = new SolidColorBrush(Colors.White);
         _currentTab = activeTab;
 
@@ -125,6 +125,11 @@ public partial class SettingsView : UserControl
                 break;
             case "4":
                 PanelAbout.Visibility = Visibility.Visible;
+                // 切换到关于页面时自动检查更新
+                if (DataContext is ViewModels.SettingsViewModel viewModel)
+                {
+                    viewModel.CheckUpdateCommand.Execute(null);
+                }
                 break;
         }
     }
@@ -133,6 +138,7 @@ public partial class SettingsView : UserControl
     {
         tab.Background = Brushes.Transparent;
         tab.SetResourceReference(Button.ForegroundProperty, "ColorBrush1");
+        tab.Opacity = 1.0; // 重置透明度
     }
 
     /// <summary>

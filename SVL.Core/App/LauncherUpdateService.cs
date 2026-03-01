@@ -42,7 +42,7 @@ public static class LauncherUpdateService
         get
         {
             var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version ?? new Version(1, 1, 0, 0);
+            return version ?? new Version(1, 1, 1, 0);
         }
     }
 
