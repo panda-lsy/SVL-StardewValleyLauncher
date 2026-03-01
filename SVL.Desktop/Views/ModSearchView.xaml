@@ -1,0 +1,381 @@
+<UserControl x:Class="SVL.Desktop.Views.ModSearchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
+             xmlns:converters="clr-namespace:SVL.Desktop.Converters"
+             xmlns:controls="clr-namespace:SVL.Desktop.Controls"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=viewModel:ModSearchViewModel}"
+             d:DesignHeight="800"
+             d:DesignWidth="1200"
+             >
+
+
+    <UserControl.Resources>
+        <converters:LongToFileSizeConverter x:Key="FileSizeConverter"/>
+        <converters:UrlToVisibilityConverter x:Key="UrlToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <StackPanel Margin="20">
+
+            <!-- ===== 标题 ===== -->
+            <TextBlock Text="搜索 MOD"
+                       FontSize="24"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorBrush1}"
+                       Margin="0,0,0,24"/>
+
+            <!-- ===== 搜索条件 Card ===== -->
+            <controls:MyCard Margin="0,0,0,20">
+                <Grid Margin="9">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 第一行标签：MOD名称 | 来源 -->
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="MOD 名称/ID"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"/>
+
+                        <TextBlock Grid.Column="2"
+                                   Text="来源"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"/>
+                    </Grid>
+
+                    <!-- 第一行输入：MOD名称输入框 | 来源下拉框 -->
+                    <Grid Grid.Row="1" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding SearchName, UpdateSourceTrigger=PropertyChanged}"
+                                 FontSize="13"
+                                 Padding="12,10"
+                                 Background="{DynamicResource ColorBrushGray8}"
+                                 Foreground="{DynamicResource ColorBrush1}"
+                                 BorderBrush="{DynamicResource ColorBrushGray3}"
+                                 BorderThickness="1"
+                                 VerticalContentAlignment="Center"
+                                 FocusVisualStyle="{x:Null}"
+                                 IsTabStop="False">
+                            <TextBox.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </TextBox.Resources>
+                        </TextBox>
+
+                        <ComboBox Grid.Column="2"
+                                  ItemsSource="{Binding Sources}"
+                                  SelectedItem="{Binding SelectedSource}"
+                                  Style="{StaticResource SettingComboBoxStyle}"
+                                  Padding="12,10"
+                                  FocusVisualStyle="{x:Null}"
+                                  IsTabStop="False"/>
+                    </Grid>
+
+                    <!-- 第二行标签：游戏版本 | 类型 -->
+                    <Grid Grid.Row="2" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="游戏版本"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"/>
+
+                        <TextBlock Grid.Column="2"
+                                   Text="类型"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"/>
+                    </Grid>
+
+                    <!-- 第二行输入：游戏版本 | 类型 -->
+                    <Grid Grid.Row="3" Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 游戏版本 ComboBox（可编辑，带占位符） -->
+                        <ComboBox Grid.Column="0"
+                                  ItemsSource="{Binding GameVersions}"
+                                  SelectedItem="{Binding SelectedGameVersion}"
+                                  IsEditable="True"
+                                  Text="{Binding SearchGameVersion, UpdateSourceTrigger=PropertyChanged}"
+                                  Style="{StaticResource SettingComboBoxStyle}"
+                                  Padding="12,10"
+                                  FocusVisualStyle="{x:Null}"
+                                  IsTabStop="False"/>
+
+                        <!-- 类型选择 ComboBox -->
+                        <ComboBox Grid.Column="2"
+                                  ItemsSource="{Binding ModTypes}"
+                                  SelectedItem="{Binding SelectedModType}"
+                                  Style="{StaticResource SettingComboBoxStyle}"
+                                  Padding="12,10"
+                                  FocusVisualStyle="{x:Null}"
+                                  IsTabStop="False"/>
+                    </Grid>
+
+                    <!-- 第三行按钮：搜索 | 重置条件（并列） -->
+                    <StackPanel Grid.Row="4"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Command="{Binding SearchModsCommand}"
+                                Content="搜索"
+                                Width="100"
+                                Height="36"
+                                FontSize="13"
+                                Background="{DynamicResource ColorBrush2}"
+                                Foreground="White"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Margin="0,0,8,0"
+                                FocusVisualStyle="{x:Null}"
+                                IsTabStop="False">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+
+                        <Button Command="{Binding ResetSearchCommand}"
+                                Content="重置条件"
+                                Width="100"
+                                Height="36"
+                                FontSize="13"
+                                Background="Transparent"
+                                Foreground="{DynamicResource ColorBrushGray3}"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource ColorBrush3}"
+                                Cursor="Hand"
+                                FocusVisualStyle="{x:Null}"
+                                IsTabStop="False">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </controls:MyCard>
+
+            <!-- ===== 状态消息 ===== -->
+            <TextBlock Text="{Binding StatusMessage}"
+                       FontSize="13"
+                       Foreground="{DynamicResource ColorBrushGray3}"
+                       Margin="0,0,0,12"
+                       Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}"/>
+
+            <!-- ===== 加载指示器 ===== -->
+            <StackPanel Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                        Margin="0,20,0,0">
+                <TextBlock Text="正在搜索..."
+                           FontSize="13"
+                           Foreground="{DynamicResource ColorBrushGray3}"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- ===== MOD 列表 Card ===== -->
+            <controls:ModSearchListControl ItemsSource="{Binding ModList}"
+                                           DetailsCommand="{Binding ViewModDetailsCommand}"
+                                           ShowDetailsButton="False"/>
+
+            <!-- ===== 分页控件（SMAPI风格）===== -->
+            <controls:MyCard Margin="0,20,0,0"
+                           HorizontalAlignment="Center"
+                           Visibility="{Binding IsPaginationVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,1,0,1">
+                    <!-- 上一页按钮 -->
+                    <Button Command="{Binding PreviousPageCommand}"
+                            Content="上一页"
+                            Width="70"
+                            Height="32"
+                            Margin="0,0,8,0"
+                            FontSize="12"
+                            Background="{DynamicResource ColorBrush2}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            IsEnabled="{Binding HasPreviousPage}"
+                            FocusVisualStyle="{x:Null}"
+                            IsTabStop="False">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Opacity" Value="0.5" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <!-- 页码按钮列表 -->
+                    <ItemsControl ItemsSource="{Binding PageNumbers}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- 省略号 (-1) -->
+                                    <TextBlock Text="..."
+                                               FontSize="14"
+                                               Foreground="{DynamicResource ColorBrushGray3}"
+                                               VerticalAlignment="Center"
+                                               Margin="4,0"
+                                               Visibility="{Binding ., Converter={StaticResource NegativeIntToCollapsedConverter}}" />
+
+                                    <!-- 页码按钮 -->
+                                    <Button Content="{Binding .}"
+                                            Width="36"
+                                            Height="32"
+                                            Margin="2,0"
+                                            FontSize="12"
+                                            Command="{Binding DataContext.GoToPageCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding .}"
+                                            Visibility="{Binding ., Converter={StaticResource PositiveIntToCollapsedConverter}}"
+                                            FocusVisualStyle="{x:Null}"
+                                            IsTabStop="False">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrushGray5}" />
+                                                <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}" />
+                                                <Setter Property="BorderThickness" Value="0" />
+                                                <Setter Property="Cursor" Value="Hand" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                                    CornerRadius="4"
+                                                                    Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                                VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <!-- 当前页高亮 -->
+                                                    <DataTrigger Value="True">
+                                                        <DataTrigger.Binding>
+                                                            <MultiBinding Converter="{StaticResource PageNumberToBoolConverter}">
+                                                                <Binding Path="." />
+                                                                <Binding Path="DataContext.CurrentPage" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                            </MultiBinding>
+                                                        </DataTrigger.Binding>
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}" />
+                                                        <Setter Property="Foreground" Value="White" />
+                                                        <Setter Property="FontWeight" Value="Bold" />
+                                                    </DataTrigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 下一页按钮 -->
+                    <Button Command="{Binding NextPageCommand}"
+                            Content="下一页"
+                            Width="70"
+                            Height="32"
+                            Margin="8,0,0,0"
+                            FontSize="12"
+                            Background="{DynamicResource ColorBrush2}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            IsEnabled="{Binding HasNextPage}"
+                            FocusVisualStyle="{x:Null}"
+                            IsTabStop="False">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Opacity" Value="0.5" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <!-- 当前页/总页数显示 -->
+                    <TextBlock Text="{Binding StatusMessage}"
+                               FontSize="12"
+                               Foreground="{DynamicResource ColorBrushGray3}"
+                               VerticalAlignment="Center"
+                               Margin="12,0,0,0"/>
+                </StackPanel>
+            </controls:MyCard>
+
+    </StackPanel>
+</UserControl>

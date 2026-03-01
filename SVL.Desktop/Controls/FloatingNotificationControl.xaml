@@ -1,0 +1,102 @@
+<UserControl x:Class="SVL.Desktop.Controls.FloatingNotificationControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             d:DesignHeight="120"
+             d:DesignWidth="400"
+             x:Name="RootControl"
+             IsHitTestVisible="True"
+             Loaded="OnLoaded">
+    <UserControl.Resources>
+        <!-- 入场动画 -->
+        <Storyboard x:Key="ShowAnimation">
+            <DoubleAnimation Storyboard.TargetName="RootControl"
+                           Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                           From="-150"
+                           To="0"
+                           Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction>
+                    <BackEase EasingMode="EaseOut" Amplitude="0.5"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="RootControl"
+                           Storyboard.TargetProperty="Opacity"
+                           From="0"
+                           To="1"
+                           Duration="0:0:0.3"/>
+        </Storyboard>
+
+        <!-- 退场动画 -->
+        <Storyboard x:Key="HideAnimation" Completed="OnHideAnimationCompleted">
+            <DoubleAnimation Storyboard.TargetName="RootControl"
+                           Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                           To="-150"
+                           Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <QuadraticEase EasingMode="EaseIn"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="RootControl"
+                           Storyboard.TargetProperty="Opacity"
+                           To="0"
+                           Duration="0:0:0.3"/>
+        </Storyboard>
+    </UserControl.Resources>
+
+    <UserControl.RenderTransform>
+        <TranslateTransform Y="0" x:Name="Transform"/>
+    </UserControl.RenderTransform>
+
+    <!-- 通知卡片 -->
+    <!-- Background 和 Icon 由代码动态控制，默认使用 Success 类型 -->
+    <Border x:Name="NotificationCard"
+            CornerRadius="8"
+            Padding="20,16"
+            Margin="20,20,20,0"
+            HorizontalAlignment="Center">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000"
+                            BlurRadius="16"
+                            ShadowDepth="0"
+                            Opacity="0.25"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 图标 -->
+            <!-- Background 和 Text 由代码动态控制 -->
+            <Border x:Name="IconBackground"
+                    Grid.Column="0"
+                    Width="40"
+                    Height="40"
+                    CornerRadius="20"
+                    Margin="0,0,16,0">
+                <TextBlock x:Name="IconTextBlock"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- 消息内容 -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Title, ElementName=RootControl}"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="White"
+                           Margin="0,0,0,4"/>
+                <TextBlock Text="{Binding Message, ElementName=RootControl}"
+                           FontSize="13"
+                           Foreground="White"
+                           Opacity="0.9"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

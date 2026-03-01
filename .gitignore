@@ -1,0 +1,92 @@
+## ==============================
+## SVL (Stardew Valley Launcher)
+## .gitignore for open-source release
+## ==============================
+
+# ----- Build outputs -----
+bin/
+obj/
+publish/
+out/
+[Bb]uild[Ll]og.*
+*.buildlog
+
+# ----- .NET / MSBuild -----
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ----- NuGet -----
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+
+# ----- IDE / Visual Studio -----
+.vs/
+*.vsidx
+*.vsps
+*.pidb
+*.svclog
+*.scc
+*.rsuser
+*.csproj.user
+*.dbmdl
+*.jfm
+launchSettings.json
+
+# ----- JetBrains Rider -----
+.idea/
+*.sln.iml
+
+# ----- VS Code -----
+.vscode/
+*.code-workspace
+
+# ----- OS generated -----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ----- Test results -----
+TestResult/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+
+# ----- Fody (auto-generated) -----
+FodyWeavers.xsd
+
+# ----- Debug / temp files -----
+*.log
+*.tmp
+*.temp
+*.cache
+nul
+
+# ----- Submodules / external source (not distributed) -----
+SMAPI/
+PCL2-CE/
+
+# ----- Misc generated / stale files -----
+DesktopSVLsmapireleases.json
+smapireleases.json
+
+# ----- AI / workflow metadata -----
+.claude/
+.spec-workflow/
+CLAUDE.md

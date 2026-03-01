@@ -1,0 +1,423 @@
+<UserControl x:Class="SVL.Desktop.Views.InstanceSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:converters="clr-namespace:SVL.Desktop.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="600">
+    <UserControl.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <!-- 提示卡片 -->
+        <Border Background="{DynamicResource ColorBrush2}"
+                BorderBrush="{DynamicResource ColorBrush3}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16"
+                Margin="0,0,0,16">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000"
+                                BlurRadius="8"
+                                ShadowDepth="0"
+                                Opacity="0.1"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="ℹ️"
+                           FontSize="18"
+                           Margin="0,0,12,0"
+                           VerticalAlignment="Center"/>
+                <TextBlock Text="这些设置只对该游戏版本生效，不会影响其他版本"
+                           FontSize="13"
+                           Foreground="White"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 启动选项卡片 -->
+        <Border Background="{DynamicResource ColorBrushTransparentBackground}"
+                BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="20"
+                Margin="0,0,0,16">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000"
+                                BlurRadius="8"
+                                ShadowDepth="0"
+                                Opacity="0.1"/>
+            </Border.Effect>
+            <StackPanel>
+                <TextBlock Text="启动选项"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorBrush1}"
+                           Margin="0,0,0,16"/>
+
+                <!-- 版本隔离 -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="版本隔离"
+                               FontSize="14"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               VerticalAlignment="Center"/>
+
+                    <CheckBox Grid.Column="1"
+                              IsChecked="{Binding EnableIsolation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              Content="开启版本隔离（Mod 独立，存档共享）"
+                              FontSize="14"
+                              Foreground="{DynamicResource ColorBrush1}"
+                              Cursor="Hand"/>
+                </Grid>
+
+                <!-- 游戏窗口标题 -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="窗口标题"
+                               FontSize="14"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               VerticalAlignment="Center"/>
+
+                    <TextBox Grid.Column="1"
+                             Text="{Binding WindowTitle, UpdateSourceTrigger=PropertyChanged}"
+                             MinHeight="32"
+                             Padding="8,6"
+                             VerticalContentAlignment="Center"
+                             FontSize="13"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             CaretBrush="{DynamicResource ColorBrush1}"
+                             BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                             Margin="0,0,8,0">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Border x:Name="Border"
+                                                    Background="{DynamicResource ColorBrushTransparentBackground}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}"
+                                                    MinHeight="{TemplateBinding MinHeight}">
+                                                <ScrollViewer x:Name="PART_ContentHost"
+                                                              VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+
+                    <!-- [?] 按钮 -->
+                    <Button Grid.Column="2"
+                            Command="{Binding ShowPlaceholderHelpCommand}"
+                            Width="32"
+                            Height="32"
+                            Margin="0"
+                            FontSize="16"
+                            FontWeight="Bold"
+                            Content="?"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="ButtonBorder"
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderThickness="0"
+                                                    CornerRadius="16"
+                                                    Width="32"
+                                                    Height="32"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush1}" TargetName="ButtonBorder"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+
+                <!-- 自定义启动参数 -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="启动参数"
+                               FontSize="14"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               VerticalAlignment="Top"
+                               Margin="0,8,0,0"/>
+
+                    <Grid Grid.Column="1">
+                        <TextBox Text="{Binding CustomArguments, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="60"
+                                 Padding="8,6"
+                                 FontSize="13"
+                                 Foreground="{DynamicResource ColorBrush1}"
+                                 CaretBrush="{DynamicResource ColorBrush1}"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 BorderBrush="{DynamicResource ColorBrushSemiTransparent}">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="TextBox">
+                                                <Border x:Name="Border"
+                                                        Background="{DynamicResource ColorBrushTransparentBackground}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ScrollViewer x:Name="PART_ContentHost"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                    </Grid>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 服务器卡片 -->
+        <Border Background="{DynamicResource ColorBrushTransparentBackground}"
+                BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="20"
+                Margin="0,0,0,16">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000"
+                                BlurRadius="8"
+                                ShadowDepth="0"
+                                Opacity="0.1"/>
+            </Border.Effect>
+            <StackPanel>
+                <TextBlock Text="服务器"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorBrush1}"
+                           Margin="0,0,0,16"/>
+
+                <!-- 自动进入服务器 -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="自动进入"
+                               FontSize="14"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               VerticalAlignment="Center"/>
+
+                    <CheckBox Grid.Column="1"
+                              IsChecked="{Binding AutoConnectServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              Content="启动时自动连接服务器"
+                              FontSize="14"
+                              Foreground="{DynamicResource ColorBrush1}"
+                              Cursor="Hand"/>
+                </Grid>
+
+                <!-- 服务器地址 -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="服务器地址"
+                               FontSize="14"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               VerticalAlignment="Center"/>
+
+                    <TextBox Grid.Column="1"
+                             Text="{Binding ServerAddress, UpdateSourceTrigger=PropertyChanged}"
+                             MinHeight="32"
+                             Padding="8,6"
+                             VerticalContentAlignment="Center"
+                             FontSize="13"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             CaretBrush="{DynamicResource ColorBrush1}"
+                             BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                             IsEnabled="{Binding AutoConnectServer}">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Border x:Name="Border"
+                                                    Background="{DynamicResource ColorBrushTransparentBackground}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}"
+                                                    MinHeight="{TemplateBinding MinHeight}">
+                                                <ScrollViewer x:Name="PART_ContentHost"
+                                                              VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </Grid>
+
+                <!-- Steam 邀请码 -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="Steam 邀请码"
+                               FontSize="14"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               VerticalAlignment="Center"/>
+
+                    <TextBox Grid.Column="1"
+                             Text="{Binding SteamInviteCode, UpdateSourceTrigger=PropertyChanged}"
+                             MinHeight="32"
+                             Padding="8,6"
+                             VerticalContentAlignment="Center"
+                             FontSize="13"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             CaretBrush="{DynamicResource ColorBrush1}"
+                             BorderBrush="{DynamicResource ColorBrushSemiTransparent}">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Border x:Name="Border"
+                                                    Background="{DynamicResource ColorBrushTransparentBackground}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}"
+                                                    MinHeight="{TemplateBinding MinHeight}">
+                                                <ScrollViewer x:Name="PART_ContentHost"
+                                                              VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 底部按钮 -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="重置默认"
+                    Command="{Binding ResetToDefaultCommand}"
+                    Width="100"
+                    Height="36"
+                    Margin="0,0,8,0"
+                    Cursor="Hand">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="ButtonBorder"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="6"
+                                            Padding="{TemplateBinding Padding}"
+                                            Cursor="Hand">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrushSemiTransparent}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <Button Content="保存设置"
+                    Command="{Binding SaveSettingsCommand}"
+                    Width="100"
+                    Height="36"
+                    Cursor="Hand">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                        <Setter Property="Foreground" Value="White"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="ButtonBorder"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="6"
+                                            Padding="{TemplateBinding Padding}"
+                                            Cursor="Hand">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

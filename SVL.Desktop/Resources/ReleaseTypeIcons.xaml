@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Alpha 版本图标 (橙色背景 + 白色 A) -->
+    <VisualBrush x:Key="AlphaIcon" Stretch="None">
+        <VisualBrush.Visual>
+            <Border Width="32" Height="32" Background="#FF9500" CornerRadius="4">
+                <TextBlock Text="A" FontSize="16" FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+        </VisualBrush.Visual>
+    </VisualBrush>
+
+    <!-- Beta 版本图标 (绿色背景 + 白色 B) -->
+    <VisualBrush x:Key="BetaIcon" Stretch="None">
+        <VisualBrush.Visual>
+            <Border Width="32" Height="32" Background="#4CD964" CornerRadius="4">
+                <TextBlock Text="B" FontSize="16" FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+        </VisualBrush.Visual>
+    </VisualBrush>
+
+    <!-- Release 版本图标 (青色背景 + 白色 R) -->
+    <VisualBrush x:Key="ReleaseIcon" Stretch="None">
+        <VisualBrush.Visual>
+            <Border Width="32" Height="32" Background="#5AC8FA" CornerRadius="4">
+                <TextBlock Text="R" FontSize="16" FontWeight="Bold"
+                           Foreground="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+        </VisualBrush.Visual>
+    </VisualBrush>
+</ResourceDictionary>

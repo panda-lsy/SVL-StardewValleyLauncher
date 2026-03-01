@@ -1,0 +1,161 @@
+<Window x:Class="SVL.Desktop.Controls.NestedFolderFixDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="MOD 安装问题检测"
+        Width="500"
+        Height="Auto"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <Style x:Key="CustomScrollBarStyle" TargetType="ScrollBar">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Width="12">
+                            <Rectangle Fill="{DynamicResource ColorBrushMask}"
+                                       Opacity="0.5"/>
+                            <Track x:Name="PART_Track"
+                                   IsDirectionReversed="True"
+                                   Margin="0">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="{DynamicResource ColorBrush3}"
+                                                        CornerRadius="6"
+                                                        Margin="2"
+                                                        Width="8"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CustomScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <ScrollContentPresenter/>
+                            <ScrollBar Orientation="Vertical"
+                                        HorizontalAlignment="Right"
+                                        Style="{StaticResource CustomScrollBarStyle}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{DynamicResource ColorBrushMask}">
+        <Border Width="500"
+                Background="{DynamicResource ColorBrushBackground}"
+                CornerRadius="8"
+                BorderBrush="{DynamicResource ColorBrush3}"
+                BorderThickness="1">
+            <Border.Effect>
+                <DropShadowEffect Color="Black"
+                                  Opacity="0.3"
+                                  BlurRadius="20"
+                                  ShadowDepth="0"/>
+            </Border.Effect>
+
+            <Grid Margin="24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 标题 -->
+                <TextBlock Grid.Row="0"
+                           Text="⚠ 检测到 MOD 安装问题"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#FFA500"
+                           Margin="0,0,0,12"/>
+
+                <!-- 说明信息 -->
+                <TextBlock Grid.Row="1"
+                           x:Name="SummaryTextBlock"
+                           TextWrapping="Wrap"
+                           FontSize="13"
+                           Foreground="{DynamicResource ColorBrushGray3}"
+                           Margin="0,0,0,16"/>
+
+                <!-- 问题列表 -->
+                <Border Grid.Row="2"
+                        Background="{DynamicResource ColorBrushTransparentBackground}"
+                        CornerRadius="6"
+                        Padding="16"
+                        MaxHeight="300"
+                        BorderBrush="{DynamicResource ColorBrush3}"
+                        BorderThickness="1">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Style="{StaticResource CustomScrollViewerStyle}">
+                        <StackPanel x:Name="IssuesPanel">
+                            <!-- 动态生成问题项 -->
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- 按钮区 -->
+                <StackPanel Grid.Row="3"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,16,0,0">
+                    <Button x:Name="SkipButton"
+                            Content="跳过"
+                            Width="80"
+                            Height="32"
+                            FontSize="12"
+                            Margin="0,0,8,0"
+                            Click="Skip_Click"
+                            Background="Transparent"
+                            Foreground="{DynamicResource ColorBrushGray3}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource ColorBrush3}"
+                            Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+
+                    <Button x:Name="FixButton"
+                            Content="自动修复"
+                            Width="80"
+                            Height="32"
+                            FontSize="12"
+                            Click="Fix_Click"
+                            Background="{DynamicResource ColorBrush2}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

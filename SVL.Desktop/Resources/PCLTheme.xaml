@@ -1,0 +1,97 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- ============================================= -->
+    <!-- 星露谷风格配色系统                            -->
+    <!-- ============================================= -->
+
+    <!-- 主色调 - 温暖橙棕与清新蓝系 -->
+    <SolidColorBrush x:Key="ColorBrush1" Color="#663021" />  <!-- 深棕色 - 主要文字 -->
+    <SolidColorBrush x:Key="ColorBrush2" Color="#D47748" />  <!-- 橙棕色 - 主要强调色 -->
+    <SolidColorBrush x:Key="ColorBrush3" Color="#FED183" />  <!-- 金色 - 次要强调色 -->
+    <SolidColorBrush x:Key="ColorBrush4" Color="#D8E8F6" />  <!-- 浅蓝白色 - 背景浅色 -->
+    <SolidColorBrush x:Key="ColorBrush5" Color="#E7E0B1" />  <!-- 米黄色 - 卡片背景 -->
+    <SolidColorBrush x:Key="ColorBrush6" Color="#0455A4" />  <!-- 深蓝色 - 边框/分割线 -->
+    <SolidColorBrush x:Key="ColorBrush7" Color="#158BF1" />  <!-- 亮蓝色 - 辅助色 -->
+    <SolidColorBrush x:Key="ColorBrush8" Color="#5EC3E6" />  <!-- 青蓝色 - 高亮色 -->
+
+    <!-- 背景色 -->
+    <SolidColorBrush x:Key="ColorBrushBg0" Color="#0455A4" />  <!-- 主背景 -->
+    <SolidColorBrush x:Key="ColorBrushBg1" Color="#E7E0B1" />  <!-- 次背景 -->
+
+    <!-- 颜色对象（用于动画） -->
+    <Color x:Key="ColorObject1">#663021</Color>
+    <Color x:Key="ColorBrush1_Color">#663021</Color>
+    <Color x:Key="ColorObject2">#D47748</Color>
+    <Color x:Key="ColorBrush2_Color">#D47748</Color>
+    <Color x:Key="ColorObject3">#FED183</Color>
+    <Color x:Key="ColorBrush3_Color">#FED183</Color>
+    <Color x:Key="ColorObject4">#D8E8F6</Color>
+    <Color x:Key="ColorObject5">#E7E0B1</Color>
+    <Color x:Key="ColorObject6">#0455A4</Color>
+    <Color x:Key="ColorObject7">#158BF1</Color>
+    <Color x:Key="ColorObject8">#5EC3E6</Color>
+
+    <!-- 灰度色系（调整为暖灰色调） -->
+    <SolidColorBrush x:Key="ColorBrushGray1" Color="#5C4033" />
+    <SolidColorBrush x:Key="ColorBrushGray2" Color="#8B7355" />
+    <SolidColorBrush x:Key="ColorBrushGray3" Color="#A0826D" />
+    <SolidColorBrush x:Key="ColorBrushGray4" Color="#B89B7F" />
+    <SolidColorBrush x:Key="ColorBrushGray5" Color="#D4C4A8" />
+    <SolidColorBrush x:Key="ColorBrushGray6" Color="#EBE0CC" />
+    <SolidColorBrush x:Key="ColorBrushGray7" Color="#F5EDE0" />
+    <SolidColorBrush x:Key="ColorBrushGray8" Color="#FAF7EE" />
+
+    <Color x:Key="ColorObjectGray1">#5C4033</Color>
+    <Color x:Key="ColorObjectGray2">#8B7355</Color>
+    <Color x:Key="ColorObjectGray3">#A0826D</Color>
+    <Color x:Key="ColorObjectGray4">#B89B7F</Color>
+    <Color x:Key="ColorObjectGray5">#D4C4A8</Color>
+    <Color x:Key="ColorObjectGray6">#EBE0CC</Color>
+    <Color x:Key="ColorObjectGray7">#F5EDE0</Color>
+    <Color x:Key="ColorObjectGray8">#FAF7EE</Color>
+
+    <!-- 状态色 -->
+    <SolidColorBrush x:Key="ColorBrushSuccess" Color="#5EC3E6" />      <!-- 青蓝色 - 成功 -->
+    <SolidColorBrush x:Key="ColorBrushSuccessLight" Color="#94D9F0" />  <!-- 浅青色 -->
+    <SolidColorBrush x:Key="ColorBrushRedBack" Color="#80FFE0CC" />
+    <SolidColorBrush x:Key="ColorBrushRedLight" Color="#FFB38A" />      <!-- 浅橙红 -->
+    <SolidColorBrush x:Key="ColorBrushRedDark" Color="#D47748" />       <!-- 深橙棕 -->
+
+    <!-- 透明度色 -->
+    <SolidColorBrush x:Key="ColorBrushHalfWhite" Color="#55FFFFFF" />
+    <SolidColorBrush x:Key="ColorBrushSemiWhite" Color="#BBFFFFFF" />
+    <SolidColorBrush x:Key="ColorBrushWhite" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="ColorBrushTransparent" Color="#00FFFFFF" />
+    <SolidColorBrush x:Key="ColorBrushSemiTransparent" Color="#01D8E8F6" />
+    <SolidColorBrush x:Key="ColorBrushTransparentBackground" Color="#D2FAF7EE" />
+    <SolidColorBrush x:Key="ColorBrushBackground" Color="#E7E0B1" />
+    <SolidColorBrush x:Key="ColorBrushToolTip" Color="#E5FFFFFF" />
+
+    <!-- 其他颜色 -->
+    <SolidColorBrush x:Key="ColorBrushMemory" Color="#663021" />
+    <SolidColorBrush x:Key="ColorBrushFatal" Color="#8B4033" />
+    <SolidColorBrush x:Key="ColorBrushError" Color="#D47748" />
+    <SolidColorBrush x:Key="ColorBrushWarn" Color="#FED183" />
+    <SolidColorBrush x:Key="ColorBrushInfoDark" Color="#663021" />
+    <SolidColorBrush x:Key="ColorBrushInfo" Color="#E7E0B1" />
+    <SolidColorBrush x:Key="ColorBrushDebug" Color="#A0826D" />
+
+    <!-- ============================================= -->
+    <!-- 字体系统                                       -->
+    <!-- ============================================= -->
+
+    <FontFamily x:Key="LaunchFontFamily">
+        Microsoft YaHei UI, Segoe UI, Microsoft YaHei, Arial
+    </FontFamily>
+
+    <!-- ============================================= -->
+    <!-- 模糊设置                                       -->
+    <!-- ============================================= -->
+
+    <sys:Double x:Key="BlurRadius">0.0</sys:Double>
+    <sys:Double x:Key="BlurSamplingRate">0.7</sys:Double>
+    <KernelType x:Key="BlurType">Gaussian</KernelType>
+
+</ResourceDictionary>

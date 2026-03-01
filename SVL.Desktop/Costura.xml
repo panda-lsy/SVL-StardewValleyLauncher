@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Weavers xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="FodyWeavers.xsd">
+  <Costura>
+    <!-- 嵌入所有依赖DLL -->
+    <IncludeAssemblies>
+      SVL.Core
+    </IncludeAssemblies>
+
+    <!-- 排除不需要嵌入的程序集（系统自带） -->
+    <ExcludeAssemblies>
+      System.*
+      Microsoft.*
+      WindowsBase
+      PresentationCore
+      PresentationFramework
+      PresentationFramework.Aero
+      PresentationFramework.Aero2
+      PresentationFramework.Luna
+      PresentationFramework.Royale
+      PresentationFramework.Classic
+      PresentationFramework-SystemData
+      PresentationFramework-SystemXml
+      PresentationFramework-SystemXmlLinq
+      UIAutomationProvider
+      UIAutomationTypes
+      ReachFramework
+      System.Drawing
+      System.Windows.Forms
+    </ExcludeAssemblies>
+
+    <!-- 混淆模式 -->
+    <Unmanaged32Assemblies />
+    <Unmanaged64Assemblies />
+
+    <!-- 资源压缩 -->
+    <OptOutAssemblies />
+  </Costura>
+</Weavers>

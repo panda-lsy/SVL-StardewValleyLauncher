@@ -1,0 +1,297 @@
+<Window x:Class="SVL.Desktop.Controls.ModpackDropDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:SVL.Desktop.ViewModels"
+        mc:Ignorable="d"
+        Title="导入整合包"
+        Height="500"
+        Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource ColorBrushBackground}"
+        AllowsTransparency="False"
+        WindowStyle="SingleBorderWindow">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="LabelText">
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrushTextSecondary}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="TextBlock" x:Key="ValueText">
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrushText}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrushText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush3}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrushText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush3}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Height" Value="40"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 标题栏 -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource ColorBrush2}"
+                Padding="24,20">
+            <StackPanel>
+                <TextBlock Text="📦 导入整合包"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource ColorBrushText}"/>
+                <TextBlock Text="将整合包安装到您的游戏中"
+                           FontSize="13"
+                           Foreground="{DynamicResource ColorBrushTextSecondary}"
+                           Margin="0,6,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 内容区域 -->
+        <Grid Grid.Row="1" Margin="24,20">
+            <!-- 加载中状态 -->
+            <StackPanel Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center">
+                <TextBlock Text="{Binding LoadingMessage}"
+                           FontSize="15"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource ColorBrushTextSecondary}"/>
+                <ProgressBar IsIndeterminate="True"
+                             Width="200"
+                             Height="4"
+                             Margin="0,16,0,0"
+                             Foreground="{DynamicResource ColorBrush2}"/>
+            </StackPanel>
+
+            <!-- 加载完成状态 -->
+            <StackPanel Visibility="{Binding IsLoading, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                <!-- 整合包信息卡片 -->
+                <Border Background="{DynamicResource ColorBrush2}"
+                        CornerRadius="10"
+                        Padding="20"
+                        Margin="0,0,0,20">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 左侧图标 -->
+                        <Border Grid.Column="0"
+                                Width="56"
+                                Height="56"
+                                Background="#F57C00"
+                                CornerRadius="12"
+                                Margin="0,0,16,0"
+                                VerticalAlignment="Top">
+                            <TextBlock Text="📦"
+                                       FontSize="24"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- 右侧信息 -->
+                        <StackPanel Grid.Column="1">
+                            <!-- 类型标签和名称 -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Border Background="#F57C00"
+                                        CornerRadius="4"
+                                        Padding="8,3"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0">
+                                    <TextBlock Text="{Binding ModpackTypeText}"
+                                               Foreground="White"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"/>
+                                </Border>
+                                <TextBlock Text="{Binding ModpackName}"
+                                           FontWeight="SemiBold"
+                                           FontSize="16"
+                                           Foreground="{DynamicResource ColorBrushText}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="280"/>
+                            </StackPanel>
+
+                            <!-- 详细信息 -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="版本" Style="{StaticResource LabelText}" Margin="0,0,16,6"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ModpackVersion}" Style="{StaticResource ValueText}" Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="作者" Style="{StaticResource LabelText}" Margin="0,0,16,6"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ModpackAuthor}" Style="{StaticResource ValueText}" Margin="0,0,0,6"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="模组数" Style="{StaticResource LabelText}" Margin="0,0,16,0"/>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                    <TextBlock Text="{Binding ModCount}" Style="{StaticResource ValueText}"/>
+                                    <TextBlock Text=" 个" Style="{StaticResource ValueText}" Foreground="{DynamicResource ColorBrushTextSecondary}"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 安装设置 -->
+                <TextBlock Text="安装设置"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorBrushText}"
+                           Margin="0,0,0,12"/>
+
+                <!-- 游戏路径 -->
+                <TextBlock Text="选择游戏路径"
+                           Style="{StaticResource LabelText}"
+                           Margin="0,0,0,6"/>
+                <ComboBox ItemsSource="{Binding GamePaths}"
+                          SelectedItem="{Binding SelectedGamePath}"
+                          Style="{StaticResource SettingComboBoxStyle}"
+                          Margin="0,0,0,16">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontWeight="Medium"/>
+                                <TextBlock Text="{Binding GamePath}" FontSize="11" Foreground="{DynamicResource ColorBrushTextSecondary}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+            </StackPanel>
+        </Grid>
+
+        <!-- 底部按钮 -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource ColorBrushTransparentBackground}"
+                Padding="24,16"
+                BorderBrush="{DynamicResource ColorBrush3}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="1"
+                        Content="取消"
+                        Padding="24,10"
+                        Margin="0,0,12,0"
+                        Command="{Binding CancelCommand}"
+                        Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{DynamicResource ColorBrushTextSecondary}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush3}"/>
+                            <Setter Property="BorderThickness" Value="1"/>
+                            <Setter Property="FontSize" Value="14"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <Button Grid.Column="2"
+                        Content="开始安装"
+                        Padding="24,10"
+                        Command="{Binding ConfirmImportCommand}"
+                        IsEnabled="{Binding IsValid}"
+                        Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="FontSize" Value="14"/>
+                            <Setter Property="FontWeight" Value="Medium"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="ButtonBorder"
+                                                Background="{TemplateBinding Background}"
+                                                CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Opacity" Value="0.9" TargetName="ButtonBorder"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
+                                                <Setter Property="Opacity" Value="0.5"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

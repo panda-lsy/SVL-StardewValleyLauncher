@@ -1,0 +1,22 @@
+<Window x:Class="SVL.Desktop.Views.SplashScreen"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        Width="200"
+        Height="200"
+        ShowInTaskbar="False">
+
+    <Grid>
+        <!-- 只显示 Logo 图片，128x128 -->
+        <Image Source="/Images/icon.png"
+               Width="128"
+               Height="128"
+               Stretch="Uniform"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"/>
+    </Grid>
+</Window>

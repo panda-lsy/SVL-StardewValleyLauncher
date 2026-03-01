@@ -1,0 +1,205 @@
+<UserControl x:Class="SVL.Desktop.Views.ModsLeftView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
+             xmlns:controls="clr-namespace:SVL.Desktop.Controls"
+             mc:Ignorable="d"
+             d:DesignHeight="450"
+             d:DesignWidth="320"
+             d:DataContext="{d:DesignInstance Type=viewModel:ModsLeftViewModel}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <controls:MyCard Grid.Row="0" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="搜索 Mod"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorBrush1}"
+                           Margin="0,0,0,8" />
+                <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="13"
+                         Padding="10,8"
+                         Margin="0,0,0,12"
+                         Background="{DynamicResource ColorBrushTransparentBackground}"
+                         Foreground="{DynamicResource ColorBrush1}"
+                         BorderBrush="{DynamicResource ColorBrush3}"
+                         BorderThickness="1" />
+                <TextBlock Text="操作"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorBrush1}"
+                           Margin="0,0,0,8" />
+
+                <!-- SMAPI 状态提示 -->
+                <TextBlock Text="{Binding SmapiInstallStatus}"
+                           FontSize="11"
+                           Foreground="{DynamicResource ColorBrush3}"
+                           Margin="0,0,0,8"
+                           TextWrapping="Wrap"
+                           Visibility="{Binding IsInstallingSmapi, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                    <Button Content="安装 SMAPI"
+                            Width="100"
+                            Margin="0,0,8,0"
+                            Padding="8,10"
+                            FontSize="13"
+                            IsEnabled="{Binding IsInstallingSmapi, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                            Command="{Binding InstallSMAPICommand}">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush1}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="安装 Mod"
+                            Width="100"
+                            Margin="0,0,8,0"
+                            Padding="8,10"
+                            FontSize="13"
+                            Command="{Binding InstallModCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush1}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="Nexus 搜索"
+                            Width="100"
+                            Padding="8,10"
+                            FontSize="13"
+                            Command="{Binding SearchNexusCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Cursor" Value="Hand" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush1}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </controls:MyCard>
+
+        <controls:MyCard Grid.Row="1" Title="Mod 列表" Margin="0,0,0,0">
+            <ListBox ItemsSource="{Binding FilteredMods}"
+                     SelectedItem="{Binding SelectedMod}"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="Transparent"
+                                Padding="8,6"
+                                Margin="0,0,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0"
+                                        Width="40"
+                                        Height="40"
+                                        Background="{DynamicResource ColorBrush5}"
+                                        Margin="0,0,10,0"
+                                        CornerRadius="6">
+                                    <TextBlock Text="📦"
+                                               FontSize="20"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource ColorBrush1}" />
+                                    <TextBlock Text="{Binding Author}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource ColorBrushGray3}"
+                                               Margin="0,3,0,0" />
+                                    <TextBlock Text="{Binding IsEnabled, Converter={StaticResource BooleanToStatusString}}"
+                                               FontSize="10"
+                                               Foreground="{DynamicResource ColorBrush2}"
+                                               Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </controls:MyCard>
+    </Grid>
+</UserControl>

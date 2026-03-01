@@ -1,0 +1,208 @@
+<UserControl x:Class="SVL.Desktop.Views.LaunchLeftView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
+             xmlns:controls="clr-namespace:SVL.Desktop.Controls"
+             xmlns:converters="clr-namespace:SVL.Desktop.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="600"
+             d:DesignWidth="240"
+             d:DataContext="{d:DesignInstance Type=viewModel:LaunchLeftViewModel}">
+    <UserControl.Resources>
+        <converters:InverseBooleanConverter x:Key="InverseBoolConverter"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部：游戏图标和版本信息 -->
+        <StackPanel Grid.Row="0" Margin="20,20,20,10">
+            <!-- 游戏图标 -->
+            <Border Width="120"
+                    Height="120"
+                    CornerRadius="12"
+                    Background="{DynamicResource ColorBrushTransparentBackground}"
+                    HorizontalAlignment="Center"
+                    Margin="0,0,0,16">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000"
+                                    BlurRadius="16"
+                                    ShadowDepth="0"
+                                    Opacity="0.15"/>
+                </Border.Effect>
+                <Image Source="{Binding IconSource}"
+                       Stretch="Uniform"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+            </Border>
+
+            <!-- 版本名称 -->
+            <TextBlock Text="{Binding InstanceName}"
+                       FontSize="16"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorBrush1}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="200"
+                       Margin="0,0,0,4"/>
+
+            <!-- 游戏版本 -->
+            <TextBlock Text="{Binding GameVersion}"
+                       FontSize="13"
+                       Foreground="{DynamicResource ColorBrushGray3}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       Margin="0,0,0,8"/>
+
+            <!-- 版本状态 -->
+            <Border Background="{DynamicResource ColorBrush5}"
+                    CornerRadius="12"
+                    Padding="12,6"
+                    HorizontalAlignment="Center"
+                    Margin="0,0,0,8">
+                <TextBlock Text="{Binding VersionStatus}"
+                           FontSize="12"
+                           Foreground="{DynamicResource ColorBrush2}"
+                           FontWeight="Medium"/>
+            </Border>
+        </StackPanel>
+
+        <!-- 中间：留空，可扩展显示其他信息 -->
+        <Border Grid.Row="1"/>
+
+        <!-- 底部：三个主要按钮 -->
+        <StackPanel Grid.Row="2" Margin="20,0,20,20">
+
+            <!-- 启动游戏按钮 -->
+            <Button Content="{Binding LaunchButtonText}"
+                    Command="{Binding LaunchGameCommand}"
+                    IsEnabled="{Binding IsLaunching, Converter={StaticResource InverseBoolConverter}}"
+                    Height="48"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
+                    FontSize="15"
+                    FontWeight="SemiBold"
+                    Cursor="Hand">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                        <Setter Property="Foreground" Value="White"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="ButtonBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderThickness="0"
+                                            CornerRadius="8"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush1}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Opacity" Value="0.6"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- 版本选择按钮 -->
+            <Button Content="版本选择"
+                    Height="42"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
+                    FontSize="14"
+                    FontWeight="Medium"
+                    Cursor="Hand"
+                    Command="{Binding NavigateToVersionSelectCommand}">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="ButtonBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                            CornerRadius="8"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush1}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- 版本设置按钮 -->
+            <Button Content="版本设置"
+                    Command="{Binding OpenVersionSettingsCommand}"
+                    Height="42"
+                    HorizontalAlignment="Stretch"
+                    FontSize="14"
+                    FontWeight="Medium"
+                    Cursor="Hand">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="ButtonBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                            CornerRadius="8"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush1}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+        </StackPanel>
+    </Grid>
+</UserControl>

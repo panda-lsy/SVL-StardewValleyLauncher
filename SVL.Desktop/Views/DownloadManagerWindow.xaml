@@ -1,0 +1,363 @@
+<Window x:Class="SVL.Desktop.Views.DownloadManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=viewModel:DownloadManagerViewModel}"
+        Title="下载管理"
+        Width="800"
+        Height="600"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </Window.Resources>
+
+    <!-- 背景遮罩 -->
+    <Grid Background="{DynamicResource ColorBrushMask}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 主窗口 -->
+        <Border Grid.Row="0"
+                Width="700"
+                Height="500"
+                Background="{DynamicResource ColorBrushBackground}"
+                CornerRadius="8"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                BorderBrush="{DynamicResource ColorBrush3}"
+                BorderThickness="1">
+            <Border.Effect>
+                <DropShadowEffect Color="Black"
+                                  Opacity="0.3"
+                                  BlurRadius="20"
+                                  ShadowDepth="0"/>
+            </Border.Effect>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 标题栏 -->
+                <Border Grid.Row="0"
+                        Background="{DynamicResource ColorBrush5}"
+                        Padding="20,16"
+                        CornerRadius="8,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <TextBlock Text="📥"
+                                       FontSize="20"
+                                       Foreground="{DynamicResource ColorBrush1}"
+                                       Margin="0,0,12,0"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="下载管理"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource ColorBrush1}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ActiveTaskCount, StringFormat=  ({0} 进行中)}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource ColorBrushGray3}"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="1"
+                                Content="✕"
+                                Width="32"
+                                Height="32"
+                                FontSize="16"
+                                Command="{Binding HideCommand}"
+                                Background="Transparent"
+                                Foreground="{DynamicResource ColorBrushGray3}"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                WindowChrome.IsHitTestVisibleInChrome="True">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                    VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- 工具栏 -->
+                <Border Grid.Row="1"
+                        Background="{DynamicResource ColorBrush5}"
+                        Padding="16,8"
+                        BorderBrush="{DynamicResource ColorBrush3}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="清空已完成"
+                                FontSize="12"
+                                Padding="12,6"
+                                Command="{Binding ClearCompletedCommand}"
+                                Background="{DynamicResource ColorBrushTransparentBackground}"
+                                Foreground="{DynamicResource ColorBrushGray3}"
+                                BorderThickness="1"
+                        BorderBrush="{DynamicResource ColorBrush3}"
+                                Cursor="Hand">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="4"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <!-- 内容区域 -->
+                <ScrollViewer Grid.Row="2"
+                              VerticalScrollBarVisibility="Auto"
+                              Padding="16">
+                    <StackPanel>
+                        <!-- 进行中的任务 -->
+                        <TextBlock Text="进行中"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   Margin="0,0,0,12"
+                                   Visibility="{Binding ActiveTasks.Count, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <ItemsControl ItemsSource="{Binding ActiveTasks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource ColorBrush5}"
+                                            Padding="16,12"
+                                            Margin="0,0,0,8"
+                                            CornerRadius="6"
+                                            Cursor="Hand">
+                                        <Border.InputBindings>
+                                            <MouseBinding Command="{Binding DataContext.SelectTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                         CommandParameter="{Binding}"
+                                                         MouseAction="LeftClick" />
+                                        </Border.InputBindings>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrush5}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                                    </DataTrigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush4}" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- 图标 -->
+                                            <Border Grid.Row="0"
+                                                    Grid.Column="0"
+                                                    Width="40"
+                                                    Height="40"
+                                                    Background="{DynamicResource ColorBrush3}"
+                                                    CornerRadius="6"
+                                                    Margin="0,0,12,0">
+                                                <TextBlock Text="📥"
+                                                           FontSize="20"
+                                                           Foreground="{DynamicResource ColorBrush1}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+
+                                            <!-- 信息 -->
+                                            <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Top">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource ColorBrush1}"/>
+                                                <TextBlock Text="{Binding StatusMessage}"
+                                                           FontSize="12"
+                                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                                           Margin="0,4,0,0"/>
+                                            </StackPanel>
+
+                                            <!-- 取消按钮 -->
+                                            <Button Grid.Row="0"
+                                                    Grid.Column="2"
+                                                    Content="取消"
+                                                    Width="60"
+                                                    Height="32"
+                                                    FontSize="12"
+                                                    Command="{Binding DataContext.CancelTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding Id}"
+                                                    Background="{DynamicResource ColorBrush3}"
+                                                    Foreground="{DynamicResource ColorBrush1}"
+                                                    BorderThickness="0"
+                                                    Cursor="Hand">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="CornerRadius" Value="4"/>
+                                                    </Style>
+                                                </Button.Resources>
+                                            </Button>
+
+                                            <!-- 进度条 -->
+                                            <Border Grid.Row="1"
+                                                    Grid.Column="0"
+                                                    Grid.ColumnSpan="3"
+                                                    Height="4"
+                                                    Background="{DynamicResource ColorBrush3}"
+                                                    CornerRadius="2"
+                                                    Margin="52,8,0,0">
+                                                <Border HorizontalAlignment="Left"
+                                                        Background="{DynamicResource ColorBrush2}"
+                                                        CornerRadius="2">
+                                                    <Border.Width>
+                                                        <MultiBinding Converter="{StaticResource ProgressWidthConverter}">
+                                                            <Binding Path="Progress"/>
+                                                            <Binding RelativeSource="{RelativeSource AncestorType=Border, AncestorLevel=1}" Path="ActualWidth"/>
+                                                        </MultiBinding>
+                                                    </Border.Width>
+                                                </Border>
+                                            </Border>
+
+                                            <!-- 进度百分比 -->
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="2"
+                                                       Text="{Binding Progress, StringFormat={}{0:F0}%}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource ColorBrushGray3}"
+                                                       HorizontalAlignment="Right"
+                                                       Margin="0,8,0,0"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- 已完成的任务 -->
+                        <TextBlock Text="已完成"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   Margin="0,16,0,12"
+                                   Visibility="{Binding CompletedTasks.Count, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <ItemsControl ItemsSource="{Binding CompletedTasks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource ColorBrush5}"
+                                            Padding="16,12"
+                                            Margin="0,0,0,8"
+                                            CornerRadius="6"
+                                            Opacity="0.8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- 图标 -->
+                                            <Border Grid.Column="0"
+                                                    Width="40"
+                                                    Height="40"
+                                                    Background="{DynamicResource ColorBrush3}"
+                                                    CornerRadius="6"
+                                                    Margin="0,0,12,0">
+                                                <TextBlock Text="{Binding Status, Converter={StaticResource StatusToIconConverter}}"
+                                                           FontSize="20"
+                                                           Foreground="{DynamicResource ColorBrush1}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+
+                                            <!-- 信息 -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource ColorBrush1}"/>
+                                                <TextBlock Text="{Binding StatusMessage}"
+                                                           FontSize="12"
+                                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                                           Margin="0,4,0,0"/>
+                                            </StackPanel>
+
+                                            <!-- 移除按钮 -->
+                                            <Button Grid.Column="2"
+                                                    Content="移除"
+                                                    Width="60"
+                                                    Height="32"
+                                                    FontSize="12"
+                                                    Command="{Binding DataContext.RemoveTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding Id}"
+                                                    Background="Transparent"
+                                                    Foreground="{DynamicResource ColorBrushGray3}"
+                                                    BorderThickness="1"
+                                                    BorderBrush="{DynamicResource ColorBrush3}"
+                                                    Cursor="Hand">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="CornerRadius" Value="4"/>
+                                                    </Style>
+                                                </Button.Resources>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- 空状态 -->
+                        <TextBlock Text="暂无下载任务"
+                                   FontSize="14"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Margin="0,40"
+                                   Visibility="{Binding ActiveTasks.Count, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

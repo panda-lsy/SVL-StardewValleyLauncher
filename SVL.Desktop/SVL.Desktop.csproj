@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ApplicationIcon>Images\icon.ico</ApplicationIcon>
+    <!-- 请求管理员权限以创建符号链接和目录连接 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <!-- 启用控制台输出以便在调试时看到日志 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <AssemblyTitle>SVL.Desktop</AssemblyTitle>
+    <AssemblyName>SVL.Desktop</AssemblyName>
+    <Description>Stardew Valley Launcher - Desktop Application</Description>
+    <Company>SVL Community</Company>
+    <Product>SVL.Desktop</Product>
+    <Copyright>Copyright © SVL Community</Copyright>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+    <Configurations>Debug;CI;Release;Beta</Configurations>
+    <Platforms>AnyCPU;x64;ARM64</Platforms>
+    <ProjectGuid>{B1C2D3E4-56F7-4A89-B8C2-0D4A5E9F6C3A}</ProjectGuid>
+    <RootNamespace>SVL.Desktop</RootNamespace>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <NoWarn>$(NoWarn);CS8632;CS4014;CS0108;MVVMTK0034;MVVMTK0039</NoWarn>
+    <OutputPath>bin\$(Configuration)-$(Platform)\</OutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' Or '$(Configuration)' == 'CI' Or '$(Configuration)' == 'DebugCI'">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <DefineConstants Condition="'$(Configuration)' == 'Debug'">DEBUG;TRACE</DefineConstants>
+    <DefineConstants Condition="'$(Configuration)' == 'CI' Or '$(Configuration)' == 'DebugCI'">CI;TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Beta' Or '$(Configuration)' == 'Release' Or '$(Configuration)' == 'Publish'">
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants Condition="'$(Configuration)' == 'Release' Or '$(Configuration)' == 'Publish'">RELEASE;PUBLISH</DefineConstants>
+    <DefineConstants Condition="'$(Configuration)' == 'Beta'">BETA;PUBLISH</DefineConstants>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Costura.Fody" Version="5.7.0">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SVL.Core\SVL.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Views\**\*.xaml" DependentUpon="%(Filename)">
+      <SubType>Designer</SubType>
+    </Compile>
+    <Resource Include="Resources\**\*" />
+    <Resource Include="Images\**\*" />
+  </ItemGroup>
+</Project>

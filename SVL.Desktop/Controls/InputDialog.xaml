@@ -1,0 +1,66 @@
+<Window x:Class="SVL.Desktop.Controls.InputDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="输入"
+        Width="400"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{DynamicResource ColorBrush1}">
+    <Border Background="{DynamicResource ColorBrush5}"
+            CornerRadius="8"
+            Padding="24,20">
+        <StackPanel>
+            <TextBlock x:Name="MessageText"
+                       Text="请输入："
+                       FontSize="14"
+                       Foreground="{DynamicResource ColorBrush1}"
+                       Margin="0,0,0,16"
+                       TextWrapping="Wrap"/>
+
+            <TextBox x:Name="InputTextBox"
+                     FontSize="13"
+                     Padding="8,6"
+                     Background="{DynamicResource ColorBrush5}"
+                     Foreground="{DynamicResource ColorBrush1}"
+                     BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                     BorderThickness="1"
+                     Margin="0,0,0,8"
+                     TextChanged="InputTextBox_TextChanged"/>
+
+            <!-- 错误消息显示 -->
+            <TextBlock x:Name="ErrorMessage"
+                       Text=""
+                       FontSize="12"
+                       Foreground="#D32F2F"
+                       Margin="0,0,0,12"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed"/>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button x:Name="OKButton"
+                        Content="确定"
+                        Width="80"
+                        Height="32"
+                        Margin="0,0,8,0"
+                        Click="OK_Click"
+                        IsDefault="True"
+                        Background="{DynamicResource ColorBrush2}"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Cursor="Hand"/>
+                <Button Content="取消"
+                        Width="80"
+                        Height="32"
+                        Click="Cancel_Click"
+                        IsCancel="True"
+                        Background="{DynamicResource ColorBrush5}"
+                        Foreground="{DynamicResource ColorBrush1}"
+                        BorderThickness="0"
+                        Cursor="Hand"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

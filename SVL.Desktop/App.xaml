@@ -1,0 +1,88 @@
+<Application x:Class="SVL.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
+             xmlns:views="clr-namespace:SVL.Desktop.Views"
+             xmlns:converters="clr-namespace:SVL.Desktop.Converters">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/PCLTheme.xaml" />
+                <ResourceDictionary Source="Resources/Styles.xaml" />
+                <ResourceDictionary Source="Resources/ModernStyles.xaml" />
+                <ResourceDictionary Source="Resources/PageTransitionAnimations.xaml" />
+                <ResourceDictionary Source="Resources/ReleaseTypeIcons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- 转换器 -->
+            <converters:PageTypeToBoolConverter x:Key="PageToBoolConverter" />
+            <converters:PageToVisibilityConverter x:Key="PageToVisibilityConverter" />
+            <converters:InversePageToVisibilityConverter x:Key="InversePageToVisibilityConverter" />
+            <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+            <converters:ProgressWidthConverter x:Key="ProgressWidthConverter" />
+            <converters:ExpandButtonLabelConverter x:Key="ExpandButtonLabelConverter" />
+            <converters:StatusToIconConverter x:Key="StatusToIconConverter" />
+            <converters:StatusIconConverter x:Key="StatusIconConverter" />
+            <converters:StatusTitleConverter x:Key="StatusTitleConverter" />
+            <converters:StatusColorConverter x:Key="StatusColorConverter" />
+            <converters:IntToVisibilityConverter x:Key="IntToVisibilityConverter" />
+            <converters:EnumToBoolConverter x:Key="EnumToBoolConverter" />
+            <converters:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter" />
+            <converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter" />
+            <converters:ZeroToVisibilityConverter x:Key="ZeroToVisibilityConverter" />
+            <converters:PositiveIntToCollapsedConverter x:Key="PositiveIntToCollapsedConverter" />
+            <converters:NegativeIntToCollapsedConverter x:Key="NegativeIntToCollapsedConverter" />
+            <converters:UrlToVisibilityConverter x:Key="UrlToVisibilityConverter" />
+            <converters:NonUrlToVisibilityConverter x:Key="NonUrlToVisibilityConverter" />
+            <converters:IntGreaterThanOneToVisibilityConverter x:Key="IntGreaterThanOneToVisibilityConverter" />
+            <converters:PageNumberToBoolConverter x:Key="PageNumberToBoolConverter" />
+            <converters:StringToBrushConverter x:Key="StringToBrushConverter" />
+            <converters:SourceToColorConverter x:Key="SourceToColorConverter" />
+            <converters:LongToNumberConverter x:Key="LongToNumberConverter" />
+            <converters:ArcGeometryConverter x:Key="ArcGeometryConverter" />
+            <converters:ImagePathConverter x:Key="ImagePathConverter" />
+            <converters:EqualityConverter x:Key="EqualityConverter" />
+            <converters:ReleaseTypeToColorConverter x:Key="ReleaseTypeToColorConverter" />
+            <converters:ReleaseTypeToLetterConverter x:Key="ReleaseTypeToLetterConverter" />
+            <converters:ReleaseTypeToIconConverter x:Key="ReleaseTypeToIconConverter" />
+
+            <DataTemplate DataType="{x:Type viewModel:LaunchLeftViewModel}">
+                <views:LaunchLeftView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:LaunchRightViewModel}">
+                <views:LaunchRightView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:ModsLeftViewModel}">
+                <views:ModsLeftView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:ModsRightViewModel}">
+                <views:ModsRightView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:InstanceSelectorViewModel}">
+                <views:InstanceSelectorView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:ModpacksLeftViewModel}">
+                <views:ModpacksLeftView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:ModpacksRightViewModel}">
+                <views:ModpacksRightView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:SettingsViewModel}">
+                <views:SettingsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:TaskStatusViewModel}">
+                <views:TaskStatusView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:ModSearchViewModel}">
+                <views:ModSearchView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:ModpackSearchViewModel}">
+                <views:ModpackSearchView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type viewModel:ModDetailsViewModel}">
+                <views:ModDetailsView />
+            </DataTemplate>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

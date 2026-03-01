@@ -1,0 +1,15 @@
+# 游戏图标占位符
+
+请将游戏图标放置在此位置：`SVL.Desktop/Resources/game-icon.png`
+
+建议规格：
+- 尺寸：256x256 像素（最小 128x128）
+- 格式：PNG（支持透明背景）
+- 命名：game-icon.png
+
+Stardew Valley 官方图标可从以下位置获取：
+- Steam 游戏安装目录
+- Stardew Valley 官方网站
+- 请确保图标为正方形，并使用高质量图片
+
+注意：如果图标文件不存在，界面将显示 "SV" 文字作为备用。

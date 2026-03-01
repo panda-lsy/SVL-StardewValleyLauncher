@@ -1,0 +1,180 @@
+<Window x:Class="SVL.Desktop.Controls.GamePathSelectionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="选择游戏安装目录"
+        Width="500"
+        Height="Auto"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </Window.Resources>
+
+    <!-- 背景遮罩 -->
+    <Grid Background="{DynamicResource ColorBrushMask}">
+        <Border Width="450"
+                Background="{DynamicResource ColorBrushBackground}"
+                CornerRadius="8"
+                BorderBrush="{DynamicResource ColorBrush3}"
+                BorderThickness="1">
+            <Border.Effect>
+                <DropShadowEffect Color="Black"
+                                  Opacity="0.3"
+                                  BlurRadius="20"
+                                  ShadowDepth="0"/>
+            </Border.Effect>
+
+            <Grid Margin="24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 标题 -->
+                <TextBlock Grid.Row="0"
+                           Text="选择 Stardew Valley 游戏安装目录"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorBrush1}"
+                           Margin="0,0,0,16"/>
+
+                <!-- 说明文本 -->
+                <TextBlock Grid.Row="1"
+                           Text="SMAPI 需要游戏本体文件才能安装。请选择游戏的安装目录（包含 Stardew Valley.exe 的文件夹）。"
+                           FontSize="12"
+                           Foreground="{DynamicResource ColorBrushGray3}"
+                           TextWrapping="Wrap"
+                           LineHeight="18"
+                           Margin="0,0,0,12"/>
+
+                <!-- Steam 安装路径提示 -->
+                <Border Grid.Row="2"
+                        Background="{DynamicResource ColorBrush5}"
+                        Padding="12"
+                        CornerRadius="4"
+                        Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="💡 Steam 默认安装路径："
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"/>
+                        <TextBlock Text="C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 路径选择 -->
+                <Grid Grid.Row="3" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox Grid.Column="0"
+                             x:Name="PathTextBox"
+                             FontSize="12"
+                             Padding="10,8"
+                             Background="{DynamicResource ColorBrushTransparentBackground}"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             BorderBrush="{DynamicResource ColorBrush3}"
+                             BorderThickness="1"
+                             Margin="0,0,8,0"
+                             TextChanged="PathTextBox_TextChanged">
+                        <TextBox.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </TextBox.Resources>
+                    </TextBox>
+
+                    <Button Grid.Column="1"
+                            Content="浏览..."
+                            Width="70"
+                            Height="32"
+                            FontSize="12"
+                            Click="Browse_Click"
+                            Background="{DynamicResource ColorBrush2}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                </Grid>
+
+                <!-- 错误提示 -->
+                <TextBlock Grid.Row="3"
+                           x:Name="ErrorTextBlock"
+                           FontSize="11"
+                           Foreground="#FF4488"
+                           Margin="0,0,0,12"
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed"/>
+
+                <!-- Steam 链接 -->
+                <TextBlock Grid.Row="4"
+                           Margin="0,0,0,12">
+                    <Hyperlink NavigateUri="https://store.steampowered.com/app/413150/Stardew_Valley/"
+                               RequestNavigate="SteamLink_RequestNavigate"
+                               Foreground="{DynamicResource ColorBrush2}"
+                               TextDecorations="None">
+                        <Run Text="🛒 从 Steam 商店下载游戏"/>
+                    </Hyperlink>
+                </TextBlock>
+
+                <!-- 按钮 -->
+                <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="取消"
+                            Width="80"
+                            Height="32"
+                            FontSize="12"
+                            Margin="0,0,8,0"
+                            Click="Cancel_Click"
+                            Background="Transparent"
+                            Foreground="{DynamicResource ColorBrushGray3}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource ColorBrush3}"
+                            Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+
+                    <Button Content="确定"
+                            Width="80"
+                            Height="32"
+                            FontSize="12"
+                            Click="Confirm_Click"
+                            Background="{DynamicResource ColorBrush2}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

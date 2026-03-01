@@ -1,0 +1,420 @@
+<UserControl x:Class="SVL.Desktop.Views.DownloadLeftView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
+             xmlns:controls="clr-namespace:SVL.Desktop.Controls"
+             mc:Ignorable="d"
+             d:DesignHeight="450"
+             d:DesignWidth="320"
+             d:DataContext="{d:DesignInstance Type=viewModel:DownloadLeftViewModel}">
+    <Grid>
+        <controls:MyCard Title="下载类别" Margin="0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- 社区资源标题 -->
+                    <TextBlock Text="社区资源"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource ColorBrushGray3}"
+                               Margin="12,0,0,8" />
+
+                    <!-- 分隔线 -->
+                    <Border Height="1"
+                            Background="{DynamicResource ColorBrush3}"
+                            Margin="8,8" />
+
+                    <!-- SMAPI 类别 - 第一位 -->
+                    <Border Background="Transparent"
+                            Padding="12,10"
+                            Cursor="Hand"
+                            CornerRadius="6"
+                            BorderThickness="3,0,0,0"
+                            BorderBrush="Transparent">
+                        <Border.InputBindings>
+                            <MouseBinding Command="{Binding SelectCategoryCommand}"
+                                         CommandParameter="{x:Static viewModel:DownloadCategory.SMAPI}"
+                                         MouseAction="LeftClick" />
+                        </Border.InputBindings>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.SMAPI}">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush2}" />
+                                    </DataTrigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 选中强调条 -->
+                            <Rectangle Grid.Column="0"
+                                       Width="4"
+                                       RadiusX="2"
+                                       RadiusY="2"
+                                       Fill="{DynamicResource ColorBrush2}"
+                                       Margin="-12,-10,10,-10"
+                                       VerticalAlignment="Stretch">
+                                <Rectangle.Style>
+                                    <Style TargetType="Rectangle">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.SMAPI}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Rectangle.Style>
+                            </Rectangle>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="🔧"
+                                       FontSize="18"
+                                       Foreground="{DynamicResource ColorBrush1}"
+                                       Margin="0,0,10,0" />
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="SMAPI"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource ColorBrush1}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.SMAPI}">
+                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="Mod 加载框架"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Mods 类别 -->
+                    <Border Background="Transparent"
+                            Padding="12,10"
+                            Cursor="Hand"
+                            CornerRadius="6"
+                            BorderThickness="3,0,0,0"
+                            BorderBrush="Transparent">
+                        <Border.InputBindings>
+                            <MouseBinding Command="{Binding SelectCategoryCommand}"
+                                         CommandParameter="{x:Static viewModel:DownloadCategory.Mods}"
+                                         MouseAction="LeftClick" />
+                        </Border.InputBindings>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Mods}">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush2}" />
+                                    </DataTrigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 选中强调条 -->
+                            <Rectangle Grid.Column="0"
+                                       Width="4"
+                                       RadiusX="2"
+                                       RadiusY="2"
+                                       Fill="{DynamicResource ColorBrush2}"
+                                       Margin="-12,-10,10,-10"
+                                       VerticalAlignment="Stretch">
+                                <Rectangle.Style>
+                                    <Style TargetType="Rectangle">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Mods}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Rectangle.Style>
+                            </Rectangle>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="📦"
+                                       FontSize="18"
+                                       Foreground="{DynamicResource ColorBrush1}"
+                                       Margin="0,0,10,0" />
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Mod"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource ColorBrush1}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Mods}">
+                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="游戏模组"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- 下载任务列表 -->
+                    <ItemsControl ItemsSource="{Binding DownloadTasks}" Margin="12,0,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource ColorBrush5}"
+                                        Padding="12,8"
+                                        Margin="0,0,0,8"
+                                        CornerRadius="6"
+                                        Cursor="Hand">
+                                    <Border.InputBindings>
+                                        <MouseBinding Command="{Binding DataContext.SelectTaskCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                     CommandParameter="{Binding}"
+                                                     MouseAction="LeftClick" />
+                                    </Border.InputBindings>
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}" />
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- 下载图标 -->
+                                        <TextBlock Grid.Column="0"
+                                                   Text="📥"
+                                                   FontSize="14"
+                                                   Foreground="{DynamicResource ColorBrush1}"
+                                                   Margin="0,0,10,0"
+                                                   VerticalAlignment="Center"/>
+
+                                        <!-- 任务名称（文件名） -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource ColorBrush1}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock FontSize="10"
+                                                       Foreground="{DynamicResource ColorBrushGray3}"
+                                                       Margin="0,2,0,0">
+                                                <Run Text="{Binding StatusMessage, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Modpacks 类别 -->
+                    <Border Background="Transparent"
+                            Padding="12,10"
+                            Cursor="Hand"
+                            CornerRadius="6"
+                            BorderThickness="3,0,0,0"
+                            BorderBrush="Transparent">
+                        <Border.InputBindings>
+                            <MouseBinding Command="{Binding SelectCategoryCommand}"
+                                         CommandParameter="{x:Static viewModel:DownloadCategory.Modpacks}"
+                                         MouseAction="LeftClick" />
+                        </Border.InputBindings>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Modpacks}">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush2}" />
+                                    </DataTrigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 选中强调条 -->
+                            <Rectangle Grid.Column="0"
+                                       Width="4"
+                                       RadiusX="2"
+                                       RadiusY="2"
+                                       Fill="{DynamicResource ColorBrush2}"
+                                       Margin="-12,-10,10,-10"
+                                       VerticalAlignment="Stretch">
+                                <Rectangle.Style>
+                                    <Style TargetType="Rectangle">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Modpacks}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Rectangle.Style>
+                            </Rectangle>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="📚"
+                                       FontSize="18"
+                                       Foreground="{DynamicResource ColorBrush1}"
+                                       Margin="0,0,10,0" />
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="整合包"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource ColorBrush1}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Modpacks}">
+                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="Mod 集合"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Utilities 类别 -->
+                    <Border Background="Transparent"
+                            Padding="12,10"
+                            Cursor="Hand"
+                            CornerRadius="6"
+                            BorderThickness="3,0,0,0"
+                            BorderBrush="Transparent">
+                        <Border.InputBindings>
+                            <MouseBinding Command="{Binding SelectCategoryCommand}"
+                                         CommandParameter="{x:Static viewModel:DownloadCategory.Utilities}"
+                                         MouseAction="LeftClick" />
+                        </Border.InputBindings>
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Utilities}">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush2}" />
+                                    </DataTrigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 选中强调条 -->
+                            <Rectangle Grid.Column="0"
+                                       Width="4"
+                                       RadiusX="2"
+                                       RadiusY="2"
+                                       Fill="{DynamicResource ColorBrush2}"
+                                       Margin="-12,-10,10,-10"
+                                       VerticalAlignment="Stretch">
+                                <Rectangle.Style>
+                                    <Style TargetType="Rectangle">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Utilities}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Rectangle.Style>
+                            </Rectangle>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="🛠️"
+                                       FontSize="18"
+                                       Foreground="{DynamicResource ColorBrush1}"
+                                       Margin="0,0,10,0" />
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="实用工具"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource ColorBrush1}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedCategory}" Value="{x:Static viewModel:DownloadCategory.Utilities}">
+                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Text="辅助工具"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </controls:MyCard>
+    </Grid>
+</UserControl>

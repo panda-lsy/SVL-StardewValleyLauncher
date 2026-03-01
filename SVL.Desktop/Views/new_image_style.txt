@@ -1,0 +1,17 @@
+                                     <Image.Style>
+                                          <Style TargetType="Image">
+                                              <Style.Triggers>
+                                                  <Trigger Property="Source" Value="{x:Null}">
+                                                      <Setter Property="Source">
+                                                          <Setter.Value>
+                                                              <DrawingImage>
+                                                                  <DrawingImage.Drawing>
+                                                                      <GeometryDrawing Brush="#7B68EE" Geometry="M0,0 H80 V80 H0 Z" />
+                                                                  </GeometryDrawing>
+                                                              </DrawingImage.Drawing>
+                                                          </Setter.Value>
+                                                      </Setter>
+                                                  </Trigger>
+                                              </Style.Triggers>
+                                          </Style>
+                                      </Image.Style>

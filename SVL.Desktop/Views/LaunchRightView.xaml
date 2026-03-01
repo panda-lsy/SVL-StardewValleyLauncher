@@ -1,0 +1,112 @@
+<UserControl x:Class="SVL.Desktop.Views.LaunchRightView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
+             xmlns:controls="clr-namespace:SVL.Desktop.Controls"
+             xmlns:converters="clr-namespace:SVL.Desktop.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="600"
+             d:DesignWidth="800"
+             d:DataContext="{d:DesignInstance Type=viewModel:LaunchRightViewModel}">
+    <UserControl.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  Padding="20,20,20,20">
+        <StackPanel>
+
+            <!-- 欢迎标题 -->
+            <StackPanel Margin="0,0,0,24">
+                <TextBlock Text="欢迎使用星露谷物语启动器"
+                           FontSize="28"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource ColorBrush1}"
+                           Margin="0,0,0,4"/>
+                <TextBlock Text="Stardew Valley Launcher"
+                           FontSize="14"
+                           Foreground="{DynamicResource ColorBrushGray3}"
+                           FontWeight="Medium"/>
+            </StackPanel>
+
+            <!-- 没有实例时的引导卡片 -->
+            <controls:MyCard Margin="0,0,0,16"
+                            Title="🎮 开始使用"
+                            Visibility="{Binding HasInstances, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                <StackPanel>
+                    <TextBlock Text="欢迎使用 Stardew Valley Launcher！"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               Margin="0,0,0,12"/>
+                    <TextBlock Text="请先添加游戏实例才能开始使用启动器："
+                               FontSize="13"
+                               Foreground="{DynamicResource ColorBrushGray3}"
+                               Margin="0,0,0,8"/>
+                    <BulletDecorator Margin="0,0,0,8">
+                        <BulletDecorator.Bullet>
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource ColorBrush2}" Margin="0,0,8,0"/>
+                        </BulletDecorator.Bullet>
+                        <TextBlock Text="点击左侧「版本选择」进入实例管理页面"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                    </BulletDecorator>
+                    <BulletDecorator Margin="0,0,0,8">
+                        <BulletDecorator.Bullet>
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource ColorBrush2}" Margin="0,0,8,0"/>
+                        </BulletDecorator.Bullet>
+                        <TextBlock Text="使用「添加」按钮选择游戏安装目录"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                    </BulletDecorator>
+                    <BulletDecorator Margin="0,0,0,8">
+                        <BulletDecorator.Bullet>
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource ColorBrush2}" Margin="0,0,8,0"/>
+                        </BulletDecorator.Bullet>
+                        <TextBlock Text="支持多实例管理，方便切换不同版本"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                    </BulletDecorator>
+                    <BulletDecorator>
+                        <BulletDecorator.Bullet>
+                            <Ellipse Width="6" Height="6" Fill="{DynamicResource ColorBrush2}" Margin="0,0,8,0"/>
+                        </BulletDecorator.Bullet>
+                        <TextBlock Text="支持自动检测 Steam 和 GOG 版本"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource ColorBrushGray3}"/>
+                    </BulletDecorator>
+                </StackPanel>
+            </controls:MyCard>
+
+            <!-- 提示卡片 -->
+            <controls:MyCard Title="💡 使用提示">
+                <StackPanel>
+                    <TextBlock Text="开始使用"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="点击左侧「启动游戏」按钮即可开始游玩 Stardew Valley。"
+                               FontSize="12"
+                               Foreground="{DynamicResource ColorBrushGray3}"
+                               TextWrapping="Wrap"
+                               LineHeight="18"
+                               Margin="0,0,0,12"/>
+                    <TextBlock Text="版本管理"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="使用「版本选择」可以切换不同的游戏版本，「版本设置」可以配置游戏参数和 Mod 选项。"
+                               FontSize="12"
+                               Foreground="{DynamicResource ColorBrushGray3}"
+                               TextWrapping="Wrap"
+                               LineHeight="18"/>
+                </StackPanel>
+            </controls:MyCard>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

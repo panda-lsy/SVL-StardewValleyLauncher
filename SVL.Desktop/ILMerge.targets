@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- ILMerge 路径 -->
+    <ILMergePath>$(MSBuildProgramFiles32)\ILMerge\ILMerge.exe</ILMergePath>
+
+    <!-- 输出目录 -->
+    <MergedOutputDir>$(SolutionDir)publish-single\</MergedOutputDir>
+  </PropertyGroup>
+
+  <Target Name="ILMerge" AfterTargets="Build" Condition=" '$(Configuration)' == 'Release' ">
+    <!-- 创建输出目录 -->
+    <MakeDir Directories="$(MergedOutputDir)" />
+
+    <!-- 合并所有 DLL 到单个 EXE -->
+    <Exec Command="&quot;$(ILMergePath)&quot; /out:&quot;$(MergedOutputDir)SVL.exe&quot; &quot;$(TargetPath)&quot; &quot;$(TargetDir)SVL.Core.dll&quot; &quot;$(TargetDir)*.dll&quot; /target:winexe /targetplatform:v4 /closed" />
+
+    <!-- 复制其他文件 -->
+    <Copy SourceFiles="$(ProjectDir)Images\icon.ico" DestinationFolder="$(MergedOutputDir)" />
+
+    <Message Text="ILMerge completed: $(MergedOutputDir)SVL.exe" Importance="high" />
+  </Target>
+</Project>
