@@ -1162,19 +1162,7 @@
 
                     <!-- ===== 其他 ===== -->
                     <StackPanel x:Name="PanelOther" Visibility="Collapsed">
-                        <!-- Card 1: 更新 -->
-                        <Border Style="{StaticResource SettingCardStyle}">
-                            <StackPanel>
-                                <TextBlock Text="更新"
-                                           Style="{StaticResource SettingTitleStyle}"/>
-
-                                <CheckBox Content="自动检查更新"
-                                          IsChecked="{Binding AutoCheckUpdates}"
-                                          Style="{StaticResource SettingCheckBoxStyle}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Card 2: 托盘 -->
+                        <!-- Card 1: 托盘 -->
                         <Border Style="{StaticResource SettingCardStyle}">
                             <StackPanel>
                                 <TextBlock Text="系统托盘"
@@ -1447,16 +1435,18 @@
                                                Margin="0,4,0,0"/>
                                 </StackPanel>
 
-                                <!-- 检查更新按钮 -->
+                                <!-- 检查更新/查看更新按钮 -->
                                 <Button Grid.Column="1"
                                         Padding="16,10"
                                         VerticalAlignment="Center"
                                         Cursor="Hand"
-                                        Command="{Binding CheckUpdateCommand}"
+                                        Command="{Binding ShowUpdateDialogCommand}"
                                         IsEnabled="{Binding IsCheckingUpdate, Converter={StaticResource InverseBoolConverter}}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                                        <TextBlock Text="检查更新" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding UpdateButtonText}"
+                                                   Margin="6,0,0,0"
+                                                   VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <Button.Style>
                                         <Style TargetType="Button">
@@ -1480,6 +1470,9 @@
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
                                                 </Trigger>
+                                                <DataTrigger Binding="{Binding HasUpdateAvailable}" Value="True">
+                                                    <Setter Property="Background" Value="#FF4CAF50"/>
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Button.Style>
@@ -1493,6 +1486,18 @@
                                 <TextBlock Text="更新设置"
                                            Style="{StaticResource SettingTitleStyle}"
                                            Margin="0,0,0,12"/>
+
+                                <!-- 启动时检查更新 -->
+                                <CheckBox Content="启动时检查更新"
+                                          IsChecked="{Binding AutoCheckUpdates}"
+                                          Foreground="{DynamicResource ColorBrush1}"
+                                          FontSize="13"
+                                          Margin="0,0,0,12"/>
+                                <TextBlock Text="应用启动后自动检查是否有新版本（推荐开启）"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           Margin="0,-8,0,12"
+                                           TextWrapping="Wrap"/>
 
                                 <!-- 自动下载更新 -->
                                 <CheckBox Content="有新版本时自动下载更新"

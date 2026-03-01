@@ -402,6 +402,11 @@ public class AppSettings
     /// 首选更新源 (0=GitHub, 1=Gitee)
     /// </summary>
     public int PreferredUpdateSource { get; set; } = 0;
+
+    /// <summary>
+    /// 跳过的更新版本号（用户点击"此版本不再提醒"后记录）
+    /// </summary>
+    public string? SkippedUpdateVersion { get; set; }
 }
 
 // ===== 枚举定义 =====

@@ -24,8 +24,8 @@
     <Company>SVL Community</Company>
     <Product>SVL.Desktop</Product>
     <Copyright>Copyright © SVL Community</Copyright>
-    <AssemblyVersion>1.1.1.0</AssemblyVersion>
-    <FileVersion>1.1.1.0</FileVersion>
+    <AssemblyVersion>1.1.2.0</AssemblyVersion>
+    <FileVersion>1.1.2.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -63,6 +63,7 @@
     <PackageReference Include="Costura.Fody" Version="5.7.0">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Markdig" Version="0.40.0" />
   </ItemGroup>
 
   <ItemGroup>

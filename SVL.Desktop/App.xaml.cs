@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Threading.Tasks;
 using SVL.Core.App;
+using SVL.Core.Config;
 using SVL.Core.Logging;
 using SVL.Core.Download.NexusMods;
 using WpfMessageBox = System.Windows.MessageBox;
@@ -126,6 +127,9 @@ public partial class App : System.Windows.Application
 
             Log.Info("[App] Startup completed");
 
+            // 启动时检查更新（异步执行，不阻塞启动）
+            _ = CheckForUpdatesOnStartupAsync();
+
             // 延迟处理 NXM URL，确保所有初始化都已完成
             if (_pendingNxmUrl != null)
             {
@@ -196,5 +200,74 @@ public partial class App : System.Windows.Application
         Console.ReadKey();
         FreeConsole();
         #endif
+    }
+
+    /// <summary>
+    /// 启动时检查更新（异步执行）
+    /// </summary>
+    private static async Task CheckForUpdatesOnStartupAsync()
+    {
+        try
+        {
+            // 检查是否启用了启动时检查更新
+            var settings = AppConfig.GetSettings();
+            if (!settings.AutoCheckUpdates)
+            {
+                Log.Info("[App] 启动时检查更新已禁用");
+                return;
+            }
+
+            // 延迟 3 秒后检查更新，避免影响启动速度
+            await Task.Delay(3000);
+
+            Log.Info("[App] 开始检查启动器更新...");
+
+            var preferGitee = settings.PreferredUpdateSource == 1;
+            var result = await LauncherUpdateService.CheckForUpdateAsync(preferGitee);
+
+            if (!result.Success)
+            {
+                Log.Warn($"[App] 检查更新失败: {result.ErrorMessage}");
+                return;
+            }
+
+            if (!result.HasUpdate)
+            {
+                Log.Info("[App] 已是最新版本");
+                return;
+            }
+
+            // 检查是否跳过了此版本
+            if (!string.IsNullOrEmpty(settings.SkippedUpdateVersion))
+            {
+                if (result.LatestVersion.ToString() == settings.SkippedUpdateVersion)
+                {
+                    Log.Info($"[App] 用户已跳过版本 {result.LatestVersion} 的更新提醒");
+                    return;
+                }
+            }
+
+            Log.Info($"[App] 发现新版本 {result.LatestVersion}，显示更新对话框");
+
+            // 在 UI 线程显示更新对话框
+            await Current.Dispatcher.InvokeAsync(() =>
+            {
+                if (result.ReleaseInfo == null) return;
+
+                var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+                    ?? new Version(1, 1, 1, 0);
+
+                var dialog = new Controls.UpdateDialog(currentVersion, result.ReleaseInfo)
+                {
+                    Owner = Current.MainWindow
+                };
+
+                dialog.ShowDialog();
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[App] 启动时检查更新失败");
+        }
     }
 }

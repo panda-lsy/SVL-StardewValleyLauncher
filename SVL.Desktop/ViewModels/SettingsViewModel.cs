@@ -113,7 +113,7 @@ public partial class SettingsViewModel : ObservableObject
 
         // 初始化应用版本号
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.1";
+        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.2";
 
         // 加载设置
         LoadSettings();
@@ -1324,6 +1324,17 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _latestReleaseUrl = string.Empty;
 
+    /// <summary>
+    /// 最新版本信息（用于显示更新对话框）
+    /// </summary>
+    private Core.App.ReleaseInfo? _latestReleaseInfo;
+
+    /// <summary>
+    /// 更新按钮文本（根据是否有更新变化）
+    /// </summary>
+    [ObservableProperty]
+    private string _updateButtonText = "检查更新";
+
     // ===== 辅助方法 =====
 
     /// <summary>
@@ -1381,17 +1392,17 @@ public partial class SettingsViewModel : ObservableObject
                 LatestVersion = result.LatestVersion.ToString();
                 UpdateSource = result.Source;
                 HasUpdateAvailable = result.HasUpdate;
+                _latestReleaseInfo = result.ReleaseInfo;
 
                 if (result.HasUpdate)
                 {
                     UpdateStatusMessage = $"发现新版本 {result.LatestVersion}！";
                     LatestReleaseUrl = result.ReleaseInfo?.HtmlUrl ?? "";
 
-                    // 如果设置了自动下载更新
-                    if (AutoDownloadUpdate && result.ReleaseInfo?.Assets.Count > 0)
+                    // 自动显示更新对话框
+                    if (result.ReleaseInfo != null)
                     {
-                        UpdateStatusMessage = $"正在下载新版本 {result.LatestVersion}...";
-                        // TODO: 实现自动下载逻辑
+                        await ShowUpdateDialogAsync();
                     }
                 }
                 else
@@ -1415,6 +1426,50 @@ public partial class SettingsViewModel : ObservableObject
         finally
         {
             IsCheckingUpdate = false;
+        }
+    }
+
+    /// <summary>
+    /// 打开更新对话框（当有更新可用时）
+    /// </summary>
+    [RelayCommand]
+    private async Task ShowUpdateDialog()
+    {
+        if (_latestReleaseInfo == null)
+        {
+            // 如果没有缓存的版本信息，重新检查更新
+            await CheckUpdate();
+            return;
+        }
+
+        await ShowUpdateDialogAsync();
+    }
+
+    /// <summary>
+    /// 显示更新对话框的内部方法
+    /// </summary>
+    private async Task ShowUpdateDialogAsync()
+    {
+        if (_latestReleaseInfo == null) return;
+
+        try
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+                    ?? new Version(1, 1, 1, 0);
+
+                var dialog = new Controls.UpdateDialog(currentVersion, _latestReleaseInfo)
+                {
+                    Owner = Application.Current.MainWindow
+                };
+
+                dialog.ShowDialog();
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[SettingsViewModel] 显示更新对话框失败");
         }
     }
 
@@ -1797,6 +1852,14 @@ public partial class SettingsViewModel : ObservableObject
         {
             // 忽略自动保存错误
         }
+    }
+
+    /// <summary>
+    /// 当 HasUpdateAvailable 变化时更新按钮文本
+    /// </summary>
+    partial void OnHasUpdateAvailableChanged(bool value)
+    {
+        UpdateButtonText = value ? "查看更新" : "检查更新";
     }
 }
 

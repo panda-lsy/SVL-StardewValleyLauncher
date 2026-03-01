@@ -1,0 +1,254 @@
+<Window x:Class="SVL.Desktop.Controls.UpdateDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="启动器更新"
+        Width="520"
+        Height="Auto"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Loaded="OnWindowLoaded"
+        MinHeight="300">
+
+    <!-- 背景遮罩 -->
+    <Grid Background="{DynamicResource ColorBrushMask}">
+        <Border Background="{DynamicResource ColorBrushBackground}"
+                CornerRadius="12"
+                BorderBrush="{DynamicResource ColorBrush3}"
+                BorderThickness="1"
+                MaxHeight="600">
+            <Border.Effect>
+                <DropShadowEffect Color="Black"
+                                  Opacity="0.3"
+                                  BlurRadius="20"
+                                  ShadowDepth="0"/>
+            </Border.Effect>
+
+            <Grid Margin="24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 标题区域 -->
+                <Grid Grid.Row="0" Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 更新图标 -->
+                    <Border Grid.Column="0"
+                            Width="48"
+                            Height="48"
+                            CornerRadius="24"
+                            Background="{DynamicResource ColorBrush2}"
+                            Margin="0,0,16,0">
+                        <TextBlock Text="&#xE896;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="24"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- 标题和版本信息 -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="发现新版本"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource ColorBrush1}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock x:Name="CurrentVersionText"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource ColorBrushGray3}"/>
+                            <TextBlock Text=" → "
+                                       FontSize="12"
+                                       Foreground="{DynamicResource ColorBrushGray3}"/>
+                            <TextBlock x:Name="NewVersionText"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource ColorBrush2}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 下载进度区域 -->
+                <Grid Grid.Row="1" x:Name="DownloadProgressPanel" Visibility="Collapsed" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock x:Name="DownloadStatusText"
+                                   Text="正在下载更新..."
+                                   FontSize="13"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   Margin="0,0,0,8"/>
+                        <ProgressBar x:Name="DownloadProgressBar"
+                                     Height="8"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="0"
+                                     Foreground="{DynamicResource ColorBrush2}"
+                                     Background="{DynamicResource ColorBrushGray8}"/>
+                        <TextBlock x:Name="DownloadProgressText"
+                                   Text="0%"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 更新日志区域 -->
+                <Border Grid.Row="2"
+                        Background="{DynamicResource ColorBrushGray8}"
+                        CornerRadius="8"
+                        Padding="16"
+                        MaxHeight="280"
+                        Margin="0,0,0,16"
+                        x:Name="ChangelogPanel">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Style="{DynamicResource ModernScrollViewerStyle}">
+                        <!-- 使用 WebBrowser 渲染 Markdown 转换后的 HTML -->
+                        <WebBrowser x:Name="ChangelogBrowser"
+                                    Height="Auto"
+                                    MinHeight="100"/>
+                    </ScrollViewer>
+                </Border>
+
+                <!-- 按钮区域 -->
+                <Grid Grid.Row="3" x:Name="ButtonPanel" Margin="0,0,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 跳过此版本 -->
+                    <Button Grid.Column="0"
+                            x:Name="SkipVersionButton"
+                            Content="此版本不再提醒"
+                            Height="36"
+                            FontSize="13"
+                            HorizontalAlignment="Left"
+                            Click="SkipVersion_Click"
+                            Background="Transparent"
+                            Foreground="{DynamicResource ColorBrushGray3}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource ColorBrushGray3}"
+                            Cursor="Hand"
+                            Padding="16,0">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+
+                    <!-- 跳过 -->
+                    <Button Grid.Column="1"
+                            x:Name="SkipButton"
+                            Content="跳过"
+                            Width="90"
+                            Height="36"
+                            FontSize="13"
+                            Margin="8,0,0,0"
+                            Click="Skip_Click"
+                            Background="Transparent"
+                            Foreground="{DynamicResource ColorBrush1}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource ColorBrush3}"
+                            Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+
+                    <!-- 更新 -->
+                    <Button Grid.Column="2"
+                            x:Name="UpdateButton"
+                            Content="更新"
+                            Width="100"
+                            Height="36"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Margin="8,0,0,0"
+                            Click="Update_Click"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="ButtonBorder"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="6">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush3}"
+                                                            TargetName="ButtonBorder"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+
+                <!-- 下载完成后的按钮 -->
+                <Grid Grid.Row="4" x:Name="RestartPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                    <Button x:Name="RestartButton"
+                            Content="重启并安装更新"
+                            Height="40"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Click="Restart_Click"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="ButtonBorder"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="8">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush3}"
+                                                            TargetName="ButtonBorder"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
