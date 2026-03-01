@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
-using Markdig;
 using SVL.Core.App;
 using SVL.Core.Config;
 using SVL.Core.Logging;
@@ -22,6 +21,7 @@ public partial class UpdateDialog : Window
     private readonly Version _currentVersion;
     private string? _downloadedFilePath;
     private bool _isDownloading;
+    private System.Threading.CancellationTokenSource? _downloadCts;
 
     public UpdateDialog(Version currentVersion, ReleaseInfo releaseInfo)
     {
@@ -34,8 +34,8 @@ public partial class UpdateDialog : Window
         CurrentVersionText.Text = $"v{currentVersion}";
         NewVersionText.Text = releaseInfo.TagName;
 
-        // 渲染 Markdown 更新日志
-        RenderChangelog(releaseInfo.Body);
+        // 显示更新日志（只使用 Update.txt 内容）
+        RenderChangelog(releaseInfo.UpdateLog);
     }
 
     private void OnWindowLoaded(object sender, RoutedEventArgs e)
@@ -46,99 +46,47 @@ public partial class UpdateDialog : Window
     }
 
     /// <summary>
-    /// 将 Markdown 渲染为 HTML 并显示在 WebBrowser 中
+    /// 简单处理 Markdown 并显示为纯文本
     /// </summary>
     private void RenderChangelog(string markdown)
     {
+        // 如果更新日志为空，显示默认消息
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            ChangelogText.Text = "暂无更新日志信息。";
+            return;
+        }
+
         try
         {
-            // 使用 Markdig 将 Markdown 转换为 HTML
-            var pipeline = new MarkdownPipelineBuilder()
-                .UseAutoLinks()
-                .UseTaskLists()
-                .Build();
-            var html = Markdig.Markdown.ToHtml(markdown, pipeline);
-
-            // 创建完整的 HTML 文档，添加样式
-            var styledHtml = $@"
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset=""utf-8"">
-    <style>
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            font-size: 13px;
-            line-height: 1.6;
-            color: #e0e0e0;
-            background-color: #1e1e1e;
-            margin: 0;
-            padding: 8px;
-        }}
-        h1, h2, h3, h4, h5, h6 {{
-            color: #ffffff;
-            margin-top: 16px;
-            margin-bottom: 8px;
-        }}
-        h1 {{ font-size: 18px; border-bottom: 1px solid #404040; padding-bottom: 8px; }}
-        h2 {{ font-size: 16px; }}
-        h3 {{ font-size: 14px; }}
-        code {{
-            background-color: #2d2d2d;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 12px;
-        }}
-        pre {{
-            background-color: #2d2d2d;
-            padding: 12px;
-            border-radius: 6px;
-            overflow-x: auto;
-        }}
-        pre code {{
-            background-color: transparent;
-            padding: 0;
-        }}
-        a {{
-            color: #60a5fa;
-            text-decoration: none;
-        }}
-        a:hover {{
-            text-decoration: underline;
-        }}
-        ul, ol {{
-            padding-left: 20px;
-        }}
-        li {{
-            margin-bottom: 4px;
-        }}
-        hr {{
-            border: none;
-            border-top: 1px solid #404040;
-            margin: 16px 0;
-        }}
-        blockquote {{
-            border-left: 3px solid #60a5fa;
-            margin: 8px 0;
-            padding-left: 12px;
-            color: #a0a0a0;
-        }}
-    </style>
-</head>
-<body>
-{html}
-</body>
-</html>";
-
-            // 在 WebBrowser 中显示 HTML
-            ChangelogBrowser.NavigateToString(styledHtml);
+            // 简单处理 Markdown 格式
+            var text = markdown;
+            
+            // 移除 Markdown 标题标记
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"^#+\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+            
+            // 移除粗体和斜体标记
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\*\*(.+?)\*\*", "$1");
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\*(.+?)\*", "$1");
+            
+            // 移除链接，保留文本
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\[(.+?)\]\(.+?\)", "$1");
+            
+            // 移除代码块标记
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"```.+?```", "", System.Text.RegularExpressions.RegexOptions.Singleline);
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"`(.+?)`", "$1");
+            
+            // 清理多余空行
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\n{3,}", "\n\n");
+            
+            ChangelogText.Text = text.Trim();
+            
+            Log.Debug($"[UpdateDialog] 更新日志已渲染，长度: {text.Length}");
         }
         catch (Exception ex)
         {
             Log.Error($"[UpdateDialog] 渲染更新日志失败: {ex.Message}");
-            // 如果渲染失败，显示原始 Markdown
-            ChangelogBrowser.NavigateToString($"<html><body><pre>{markdown}</pre></body></html>");
+            ChangelogText.Text = markdown;
         }
     }
 
@@ -167,6 +115,7 @@ public partial class UpdateDialog : Window
             return;
 
         _isDownloading = true;
+        _downloadCts = new System.Threading.CancellationTokenSource();
 
         try
         {
@@ -178,19 +127,25 @@ public partial class UpdateDialog : Window
             // 禁用窗口关闭
             Closing += OnWindowClosing;
 
-            // 查找 ZIP 资源
-            var zipAsset = _releaseInfo.Assets.FirstOrDefault(a => 
-                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+            // 只查找 EXE 文件（只发布 EXE）
+            var downloadAsset = _releaseInfo.Assets.FirstOrDefault(a => 
+                a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
 
-            if (zipAsset == null)
+            // 如果没有 EXE，尝试查找任何可下载的资源
+            if (downloadAsset == null && _releaseInfo.Assets.Count > 0)
             {
-                throw new InvalidOperationException("未找到可下载的更新包");
+                downloadAsset = _releaseInfo.Assets[0];
             }
 
-            Log.Info($"[UpdateDialog] 开始下载更新: {zipAsset.BrowserDownloadUrl}");
+            if (downloadAsset == null)
+            {
+                throw new InvalidOperationException("该版本没有可下载的更新包。\n请前往 GitHub 发布页面手动下载。");
+            }
+
+            Log.Info($"[UpdateDialog] 开始下载更新: {downloadAsset.BrowserDownloadUrl}");
 
             // 下载更新文件
-            _downloadedFilePath = await DownloadUpdateAsync(zipAsset.BrowserDownloadUrl);
+            _downloadedFilePath = await DownloadUpdateAsync(downloadAsset.BrowserDownloadUrl, _downloadCts.Token);
 
             // 下载完成，显示重启按钮
             DownloadProgressPanel.Visibility = Visibility.Collapsed;
@@ -199,16 +154,37 @@ public partial class UpdateDialog : Window
 
             Log.Info($"[UpdateDialog] 更新下载完成: {_downloadedFilePath}");
         }
+        catch (OperationCanceledException)
+        {
+            Log.Info("[UpdateDialog] 下载已取消");
+
+            // 解除 Closing 事件
+            Closing -= OnWindowClosing;
+            _isDownloading = false;
+            _downloadCts?.Dispose();
+            _downloadCts = null;
+
+            // 删除临时文件
+            if (!string.IsNullOrEmpty(_downloadedFilePath) && File.Exists(_downloadedFilePath))
+            {
+                try { File.Delete(_downloadedFilePath); }
+                catch { }
+                _downloadedFilePath = null;
+            }
+
+            // 关闭对话框
+            DialogResult = false;
+            Close();
+        }
         catch (Exception ex)
         {
             Log.Error($"[UpdateDialog] 下载更新失败: {ex.Message}");
 
-            // 恢复按钮区域
-            ButtonPanel.Visibility = Visibility.Visible;
-            DownloadProgressPanel.Visibility = Visibility.Collapsed;
-            ChangelogPanel.MaxHeight = 280;
-
+            // 先解除 Closing 事件，避免 NullReferenceException
+            Closing -= OnWindowClosing;
             _isDownloading = false;
+            _downloadCts?.Dispose();
+            _downloadCts = null;
 
             // 如果有下载的临时文件，删除它
             if (!string.IsNullOrEmpty(_downloadedFilePath) && File.Exists(_downloadedFilePath))
@@ -221,18 +197,55 @@ public partial class UpdateDialog : Window
                 catch { }
             }
 
-            MessageBox.Show($"下载更新失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            // 恢复按钮区域
+            ButtonPanel.Visibility = Visibility.Visible;
+            DownloadProgressPanel.Visibility = Visibility.Collapsed;
+            ChangelogPanel.MaxHeight = 280;
+
+            // 使用 Dispatcher 延迟显示错误，确保 UI 状态完全稳定
+            await Dispatcher.BeginInvoke(async () =>
+            {
+                // 再次等待确保所有 UI 更新完成
+                await Task.Delay(100);
+                
+                try
+                {
+                    // 使用自定义 ConfirmDialog
+                    var result = ConfirmDialog.Show(
+                        this,
+                        "下载更新失败，是否前往发布页面手动下载？",
+                        "下载更新失败",
+                        ex.Message,
+                        "前往下载",
+                        "取消");
+
+                    if (result)
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = _releaseInfo.HtmlUrl,
+                            UseShellExecute = true
+                        });
+                        DialogResult = false;
+                        Close();
+                    }
+                }
+                catch (Exception dialogEx)
+                {
+                    Log.Error($"[UpdateDialog] 显示错误对话框失败: {dialogEx.Message}");
+                }
+            }, DispatcherPriority.ContextIdle);
         }
     }
 
-    private async Task<string> DownloadUpdateAsync(string downloadUrl)
+    private async Task<string> DownloadUpdateAsync(string downloadUrl, System.Threading.CancellationToken cancellationToken)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), "SVL_Update");
         Directory.CreateDirectory(tempPath);
 
         var fileName = Path.GetFileName(new Uri(downloadUrl).LocalPath);
-        if (string.IsNullOrEmpty(fileName) || !fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            fileName = $"SVL_Update_{_releaseInfo.TagName}.zip";
+        if (string.IsNullOrEmpty(fileName))
+            fileName = $"SVL_Update_{_releaseInfo.TagName}.exe";
 
         var filePath = Path.Combine(tempPath, fileName);
 
@@ -242,7 +255,7 @@ public partial class UpdateDialog : Window
         // 添加 User-Agent
         httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-Launcher");
 
-        using var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+        using var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var totalBytes = response.Content.Headers.ContentLength ?? -1L;
@@ -259,6 +272,7 @@ public partial class UpdateDialog : Window
 
         while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             await fileStream.WriteAsync(buffer, 0, bytesRead);
             totalBytesRead += bytesRead;
 
@@ -299,6 +313,15 @@ public partial class UpdateDialog : Window
         return filePath;
     }
 
+    private void CancelDownload_Click(object sender, RoutedEventArgs e)
+    {
+        if (_downloadCts != null && !_downloadCts.IsCancellationRequested)
+        {
+            _downloadCts.Cancel();
+            Log.Info("[UpdateDialog] 用户取消下载");
+        }
+    }
+
     private void Restart_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(_downloadedFilePath) || !File.Exists(_downloadedFilePath))
@@ -309,20 +332,30 @@ public partial class UpdateDialog : Window
 
         try
         {
+            // 标记正在为更新而退出（跳过 Debug 控制台的等待按键）
+            App.MarkExitingForUpdate();
+
+            // 判断是否为 Release 版本（非 Debug 构建）
+            // Release 版本静默更新，Debug 版本显示控制台
+            bool isSilentUpdate = !LauncherUpdateService.IsDebugBuild;
+
             // 创建更新脚本
-            var scriptPath = CreateUpdateScript(_downloadedFilePath);
+            var scriptPath = CreateUpdateScript(_downloadedFilePath, isSilentUpdate);
 
             // 启动更新脚本
             var processInfo = new ProcessStartInfo
             {
                 FileName = scriptPath,
                 UseShellExecute = true,
-                WindowStyle = ProcessWindowStyle.Normal
+                // Release 版本隐藏窗口，Debug 版本显示窗口
+                WindowStyle = isSilentUpdate ? ProcessWindowStyle.Hidden : ProcessWindowStyle.Normal,
+                // 静默更新时创建新窗口但不显示
+                CreateNoWindow = isSilentUpdate
             };
 
             Process.Start(processInfo);
 
-            Log.Info($"[UpdateDialog] 启动更新脚本: {scriptPath}");
+            Log.Info($"[UpdateDialog] 启动更新脚本: {scriptPath}, 静默模式: {isSilentUpdate}");
 
             // 关闭应用程序
             Application.Current.Shutdown();
@@ -335,20 +368,52 @@ public partial class UpdateDialog : Window
     }
 
     /// <summary>
-    /// 创建更新脚本（批处理文件）
+    /// 创建更新脚本（批处理文件）- EXE 直接复制替换
     /// </summary>
-    private string CreateUpdateScript(string zipFilePath)
+    /// <param name="updateFilePath">更新文件路径</param>
+    /// <param name="silent">是否静默模式（不显示控制台窗口）</param>
+    private string CreateUpdateScript(string updateFilePath, bool silent = false)
     {
         var currentExePath = Process.GetCurrentProcess().MainModule?.FileName
             ?? throw new InvalidOperationException("无法获取当前程序路径");
 
-        var appDirectory = Path.GetDirectoryName(currentExePath)
-            ?? throw new InvalidOperationException("无法获取程序目录");
-
         var scriptPath = Path.Combine(Path.GetTempPath(), "SVL_Update.bat");
 
-        // 批处理脚本内容
-        var scriptContent = $@"@echo off
+        string scriptContent;
+        
+        if (silent)
+        {
+            // 静默模式：不显示任何窗口，出错时弹窗提示
+            scriptContent = $@"@echo off
+chcp 65001 >nul
+REM 静默更新脚本
+
+REM 等待进程完全退出
+timeout /t 3 /nobreak >nul
+
+REM 尝试复制文件
+copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul 2>&1
+
+if %errorlevel% neq 0 (
+    REM 复制失败，使用 mshta 弹窗提示错误
+    mshta vbscript:Execute(""CreateObject(""WScript.Shell"").Popup(""更新失败：无法复制文件。"" & vbCrLf & ""请手动将以下文件复制到程序目录："" & vbCrLf & ""{updateFilePath}"", 0, ""SVL 更新错误"", 16):close"")
+    exit /b 1
+)
+
+REM 更新成功，启动程序
+start "" ""{currentExePath}""
+
+REM 清理临时文件
+del ""{updateFilePath}"" 2>nul
+del ""%~f0"" 2>nul
+
+exit
+";
+        }
+        else
+        {
+            // 调试模式：显示控制台窗口，方便查看更新过程
+            scriptContent = $@"@echo off
 chcp 65001 >nul
 title SVL 更新程序
 echo ========================================
@@ -360,12 +425,14 @@ echo 正在关闭启动器...
 REM 等待进程完全退出
 timeout /t 3 /nobreak >nul
 
-echo 正在解压更新文件...
-powershell -Command ""Expand-Archive -Path '{zipFilePath}' -DestinationPath '{appDirectory}' -Force""
+echo 正在复制更新文件...
+copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul
 
 if %errorlevel% neq 0 (
     echo.
-    echo [错误] 解压失败！
+    echo [错误] 复制文件失败！
+    echo 请手动将下载的文件复制到程序目录。
+    echo 下载位置: {updateFilePath}
     pause
     exit /b 1
 )
@@ -377,11 +444,12 @@ timeout /t 2 /nobreak >nul
 start "" ""{currentExePath}""
 
 REM 清理临时文件
-del ""{zipFilePath}"" 2>nul
+del ""{updateFilePath}"" 2>nul
 del ""%~f0"" 2>nul
 
 exit
 ";
+        }
 
         File.WriteAllText(scriptPath, scriptContent);
 

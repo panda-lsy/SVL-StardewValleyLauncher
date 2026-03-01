@@ -133,7 +133,13 @@ public static class AppConfig
                 MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose,
                 ShowNotifications = settings.ShowNotifications,
                 LogLevel = settings.LogLevel,
-                DebugMode = settings.DebugMode
+                DebugMode = settings.DebugMode,
+
+                // 启动器更新设置（之前漏掉的字段）
+                AutoDownloadUpdate = settings.AutoDownloadUpdate,
+                ShowUpdateNotification = settings.ShowUpdateNotification,
+                PreferredUpdateSource = settings.PreferredUpdateSource,
+                SkippedUpdateVersion = settings.SkippedUpdateVersion
             };
 
             var options = new JsonSerializerOptions { WriteIndented = true };

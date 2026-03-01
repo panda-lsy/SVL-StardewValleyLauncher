@@ -16,8 +16,9 @@
         Loaded="OnWindowLoaded"
         MinHeight="300">
 
-    <!-- 背景遮罩 -->
-    <Grid Background="{DynamicResource ColorBrushMask}">
+    <!-- 透明背景 -->
+    <Grid>
+        <!-- 圆角容器 -->
         <Border Background="{DynamicResource ColorBrushBackground}"
                 CornerRadius="12"
                 BorderBrush="{DynamicResource ColorBrush3}"
@@ -97,30 +98,124 @@
                                      Value="0"
                                      Foreground="{DynamicResource ColorBrush2}"
                                      Background="{DynamicResource ColorBrushGray8}"/>
-                        <TextBlock x:Name="DownloadProgressText"
-                                   Text="0%"
-                                   FontSize="11"
-                                   Foreground="{DynamicResource ColorBrushGray3}"
-                                   HorizontalAlignment="Right"
-                                   Margin="0,4,0,0"/>
+                        <Grid Margin="0,8,0,0">
+                            <TextBlock x:Name="DownloadProgressText"
+                                       Text="0%"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource ColorBrushGray3}"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="CancelDownloadButton"
+                                    Content="取消"
+                                    Width="70"
+                                    Height="26"
+                                    FontSize="12"
+                                    HorizontalAlignment="Right"
+                                    Click="CancelDownload_Click"
+                                    Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ColorBrushGray3}"/>
+                                        <Setter Property="BorderThickness" Value="1"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushGray3}"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="ButtonBorder"
+                                                            Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="4">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                          VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrushGray8}"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
                     </StackPanel>
                 </Grid>
 
-                <!-- 更新日志区域 -->
+                <!-- 更新日志区域 - 使用 TextBox 替代 WebBrowser 避免 WPF 样式崩溃 -->
                 <Border Grid.Row="2"
                         Background="{DynamicResource ColorBrushGray8}"
                         CornerRadius="8"
-                        Padding="16"
+                        Padding="12"
                         MaxHeight="280"
                         Margin="0,0,0,16"
                         x:Name="ChangelogPanel">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  Style="{DynamicResource ModernScrollViewerStyle}">
-                        <!-- 使用 WebBrowser 渲染 Markdown 转换后的 HTML -->
-                        <WebBrowser x:Name="ChangelogBrowser"
-                                    Height="Auto"
-                                    MinHeight="100"/>
-                    </ScrollViewer>
+                    <TextBox x:Name="ChangelogText"
+                             IsReadOnly="True"
+                             TextWrapping="Wrap"
+                             AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Disabled"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             FontSize="13"
+                             FontFamily="Microsoft YaHei UI, Segoe UI"
+                             CaretBrush="Transparent"
+                             SelectionBrush="Transparent"
+                             MinHeight="100">
+                        <TextBox.Resources>
+                            <!-- 自定义滚动条样式 -->
+                            <Style TargetType="ScrollBar">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Width" Value="8"/>
+                                <Setter Property="MinWidth" Value="8"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ScrollBar">
+                                            <Grid Background="{TemplateBinding Background}" Width="8">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <Track Grid.Row="1" Name="PART_Track" IsDirectionReversed="True">
+                                                    <Track.Thumb>
+                                                        <Thumb>
+                                                            <Thumb.Style>
+                                                                <Style TargetType="Thumb">
+                                                                    <Setter Property="Background" Value="{DynamicResource ColorBrushGray5}"/>
+                                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                                    <Setter Property="Template">
+                                                                        <Setter.Value>
+                                                                            <ControlTemplate TargetType="Thumb">
+                                                                                <Border Background="{TemplateBinding Background}"
+                                                                                        CornerRadius="4"
+                                                                                        Width="6"
+                                                                                        Margin="1"/>
+                                                                            </ControlTemplate>
+                                                                        </Setter.Value>
+                                                                    </Setter>
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource ColorBrushGray3}"/>
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Thumb.Style>
+                                                        </Thumb>
+                                                    </Track.Thumb>
+                                                </Track>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Resources>
+                    </TextBox>
                 </Border>
 
                 <!-- 按钮区域 -->

@@ -113,7 +113,7 @@ public partial class SettingsViewModel : ObservableObject
 
         // 初始化应用版本号
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.2";
+        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.1";
 
         // 加载设置
         LoadSettings();
@@ -1454,6 +1454,9 @@ public partial class SettingsViewModel : ObservableObject
 
         try
         {
+            // 标记本次启动已显示过更新弹窗，防止启动时再次自动检测
+            App.MarkUpdateDialogShown();
+
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
@@ -1823,9 +1826,24 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnPreferredUpdateSourceIndexChanged(int value)
     {
-        // 立即更新显示的更新源名称
-        UpdateSource = value == 1 ? "Gitee" : "GitHub";
-        AutoSave();
+        // 使用 Dispatcher 延迟执行，避免快速切换时 WPF 样式系统崩溃
+        // 这是 WPF ComboBox 快速切换时的已知问题 (NullReferenceException in StyleHelper)
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            // 立即更新显示的更新源名称
+            UpdateSource = value == 1 ? "Gitee" : "GitHub";
+            
+            // 清除新选择源的缓存，确保从该源重新获取
+            LauncherUpdateService.ClearCache(preferGitee: value == 1);
+            
+            // 重置更新状态，让用户用新源重新检查
+            HasUpdateAvailable = false;
+            _latestReleaseInfo = null;
+            UpdateStatusMessage = "切换更新源后请点击检查更新";
+            
+            // 立即保存设置（不使用延迟，确保检查更新时配置已保存）
+            SaveSettings();
+        }), System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
     /// <summary>

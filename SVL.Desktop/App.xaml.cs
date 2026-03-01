@@ -22,6 +22,28 @@ public partial class App : System.Windows.Application
     // 用于从管道接收 NXM URL 的同步锁
     private static readonly object _nxmLock = new();
 
+    // 标记本次启动是否已显示过更新弹窗（防止重复检测）
+    private static bool _hasShownUpdateDialogThisSession = false;
+
+    // 标记是否为更新而退出（用于跳过 Debug 控制台的等待按键）
+    private static bool _isExitingForUpdate = false;
+
+    /// <summary>
+    /// 标记本次启动已显示过更新弹窗
+    /// </summary>
+    public static void MarkUpdateDialogShown()
+    {
+        _hasShownUpdateDialogThisSession = true;
+    }
+
+    /// <summary>
+    /// 标记应用程序正在为更新而退出
+    /// </summary>
+    public static void MarkExitingForUpdate()
+    {
+        _isExitingForUpdate = true;
+    }
+
     [DllImport("kernel32.dll")]
     private static extern bool AllocConsole();
 
@@ -193,11 +215,14 @@ public partial class App : System.Windows.Application
         base.OnExit(e);
         await ApplicationService.ShutdownAsync();
 
-        // 释放控制台
+        // 释放控制台（如果是更新退出，不等待按键）
         #if DEBUG
-        Console.WriteLine("========================================");
-        Console.WriteLine("Press any key to exit...");
-        Console.ReadKey();
+        if (!_isExitingForUpdate)
+        {
+            Console.WriteLine("========================================");
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
+        }
         FreeConsole();
         #endif
     }
@@ -209,6 +234,13 @@ public partial class App : System.Windows.Application
     {
         try
         {
+            // 如果本次启动已显示过更新弹窗，不再重复检测
+            if (_hasShownUpdateDialogThisSession)
+            {
+                Log.Info("[App] 本次启动已显示过更新弹窗，跳过自动检测");
+                return;
+            }
+
             // 检查是否启用了启动时检查更新
             var settings = AppConfig.GetSettings();
             if (!settings.AutoCheckUpdates)
@@ -248,6 +280,9 @@ public partial class App : System.Windows.Application
             }
 
             Log.Info($"[App] 发现新版本 {result.LatestVersion}，显示更新对话框");
+
+            // 标记本次启动已显示过更新弹窗
+            _hasShownUpdateDialogThisSession = true;
 
             // 在 UI 线程显示更新对话框
             await Current.Dispatcher.InvokeAsync(() =>

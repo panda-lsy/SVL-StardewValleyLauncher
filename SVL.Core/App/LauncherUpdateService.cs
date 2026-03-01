@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -26,12 +27,14 @@ public static class LauncherUpdateService
     private const string GitHubRepo = "panda-lsy/SVL-StardewValleyLauncher";
     private const string GiteeRepo = "mc_shengxia/SVL-StardewValleyLauncher";
 
-    private static readonly string GitHubApiUrl = $"https://api.github.com/repos/{GitHubRepo}/releases";
-    private static readonly string GiteeApiUrl = $"https://gitee.com/api/v5/repos/{GiteeRepo}/releases";
+    private static readonly string GitHubApiUrl = $"https://api.github.com/repos/{GitHubRepo}/releases?per_page=10";
+    private static readonly string GiteeApiUrl = $"https://gitee.com/api/v5/repos/{GiteeRepo}/releases?per_page=100&sort=created&direction=desc";
 
-    // 缓存最新版本信息
-    private static ReleaseInfo? _cachedLatestRelease;
-    private static DateTime _lastCheckTime;
+    // 缓存最新版本信息（按源分开缓存）
+    private static ReleaseInfo? _cachedGitHubRelease;
+    private static ReleaseInfo? _cachedGiteeRelease;
+    private static DateTime _lastGitHubCheckTime;
+    private static DateTime _lastGiteeCheckTime;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
     /// <summary>
@@ -62,19 +65,58 @@ public static class LauncherUpdateService
     }
 
     /// <summary>
+    /// 清除指定源的缓存
+    /// </summary>
+    /// <param name="preferGitee">true 清除 Gitee 缓存，false 清除 GitHub 缓存</param>
+    public static void ClearCache(bool preferGitee)
+    {
+        if (preferGitee)
+        {
+            _cachedGiteeRelease = null;
+            _lastGiteeCheckTime = DateTime.MinValue;
+            Log.Info("[LauncherUpdateService] 已清除 Gitee 缓存");
+        }
+        else
+        {
+            _cachedGitHubRelease = null;
+            _lastGitHubCheckTime = DateTime.MinValue;
+            Log.Info("[LauncherUpdateService] 已清除 GitHub 缓存");
+        }
+    }
+
+    /// <summary>
+    /// 清除所有缓存
+    /// </summary>
+    public static void ClearAllCache()
+    {
+        _cachedGitHubRelease = null;
+        _cachedGiteeRelease = null;
+        _lastGitHubCheckTime = DateTime.MinValue;
+        _lastGiteeCheckTime = DateTime.MinValue;
+        Log.Info("[LauncherUpdateService] 已清除所有更新缓存");
+    }
+
+    /// <summary>
     /// 检查更新
     /// </summary>
-    /// <param name="preferGitee">是否优先使用 Gitee 源</param>
+    /// <param name="preferGitee">是否优先使用 Gitee 源（默认 true）</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>更新检查结果</returns>
-    public static async Task<UpdateCheckResult> CheckForUpdateAsync(bool preferGitee = false, CancellationToken cancellationToken = default)
+    public static async Task<UpdateCheckResult> CheckForUpdateAsync(bool preferGitee = true, CancellationToken cancellationToken = default)
     {
         try
         {
-            // 检查缓存
-            if (_cachedLatestRelease != null && DateTime.Now - _lastCheckTime < CacheDuration)
+            // 根据当前选择的源检查对应的缓存
+            var (cachedRelease, lastCheckTime) = preferGitee
+                ? (_cachedGiteeRelease, _lastGiteeCheckTime)
+                : (_cachedGitHubRelease, _lastGitHubCheckTime);
+
+            if (cachedRelease != null && DateTime.Now - lastCheckTime < CacheDuration)
             {
-                return CreateResult(_cachedLatestRelease);
+                Log.Info($"[LauncherUpdateService] 使用 {(preferGitee ? "Gitee" : "GitHub")} 缓存的版本信息: {cachedRelease.TagName}");
+                var cachedResult = CreateResult(cachedRelease);
+                cachedResult.Source = preferGitee ? "Gitee" : "GitHub";
+                return cachedResult;
             }
 
             ReleaseInfo? release = null;
@@ -142,9 +184,17 @@ public static class LauncherUpdateService
                 };
             }
 
-            // 缓存结果
-            _cachedLatestRelease = release;
-            _lastCheckTime = DateTime.Now;
+            // 根据使用的源缓存结果
+            if (usedSource == "GitHub")
+            {
+                _cachedGitHubRelease = release;
+                _lastGitHubCheckTime = DateTime.Now;
+            }
+            else if (usedSource == "Gitee")
+            {
+                _cachedGiteeRelease = release;
+                _lastGiteeCheckTime = DateTime.Now;
+            }
 
             var result = CreateResult(release);
             result.Source = usedSource ?? "Unknown";
@@ -191,17 +241,56 @@ public static class LauncherUpdateService
 
         var json = await response.Content.ReadAsStringAsync();
 
+        ReleaseInfo? info;
+        string? updateTxtUrl;
+
         if (source == "GitHub")
         {
-            return ParseGitHubReleases(json);
+            (info, updateTxtUrl) = ParseGitHubReleases(json);
         }
         else
         {
-            return ParseGiteeReleases(json);
+            (info, updateTxtUrl) = ParseGiteeReleases(json);
         }
+
+        // 异步获取 Update.txt 内容
+        if (info != null && !string.IsNullOrEmpty(updateTxtUrl))
+        {
+            try
+            {
+                Log.Debug($"[LauncherUpdateService] 正在获取 Update.txt: {updateTxtUrl}");
+                info.UpdateLog = await FetchUpdateLogAsync(updateTxtUrl, cancellationToken);
+                Log.Debug($"[LauncherUpdateService] 从 Update.txt 获取更新日志，长度: {info.UpdateLog?.Length ?? 0}");
+            }
+            catch (OperationCanceledException)
+            {
+                // 取消操作时不记录警告，直接返回
+                Log.Debug("[LauncherUpdateService] 获取 Update.txt 已被取消");
+                throw;
+            }
+            catch (HttpRequestException ex)
+            {
+                // 网络请求错误（如 GitHub 资源无法访问）
+                Log.Warn($"[LauncherUpdateService] 获取 Update.txt 失败 (网络错误): {ex.Message}");
+                Log.Debug($"[LauncherUpdateService] Update.txt URL: {updateTxtUrl}");
+                info.UpdateLog = "无法获取更新日志（网络连接失败）";
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[LauncherUpdateService] 获取 Update.txt 失败: {ex.Message}");
+                info.UpdateLog = "无法获取更新日志";
+            }
+        }
+        else if (info != null && string.IsNullOrEmpty(updateTxtUrl))
+        {
+            info.UpdateLog = "该版本未提供更新日志";
+            Log.Debug($"[LauncherUpdateService] Release {info.TagName} 没有 Update.txt 文件");
+        }
+
+        return info;
     }
 
-    private static ReleaseInfo? ParseGitHubReleases(string json)
+    private static (ReleaseInfo? info, string? updateTxtUrl) ParseGitHubReleases(string json)
     {
         try
         {
@@ -223,18 +312,29 @@ public static class LauncherUpdateService
                 {
                     TagName = tagName,
                     Name = release.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? tagName : tagName,
-                    Body = release.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : "",
+                    Body = "", // 不再使用 Body
                     HtmlUrl = release.GetProperty("html_url").GetString() ?? "",
                     PublishedAt = release.TryGetProperty("published_at", out var dateProp) ? dateProp.GetDateTime() : DateTime.MinValue
                 };
 
                 // 解析资源，根据当前构建类型筛选
                 var buildType = IsDebugBuild ? "Debug" : "Release";
+                string? updateTxtUrl = null;
+                
                 if (release.TryGetProperty("assets", out var assetsProp))
                 {
                     foreach (var asset in assetsProp.EnumerateArray())
                     {
                         var assetName = asset.GetProperty("name").GetString() ?? "";
+                        var downloadUrl = asset.GetProperty("browser_download_url").GetString() ?? "";
+                        
+                        // 检查是否是 Update.txt 文件
+                        if (assetName.Equals("Update.txt", StringComparison.OrdinalIgnoreCase))
+                        {
+                            updateTxtUrl = downloadUrl;
+                            continue;
+                        }
+                        
                         // 检查文件是否匹配当前构建类型（使用 IndexOf 兼容 .NET Framework）
                         if ((assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
                              assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) &&
@@ -243,7 +343,7 @@ public static class LauncherUpdateService
                             info.Assets.Add(new ReleaseAsset
                             {
                                 Name = assetName,
-                                BrowserDownloadUrl = asset.GetProperty("browser_download_url").GetString() ?? "",
+                                BrowserDownloadUrl = downloadUrl,
                                 Size = asset.GetProperty("size").GetInt64()
                             });
                         }
@@ -254,7 +354,7 @@ public static class LauncherUpdateService
                 if (info.Assets.Count > 0)
                 {
                     Log.Info($"[LauncherUpdateService] 选择 GitHub Release: {tagName}, 匹配 '{buildType}' 的资源数: {info.Assets.Count}");
-                    return info;
+                    return (info, updateTxtUrl);
                 }
                 else
                 {
@@ -263,16 +363,16 @@ public static class LauncherUpdateService
             }
 
             Log.Warn($"[LauncherUpdateService] GitHub: 检查了 {releaseCount} 个版本，未找到匹配 '{(IsDebugBuild ? "Debug" : "Release")}' 的资源");
-            return null;
+            return (null, null);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "[LauncherUpdateService] 解析 GitHub releases 失败");
-            return null;
+            return (null, null);
         }
     }
 
-    private static ReleaseInfo? ParseGiteeReleases(string json)
+    private static (ReleaseInfo? info, string? updateTxtUrl) ParseGiteeReleases(string json)
     {
         try
         {
@@ -294,7 +394,7 @@ public static class LauncherUpdateService
                 {
                     TagName = tagName,
                     Name = release.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? tagName : tagName,
-                    Body = release.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : "",
+                    Body = "", // 不再使用 Body，只使用 Update.txt
                     HtmlUrl = release.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? "" : "",
                     PublishedAt = release.TryGetProperty("published_at", out var dateProp)
                         ? DateTime.TryParse(dateProp.GetString(), out var date) ? date : DateTime.MinValue
@@ -303,11 +403,24 @@ public static class LauncherUpdateService
 
                 // 解析资源，根据当前构建类型筛选
                 var buildType = IsDebugBuild ? "Debug" : "Release";
+                string? updateTxtUrl = null;
+                
                 if (release.TryGetProperty("assets", out var assetsProp))
                 {
                     foreach (var asset in assetsProp.EnumerateArray())
                     {
                         var assetName = asset.GetProperty("name").GetString() ?? "";
+                        var downloadUrl = asset.TryGetProperty("browser_download_url", out var dlProp)
+                            ? dlProp.GetString() ?? ""
+                            : "";
+                        
+                        // 检查是否是 Update.txt 文件
+                        if (assetName.Equals("Update.txt", StringComparison.OrdinalIgnoreCase))
+                        {
+                            updateTxtUrl = downloadUrl;
+                            continue;
+                        }
+                        
                         // 检查文件是否匹配当前构建类型（使用 IndexOf 兼容 .NET Framework）
                         if ((assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
                              assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) &&
@@ -316,9 +429,7 @@ public static class LauncherUpdateService
                             info.Assets.Add(new ReleaseAsset
                             {
                                 Name = assetName,
-                                BrowserDownloadUrl = asset.TryGetProperty("browser_download_url", out var dlProp)
-                                    ? dlProp.GetString() ?? ""
-                                    : "",
+                                BrowserDownloadUrl = downloadUrl,
                                 Size = asset.TryGetProperty("size", out var sizeProp) ? sizeProp.GetInt64() : 0
                             });
                         }
@@ -328,8 +439,9 @@ public static class LauncherUpdateService
                 // 只有找到匹配的资源才返回
                 if (info.Assets.Count > 0)
                 {
+                    // 不再在此处同步获取 Update.txt，由调用方异步处理
                     Log.Info($"[LauncherUpdateService] 选择 Gitee Release: {tagName}, 匹配 '{buildType}' 的资源数: {info.Assets.Count}");
-                    return info;
+                    return (info, updateTxtUrl);
                 }
                 else
                 {
@@ -338,13 +450,27 @@ public static class LauncherUpdateService
             }
 
             Log.Warn($"[LauncherUpdateService] Gitee: 检查了 {releaseCount} 个版本，未找到匹配 '{(IsDebugBuild ? "Debug" : "Release")}' 的资源");
-            return null;
+            return (null, null);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "[LauncherUpdateService] 解析 Gitee releases 失败");
-            return null;
+            return (null, null);
         }
+    }
+
+    /// <summary>
+    /// 从 Update.txt URL 获取更新日志内容
+    /// </summary>
+    private static async Task<string> FetchUpdateLogAsync(string url, CancellationToken cancellationToken = default)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("User-Agent", "SVL-Launcher/1.0");
+        
+        var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        
+        return await response.Content.ReadAsStringAsync();
     }
 
     private static Version ParseVersion(string tagName)
@@ -399,7 +525,7 @@ public class UpdateCheckResult
     public Version CurrentVersion { get; set; } = new Version(0, 0, 0, 0);
 
     /// <summary>
-    /// 是否有更新
+    /// 是否有可用更新
     /// </summary>
     public bool HasUpdate { get; set; }
 
@@ -435,6 +561,11 @@ public class ReleaseInfo
     public string Body { get; set; } = "";
 
     /// <summary>
+    /// 更新日志（从 Update.txt 获取）
+    /// </summary>
+    public string UpdateLog { get; set; } = "";
+
+    /// <summary>
     /// 网页 URL
     /// </summary>
     public string HtmlUrl { get; set; } = "";
@@ -445,18 +576,23 @@ public class ReleaseInfo
     public DateTime PublishedAt { get; set; }
 
     /// <summary>
-    /// 下载资源列表
+    /// 是否为预发布版本（Debug 版本视为预发布）
     /// </summary>
-    public System.Collections.Generic.List<ReleaseAsset> Assets { get; set; } = new();
+    public bool IsPrerelease { get; set; }
+
+    /// <summary>
+    /// 资产列表
+    /// </summary>
+    public List<ReleaseAsset> Assets { get; set; } = new();
 }
 
 /// <summary>
-/// 发布资源
+/// 发布资产
 /// </summary>
 public class ReleaseAsset
 {
     /// <summary>
-    /// 文件名
+    /// 资产名称
     /// </summary>
     public string Name { get; set; } = "";
 

@@ -1471,7 +1471,10 @@
                                                     <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
                                                 </Trigger>
                                                 <DataTrigger Binding="{Binding HasUpdateAvailable}" Value="True">
-                                                    <Setter Property="Background" Value="#FF4CAF50"/>
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsCheckingUpdate}" Value="True">
+                                                    <Setter Property="IsEnabled" Value="False"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
