@@ -378,6 +378,19 @@ public partial class UpdateDialog : Window
             ?? throw new InvalidOperationException("无法获取当前程序路径");
 
         var scriptPath = Path.Combine(Path.GetTempPath(), "SVL_Update.bat");
+        var currentDir = Path.GetDirectoryName(currentExePath) ?? "";
+        var currentExeName = Path.GetFileName(currentExePath);
+        
+        // 获取新版本号，用于重命名文件（从 TagName 解析，如 "v1.1.3" -> "1.1.3"）
+        var versionStr = _releaseInfo.TagName.TrimStart('v');
+        var newExeName = $"SVL.Desktop_v{versionStr}.exe";
+        var newExePath = Path.Combine(currentDir, newExeName);
+
+        // 更新日志内容（用于更新完成后显示）
+        var updateLogEscaped = (_releaseInfo.UpdateLog ?? _releaseInfo.Body ?? "更新完成")
+            .Replace("\"", "'")
+            .Replace("\r\n", " ")
+            .Replace("\n", " ");
 
         string scriptContent;
         
@@ -388,20 +401,34 @@ public partial class UpdateDialog : Window
 chcp 65001 >nul
 REM 静默更新脚本
 
-REM 等待进程完全退出
-timeout /t 3 /nobreak >nul
+REM 等待进程完全退出（增加到5秒确保完全关闭）
+echo 等待程序关闭... >nul
+timeout /t 5 /nobreak >nul
 
-REM 尝试复制文件
-copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul 2>&1
+REM 强制结束可能残留的进程
+taskkill /f /im ""{currentExeName}"" >nul 2>&1
+
+REM 再等待1秒
+timeout /t 1 /nobreak >nul
+
+REM 复制新文件到临时位置
+echo 正在更新文件... >nul
+copy /Y ""{updateFilePath}"" ""{newExePath}"" >nul 2>&1
 
 if %errorlevel% neq 0 (
-    REM 复制失败，使用 mshta 弹窗提示错误
-    mshta vbscript:Execute(""CreateObject(""WScript.Shell"").Popup(""更新失败：无法复制文件。"" & vbCrLf & ""请手动将以下文件复制到程序目录："" & vbCrLf & ""{updateFilePath}"", 0, ""SVL 更新错误"", 16):close"")
-    exit /b 1
+    REM 复制失败，尝试直接覆盖原文件
+    copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul 2>&1
+    if %errorlevel% neq 0 (
+        mshta vbscript:Execute(""CreateObject(""WScript.Shell"").Popup(""更新失败：无法复制文件。"" & vbCrLf & ""请手动将以下文件复制到程序目录："" & vbCrLf & ""{updateFilePath}"", 0, ""SVL 更新错误"", 16):close"")
+        exit /b 1
+    )
+    set ""FINAL_EXE={currentExePath}""
+) else (
+    set ""FINAL_EXE={newExePath}""
 )
 
-REM 更新成功，启动程序
-start "" ""{currentExePath}""
+REM 更新成功，启动程序（带 --updated 参数表示刚完成更新）
+start "" ""%FINAL_EXE%"" --updated
 
 REM 清理临时文件
 del ""{updateFilePath}"" 2>nul
@@ -422,26 +449,47 @@ echo ========================================
 echo.
 echo 正在关闭启动器...
 
-REM 等待进程完全退出
-timeout /t 3 /nobreak >nul
+REM 等待进程完全退出（增加到5秒确保完全关闭）
+timeout /t 5 /nobreak >nul
+
+REM 强制结束可能残留的进程
+taskkill /f /im ""{currentExeName}"" >nul 2>&1
+
+REM 再等待1秒
+timeout /t 1 /nobreak >nul
 
 echo 正在复制更新文件...
-copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul
+echo 新版本: {versionStr}
+echo 目标文件: {newExeName}
+
+REM 复制新文件到带版本号的文件名
+copy /Y ""{updateFilePath}"" ""{newExePath}"" >nul
 
 if %errorlevel% neq 0 (
     echo.
-    echo [错误] 复制文件失败！
-    echo 请手动将下载的文件复制到程序目录。
-    echo 下载位置: {updateFilePath}
-    pause
-    exit /b 1
+    echo [警告] 无法创建版本化文件名，尝试直接覆盖...
+    copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul
+    if %errorlevel% neq 0 (
+        echo.
+        echo [错误] 复制文件失败！
+        echo 请手动将下载的文件复制到程序目录。
+        echo 下载位置: {updateFilePath}
+        pause
+        exit /b 1
+    )
+    set ""FINAL_EXE={currentExePath}""
+) else (
+    echo 成功创建: {newExeName}
+    set ""FINAL_EXE={newExePath}""
 )
 
 echo.
 echo 更新完成！正在启动启动器...
 timeout /t 2 /nobreak >nul
 
-start "" ""{currentExePath}""
+REM 启动程序（带 --updated 参数表示刚完成更新）
+echo 启动: %FINAL_EXE%
+start "" ""%FINAL_EXE%"" --updated
 
 REM 清理临时文件
 del ""{updateFilePath}"" 2>nul

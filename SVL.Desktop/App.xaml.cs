@@ -28,6 +28,9 @@ public partial class App : System.Windows.Application
     // 标记是否为更新而退出（用于跳过 Debug 控制台的等待按键）
     private static bool _isExitingForUpdate = false;
 
+    // 标记是否刚完成更新（用于显示更新完成对话框）
+    private static bool _justUpdated = false;
+
     /// <summary>
     /// 标记本次启动已显示过更新弹窗
     /// </summary>
@@ -81,7 +84,7 @@ public partial class App : System.Windows.Application
         try
         {
             // ===== 单实例检查（必须在最开始） =====
-            // 首先检查命令行参数中是否有 NXM URL
+            // 首先检查命令行参数中是否有 NXM URL 或 --updated 标记
             string? nxmUrlFromArgs = null;
             if (e.Args.Length > 0)
             {
@@ -92,6 +95,11 @@ public partial class App : System.Windows.Application
                         nxmUrlFromArgs = arg;
                         Log.Info($"[App] 从命令行检测到 NXM URL: {nxmUrlFromArgs}");
                         break;
+                    }
+                    else if (arg.Equals("--updated", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _justUpdated = true;
+                        Log.Info("[App] 检测到 --updated 参数，将在启动后显示更新完成对话框");
                     }
                 }
             }
@@ -148,6 +156,12 @@ public partial class App : System.Windows.Application
             splashScreen.ShowAndClose(mainWindow, 2000);
 
             Log.Info("[App] Startup completed");
+
+            // 如果刚完成更新，显示更新完成对话框
+            if (_justUpdated)
+            {
+                _ = ShowUpdateCompleteDialogAsync();
+            }
 
             // 启动时检查更新（异步执行，不阻塞启动）
             _ = CheckForUpdatesOnStartupAsync();
@@ -255,7 +269,8 @@ public partial class App : System.Windows.Application
             Log.Info("[App] 开始检查启动器更新...");
 
             var preferGitee = settings.PreferredUpdateSource == 1;
-            var result = await LauncherUpdateService.CheckForUpdateAsync(preferGitee);
+            var includePrerelease = settings.CheckPrereleaseUpdates;
+            var result = await LauncherUpdateService.CheckForUpdateAsync(preferGitee, includePrerelease);
 
             if (!result.Success)
             {
@@ -303,6 +318,48 @@ public partial class App : System.Windows.Application
         catch (Exception ex)
         {
             Log.Error(ex, "[App] 启动时检查更新失败");
+        }
+    }
+
+    /// <summary>
+    /// 显示更新完成对话框
+    /// </summary>
+    private static async Task ShowUpdateCompleteDialogAsync()
+    {
+        try
+        {
+            // 等待主窗口完全加载
+            await Task.Delay(1500);
+
+            // 获取当前版本
+            var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+                ?? new Version(1, 1, 3, 0);
+
+            // 获取更新日志（从配置或默认）
+            var updateLog = $"SVL 启动器已更新至 v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}\n\n" +
+                           "本次更新内容：\n" +
+                           "• Release 版本静默更新（无控制台窗口）\n" +
+                           "• 更新失败时弹窗提示错误信息\n" +
+                           "• 更新日志使用自定义滚动条样式\n" +
+                           "• Gitee 更新源持久化保存\n" +
+                           "• 修复快速切换更新源崩溃问题\n" +
+                           "• 修复更新源设置重启后丢失问题";
+
+            await Current.Dispatcher.InvokeAsync(() =>
+            {
+                WpfMessageBox.Show(
+                    updateLog,
+                    "更新完成",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+            });
+
+            Log.Info($"[App] 更新完成对话框已显示，当前版本: {currentVersion}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[App] 显示更新完成对话框失败");
         }
     }
 }

@@ -485,6 +485,11 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _debugMode = false;
 
+    // ===== 启动器更新设置 =====
+
+    [ObservableProperty]
+    private bool _checkPrereleaseUpdates = false;
+
     // ===== 选项列表（只读） =====
 
     public List<string> LauncherVisibilityOptions => _launcherVisibilityOptions;
@@ -580,7 +585,8 @@ public partial class SettingsViewModel : ObservableObject
                 // 启动器更新设置
                 AutoDownloadUpdate = AutoDownloadUpdate,
                 ShowUpdateNotification = ShowUpdateNotification,
-                PreferredUpdateSource = PreferredUpdateSourceIndex
+                PreferredUpdateSource = PreferredUpdateSourceIndex,
+                CheckPrereleaseUpdates = CheckPrereleaseUpdates
             };
 
             var success = AppConfig.SaveSettings(settings);
@@ -1385,7 +1391,7 @@ public partial class SettingsViewModel : ObservableObject
             UpdateStatusMessage = "正在检查更新...";
 
             var preferGitee = PreferredUpdateSourceIndex == 1;
-            var result = await LauncherUpdateService.CheckForUpdateAsync(preferGitee);
+            var result = await LauncherUpdateService.CheckForUpdateAsync(preferGitee, CheckPrereleaseUpdates);
 
             if (result.Success)
             {
@@ -1546,6 +1552,7 @@ public partial class SettingsViewModel : ObservableObject
             AutoDownloadUpdate = settings.AutoDownloadUpdate;
             ShowUpdateNotification = settings.ShowUpdateNotification;
             PreferredUpdateSourceIndex = settings.PreferredUpdateSource;
+            CheckPrereleaseUpdates = settings.CheckPrereleaseUpdates;
 
             // 默认下载源（加载时不要触发立即保存）
             _suppressDefaultSourceImmediateSave = true;

@@ -139,7 +139,8 @@ public static class AppConfig
                 AutoDownloadUpdate = settings.AutoDownloadUpdate,
                 ShowUpdateNotification = settings.ShowUpdateNotification,
                 PreferredUpdateSource = settings.PreferredUpdateSource,
-                SkippedUpdateVersion = settings.SkippedUpdateVersion
+                SkippedUpdateVersion = settings.SkippedUpdateVersion,
+                CheckPrereleaseUpdates = settings.CheckPrereleaseUpdates
             };
 
             var options = new JsonSerializerOptions { WriteIndented = true };
@@ -413,6 +414,11 @@ public class AppSettings
     /// 跳过的更新版本号（用户点击"此版本不再提醒"后记录）
     /// </summary>
     public string? SkippedUpdateVersion { get; set; }
+
+    /// <summary>
+    /// 检查预发布版本更新（默认关闭）
+    /// </summary>
+    public bool CheckPrereleaseUpdates { get; set; } = false;
 }
 
 // ===== 枚举定义 =====

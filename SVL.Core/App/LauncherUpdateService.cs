@@ -100,9 +100,10 @@ public static class LauncherUpdateService
     /// 检查更新
     /// </summary>
     /// <param name="preferGitee">是否优先使用 Gitee 源（默认 true）</param>
+    /// <param name="includePrerelease">是否包含预发布版本（默认 false）</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>更新检查结果</returns>
-    public static async Task<UpdateCheckResult> CheckForUpdateAsync(bool preferGitee = true, CancellationToken cancellationToken = default)
+    public static async Task<UpdateCheckResult> CheckForUpdateAsync(bool preferGitee = true, bool includePrerelease = false, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -135,7 +136,7 @@ public static class LauncherUpdateService
                 try
                 {
                     Log.Info($"[LauncherUpdateService] 正在从 {source.Name} 获取更新...");
-                    release = await FetchLatestReleaseAsync(source.Url, source.Name, cancellationToken);
+                    release = await FetchLatestReleaseAsync(source.Url, source.Name, includePrerelease, cancellationToken);
                     if (release != null)
                     {
                         usedSource = source.Name;
@@ -160,7 +161,7 @@ public static class LauncherUpdateService
                 try
                 {
                     Log.Info($"[LauncherUpdateService] 首选源失败，尝试备用源 {fallbackSource.Name}...");
-                    release = await FetchLatestReleaseAsync(fallbackSource.Url, fallbackSource.Name, cancellationToken);
+                    release = await FetchLatestReleaseAsync(fallbackSource.Url, fallbackSource.Name, includePrerelease, cancellationToken);
                     if (release != null)
                     {
                         usedSource = fallbackSource.Name;
@@ -226,7 +227,7 @@ public static class LauncherUpdateService
         };
     }
 
-    private static async Task<ReleaseInfo?> FetchLatestReleaseAsync(string url, string source, CancellationToken cancellationToken)
+    private static async Task<ReleaseInfo?> FetchLatestReleaseAsync(string url, string source, bool includePrerelease, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, url);
 
@@ -246,11 +247,11 @@ public static class LauncherUpdateService
 
         if (source == "GitHub")
         {
-            (info, updateTxtUrl) = ParseGitHubReleases(json);
+            (info, updateTxtUrl) = ParseGitHubReleases(json, includePrerelease);
         }
         else
         {
-            (info, updateTxtUrl) = ParseGiteeReleases(json);
+            (info, updateTxtUrl) = ParseGiteeReleases(json, includePrerelease);
         }
 
         // 异步获取 Update.txt 内容
@@ -290,7 +291,7 @@ public static class LauncherUpdateService
         return info;
     }
 
-    private static (ReleaseInfo? info, string? updateTxtUrl) ParseGitHubReleases(string json)
+    private static (ReleaseInfo? info, string? updateTxtUrl) ParseGitHubReleases(string json, bool includePrerelease)
     {
         try
         {
@@ -305,8 +306,16 @@ public static class LauncherUpdateService
             {
                 releaseCount++;
                 var tagName = release.GetProperty("tag_name").GetString() ?? "";
+                var isPrerelease = release.TryGetProperty("prerelease", out var prereleaseProp) && prereleaseProp.GetBoolean();
 
-                Log.Debug($"[LauncherUpdateService] GitHub Release #{releaseCount}: {tagName}, IsDebugBuild={IsDebugBuild}");
+                // 如果不包含预发布版本，且该版本是预发布，则跳过
+                if (!includePrerelease && isPrerelease)
+                {
+                    Log.Debug($"[LauncherUpdateService] GitHub Release #{releaseCount}: {tagName} 是预发布版本，已跳过");
+                    continue;
+                }
+
+                Log.Debug($"[LauncherUpdateService] GitHub Release #{releaseCount}: {tagName}, IsDebugBuild={IsDebugBuild}, IsPrerelease={isPrerelease}");
 
                 var info = new ReleaseInfo
                 {
@@ -314,7 +323,8 @@ public static class LauncherUpdateService
                     Name = release.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? tagName : tagName,
                     Body = "", // 不再使用 Body
                     HtmlUrl = release.GetProperty("html_url").GetString() ?? "",
-                    PublishedAt = release.TryGetProperty("published_at", out var dateProp) ? dateProp.GetDateTime() : DateTime.MinValue
+                    PublishedAt = release.TryGetProperty("published_at", out var dateProp) ? dateProp.GetDateTime() : DateTime.MinValue,
+                    IsPrerelease = isPrerelease
                 };
 
                 // 解析资源，根据当前构建类型筛选
@@ -372,7 +382,7 @@ public static class LauncherUpdateService
         }
     }
 
-    private static (ReleaseInfo? info, string? updateTxtUrl) ParseGiteeReleases(string json)
+    private static (ReleaseInfo? info, string? updateTxtUrl) ParseGiteeReleases(string json, bool includePrerelease)
     {
         try
         {
@@ -387,8 +397,16 @@ public static class LauncherUpdateService
             {
                 releaseCount++;
                 var tagName = release.GetProperty("tag_name").GetString() ?? "";
+                var isPrerelease = release.TryGetProperty("prerelease", out var prereleaseProp) && prereleaseProp.GetBoolean();
 
-                Log.Debug($"[LauncherUpdateService] Gitee Release #{releaseCount}: {tagName}, IsDebugBuild={IsDebugBuild}");
+                // 如果不包含预发布版本，且该版本是预发布，则跳过
+                if (!includePrerelease && isPrerelease)
+                {
+                    Log.Debug($"[LauncherUpdateService] Gitee Release #{releaseCount}: {tagName} 是预发布版本，已跳过");
+                    continue;
+                }
+
+                Log.Debug($"[LauncherUpdateService] Gitee Release #{releaseCount}: {tagName}, IsDebugBuild={IsDebugBuild}, IsPrerelease={isPrerelease}");
 
                 var info = new ReleaseInfo
                 {
@@ -398,7 +416,8 @@ public static class LauncherUpdateService
                     HtmlUrl = release.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? "" : "",
                     PublishedAt = release.TryGetProperty("published_at", out var dateProp)
                         ? DateTime.TryParse(dateProp.GetString(), out var date) ? date : DateTime.MinValue
-                        : DateTime.MinValue
+                        : DateTime.MinValue,
+                    IsPrerelease = isPrerelease
                 };
 
                 // 解析资源，根据当前构建类型筛选

@@ -1526,6 +1526,17 @@
                                           Style="{StaticResource SettingComboBoxStyle}"
                                           Width="200"
                                           HorizontalAlignment="Left"/>
+
+                                <!-- 检查预发布版本 -->
+                                <CheckBox Content="检查预发布版本更新"
+                                          IsChecked="{Binding CheckPrereleaseUpdates}"
+                                          Foreground="{DynamicResource ColorBrush1}"
+                                          FontSize="13"
+                                          Margin="0,16,0,4"/>
+                                <TextBlock Text="启用后将检测预发布版本（Beta/RC 等），默认只检测正式版本"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
