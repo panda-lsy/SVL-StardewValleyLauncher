@@ -1853,6 +1853,13 @@ public partial class SettingsViewModel : ObservableObject
         }), System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
+    partial void OnCheckPrereleaseUpdatesChanged(bool value)
+    {
+        // 清除缓存，确保使用新的 prerelease 设置重新获取
+        LauncherUpdateService.ClearAllCache();
+        AutoSave();
+    }
+
     /// <summary>
     /// 自动保存设置（延迟 1000ms，防抖）
     /// </summary>

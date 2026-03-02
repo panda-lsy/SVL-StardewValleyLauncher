@@ -397,7 +397,9 @@ public partial class UpdateDialog : Window
         if (silent)
         {
             // 静默模式：不显示任何窗口，出错时弹窗提示
+            // 使用 PowerShell 启动新进程，更可靠地处理路径和参数
             scriptContent = $@"@echo off
+setlocal EnableDelayedExpansion
 chcp 65001 >nul
 REM 静默更新脚本
 
@@ -415,10 +417,10 @@ REM 复制新文件到临时位置
 echo 正在更新文件... >nul
 copy /Y ""{updateFilePath}"" ""{newExePath}"" >nul 2>&1
 
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     REM 复制失败，尝试直接覆盖原文件
     copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul 2>&1
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         mshta vbscript:Execute(""CreateObject(""WScript.Shell"").Popup(""更新失败：无法复制文件。"" & vbCrLf & ""请手动将以下文件复制到程序目录："" & vbCrLf & ""{updateFilePath}"", 0, ""SVL 更新错误"", 16):close"")
         exit /b 1
     )
@@ -428,7 +430,8 @@ if %errorlevel% neq 0 (
 )
 
 REM 更新成功，启动程序（带 --updated 参数表示刚完成更新）
-start "" ""%FINAL_EXE%"" --updated
+REM 使用 PowerShell 启动，更可靠地处理路径和参数
+powershell -WindowStyle Hidden -Command ""Start-Process -FilePath '!FINAL_EXE!' -ArgumentList '--updated'""
 
 REM 清理临时文件
 del ""{updateFilePath}"" 2>nul
@@ -441,6 +444,7 @@ exit
         {
             // 调试模式：显示控制台窗口，方便查看更新过程
             scriptContent = $@"@echo off
+setlocal EnableDelayedExpansion
 chcp 65001 >nul
 title SVL 更新程序
 echo ========================================
@@ -465,11 +469,11 @@ echo 目标文件: {newExeName}
 REM 复制新文件到带版本号的文件名
 copy /Y ""{updateFilePath}"" ""{newExePath}"" >nul
 
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo.
     echo [警告] 无法创建版本化文件名，尝试直接覆盖...
     copy /Y ""{updateFilePath}"" ""{currentExePath}"" >nul
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo.
         echo [错误] 复制文件失败！
         echo 请手动将下载的文件复制到程序目录。
@@ -488,8 +492,8 @@ echo 更新完成！正在启动启动器...
 timeout /t 2 /nobreak >nul
 
 REM 启动程序（带 --updated 参数表示刚完成更新）
-echo 启动: %FINAL_EXE%
-start "" ""%FINAL_EXE%"" --updated
+echo 启动: !FINAL_EXE!
+powershell -Command ""Start-Process -FilePath '!FINAL_EXE!' -ArgumentList '--updated'""
 
 REM 清理临时文件
 del ""{updateFilePath}"" 2>nul

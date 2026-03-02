@@ -35,6 +35,8 @@ public static class LauncherUpdateService
     private static ReleaseInfo? _cachedGiteeRelease;
     private static DateTime _lastGitHubCheckTime;
     private static DateTime _lastGiteeCheckTime;
+    private static bool _cachedGitHubIncludePrerelease;
+    private static bool _cachedGiteeIncludePrerelease;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
     /// <summary>
@@ -74,12 +76,14 @@ public static class LauncherUpdateService
         {
             _cachedGiteeRelease = null;
             _lastGiteeCheckTime = DateTime.MinValue;
+            _cachedGiteeIncludePrerelease = false;
             Log.Info("[LauncherUpdateService] 已清除 Gitee 缓存");
         }
         else
         {
             _cachedGitHubRelease = null;
             _lastGitHubCheckTime = DateTime.MinValue;
+            _cachedGitHubIncludePrerelease = false;
             Log.Info("[LauncherUpdateService] 已清除 GitHub 缓存");
         }
     }
@@ -93,6 +97,8 @@ public static class LauncherUpdateService
         _cachedGiteeRelease = null;
         _lastGitHubCheckTime = DateTime.MinValue;
         _lastGiteeCheckTime = DateTime.MinValue;
+        _cachedGitHubIncludePrerelease = false;
+        _cachedGiteeIncludePrerelease = false;
         Log.Info("[LauncherUpdateService] 已清除所有更新缓存");
     }
 
@@ -108,11 +114,12 @@ public static class LauncherUpdateService
         try
         {
             // 根据当前选择的源检查对应的缓存
-            var (cachedRelease, lastCheckTime) = preferGitee
-                ? (_cachedGiteeRelease, _lastGiteeCheckTime)
-                : (_cachedGitHubRelease, _lastGitHubCheckTime);
+            var (cachedRelease, lastCheckTime, cachedIncludePrerelease) = preferGitee
+                ? (_cachedGiteeRelease, _lastGiteeCheckTime, _cachedGiteeIncludePrerelease)
+                : (_cachedGitHubRelease, _lastGitHubCheckTime, _cachedGitHubIncludePrerelease);
 
-            if (cachedRelease != null && DateTime.Now - lastCheckTime < CacheDuration)
+            // 缓存有效条件：时间未过期 且 includePrerelease 参数一致
+            if (cachedRelease != null && DateTime.Now - lastCheckTime < CacheDuration && cachedIncludePrerelease == includePrerelease)
             {
                 Log.Info($"[LauncherUpdateService] 使用 {(preferGitee ? "Gitee" : "GitHub")} 缓存的版本信息: {cachedRelease.TagName}");
                 var cachedResult = CreateResult(cachedRelease);
@@ -185,16 +192,18 @@ public static class LauncherUpdateService
                 };
             }
 
-            // 根据使用的源缓存结果
+            // 根据使用的源缓存结果（包括 includePrerelease 参数）
             if (usedSource == "GitHub")
             {
                 _cachedGitHubRelease = release;
                 _lastGitHubCheckTime = DateTime.Now;
+                _cachedGitHubIncludePrerelease = includePrerelease;
             }
             else if (usedSource == "Gitee")
             {
                 _cachedGiteeRelease = release;
                 _lastGiteeCheckTime = DateTime.Now;
+                _cachedGiteeIncludePrerelease = includePrerelease;
             }
 
             var result = CreateResult(release);

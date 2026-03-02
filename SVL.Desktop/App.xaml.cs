@@ -328,38 +328,97 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            // 等待主窗口完全加载
-            await Task.Delay(1500);
+            // 等待主窗口完全加载并显示
+            await Task.Delay(2500);
+
+            // 等待主窗口可用
+            await Current.Dispatcher.InvokeAsync(() => { });
 
             // 获取当前版本
-            var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
-                ?? new Version(1, 1, 3, 0);
+            var currentVersion = LauncherUpdateService.CurrentVersion;
+            var versionString = $"v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
 
-            // 获取更新日志（从配置或默认）
-            var updateLog = $"SVL 启动器已更新至 v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}\n\n" +
-                           "本次更新内容：\n" +
-                           "• Release 版本静默更新（无控制台窗口）\n" +
-                           "• 更新失败时弹窗提示错误信息\n" +
-                           "• 更新日志使用自定义滚动条样式\n" +
-                           "• Gitee 更新源持久化保存\n" +
-                           "• 修复快速切换更新源崩溃问题\n" +
-                           "• 修复更新源设置重启后丢失问题";
+            // 尝试从更新源获取最新版本的更新日志
+            string updateLog;
+            try
+            {
+                // 获取配置中的更新源偏好
+                var settings = AppConfig.GetSettings();
+                var preferGitee = settings.PreferredUpdateSource == 1;
+                var includePrerelease = settings.CheckPrereleaseUpdates;
 
+                // 检查更新（会使用缓存，不会频繁请求）
+                var result = await LauncherUpdateService.CheckForUpdateAsync(preferGitee, includePrerelease);
+
+                if (result.Success && result.ReleaseInfo != null)
+                {
+                    // 使用从服务器获取的更新日志
+                    var release = result.ReleaseInfo;
+                    
+                    // 优先使用 UpdateLog（Update.txt），其次使用 Body（发布说明）
+                    if (!string.IsNullOrWhiteSpace(release.UpdateLog))
+                    {
+                        updateLog = release.UpdateLog;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(release.Body))
+                    {
+                        updateLog = release.Body;
+                    }
+                    else
+                    {
+                        updateLog = "暂无更新日志";
+                    }
+
+                    Log.Info($"[App] 从 {result.Source} 获取到更新日志，长度: {updateLog.Length}");
+                }
+                else
+                {
+                    updateLog = GetDefaultUpdateLog();
+                    Log.Warn("[App] 无法获取更新日志，使用默认内容");
+                }
+            }
+            catch (Exception ex)
+            {
+                updateLog = GetDefaultUpdateLog();
+                Log.Warn($"[App] 获取更新日志失败，使用默认内容: {ex.Message}");
+            }
+
+            // 在主线程显示对话框
             await Current.Dispatcher.InvokeAsync(() =>
             {
-                WpfMessageBox.Show(
-                    updateLog,
-                    "更新完成",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information
-                );
+                var mainWindow = Current.MainWindow as MainWindow;
+                Controls.UpdateCompleteDialog.ShowDialog(mainWindow, versionString, updateLog);
             });
 
-            Log.Info($"[App] 更新完成对话框已显示，当前版本: {currentVersion}");
+            Log.Info($"[App] 更新完成对话框已显示，当前版本: {versionString}");
         }
         catch (Exception ex)
         {
             Log.Error(ex, "[App] 显示更新完成对话框失败");
         }
+    }
+
+    /// <summary>
+    /// 获取默认更新日志（当无法从服务器获取时使用）
+    /// </summary>
+    private static string GetDefaultUpdateLog()
+    {
+        return @"## v1.1.3.1 更新内容
+
+### 新功能
+• Release 版本静默更新（无控制台窗口）
+• 更新失败时弹窗提示错误信息
+• 更新完成对话框美化
+
+### 优化
+• 更新日志使用自定义滚动条样式
+• Gitee 更新源持久化保存
+• 优化 prerelease 版本检测逻辑
+
+### 修复
+• 修复快速切换更新源崩溃问题
+• 修复更新源设置重启后丢失问题
+• 修复 prerelease 缓存未正确失效问题
+• 修复更新后重启程序启动失败问题";
     }
 }
