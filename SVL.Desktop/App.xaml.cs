@@ -32,6 +32,52 @@ public partial class App : System.Windows.Application
     private static bool _justUpdated = false;
 
     /// <summary>
+    /// 清理旧版本 EXE 文件
+    /// </summary>
+    private static void CleanupOldVersions()
+    {
+        try
+        {
+            var currentExePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrEmpty(currentExePath))
+                return;
+
+            var currentDir = System.IO.Path.GetDirectoryName(currentExePath);
+            if (string.IsNullOrEmpty(currentDir))
+                return;
+
+            var currentExeName = System.IO.Path.GetFileName(currentExePath);
+
+            // 查找所有 SVL.Desktop_v*.exe 文件（旧版本）
+            var oldVersions = System.IO.Directory.GetFiles(currentDir, "SVL.Desktop_v*.exe")
+                .Where(f => !System.IO.Path.GetFileName(f).Equals(currentExeName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (oldVersions.Count == 0)
+                return;
+
+            Log.Info($"[App] 发现 {oldVersions.Count} 个旧版本文件，正在清理...");
+
+            foreach (var oldFile in oldVersions)
+            {
+                try
+                {
+                    System.IO.File.Delete(oldFile);
+                    Log.Info($"[App] 已删除旧版本: {System.IO.Path.GetFileName(oldFile)}");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"[App] 无法删除旧版本 {System.IO.Path.GetFileName(oldFile)}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[App] 清理旧版本失败: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// 标记本次启动已显示过更新弹窗
     /// </summary>
     public static void MarkUpdateDialogShown()
@@ -100,6 +146,8 @@ public partial class App : System.Windows.Application
                     {
                         _justUpdated = true;
                         Log.Info("[App] 检测到 --updated 参数，将在启动后显示更新完成对话框");
+                        // 清理旧版本 EXE
+                        CleanupOldVersions();
                     }
                 }
             }
