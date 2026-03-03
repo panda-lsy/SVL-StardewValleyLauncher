@@ -115,7 +115,7 @@ public partial class LaunchLeftViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private string _instanceName = "加载中...";
+    private string _instanceName = "未找到可用的游戏";
 
     [ObservableProperty]
     private string _gameVersion = "-";

@@ -641,10 +641,112 @@ public static class GamePathService
     public static string[] AutoDetectGamePaths()
     {
         var results = new System.Collections.Generic.List<string>();
+        var checkedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
-            // 方法1: 查找当前驱动器上的 Stardew Valley 文件夹
+            // 方法1: 从 Steam 注册表读取安装路径
+            try
+            {
+                var steamPath = Microsoft.Win32.Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam",
+                    "InstallPath",
+                    null) as string;
+
+                if (!string.IsNullOrEmpty(steamPath) && Directory.Exists(steamPath))
+                {
+                    Log.Info($"[AutoDetect] 找到 Steam 安装路径: {steamPath}");
+
+                    // 读取 Steam 库文件夹
+                    var libraryFoldersPath = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
+                    if (File.Exists(libraryFoldersPath))
+                    {
+                        var libraryPaths = ParseSteamLibraryFolders(libraryFoldersPath);
+                        foreach (var libPath in libraryPaths)
+                        {
+                            var gamePath = Path.Combine(libPath, "steamapps", "common", "Stardew Valley");
+                            if (Directory.Exists(gamePath) && IsValidGamePath(gamePath) && !checkedPaths.Contains(gamePath))
+                            {
+                                results.Add(gamePath);
+                                checkedPaths.Add(gamePath);
+                                Log.Info($"[AutoDetect] 从 Steam 库找到游戏: {gamePath}");
+                            }
+                        }
+                    }
+
+                    // 也检查 Steam 默认路径
+                    var defaultGamePath = Path.Combine(steamPath, "steamapps", "common", "Stardew Valley");
+                    if (Directory.Exists(defaultGamePath) && IsValidGamePath(defaultGamePath) && !checkedPaths.Contains(defaultGamePath))
+                    {
+                        results.Add(defaultGamePath);
+                        checkedPaths.Add(defaultGamePath);
+                        Log.Info($"[AutoDetect] 从 Steam 默认路径找到游戏: {defaultGamePath}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[AutoDetect] 读取 Steam 注册表失败: {ex.Message}");
+            }
+
+            // 方法2: GOG Galaxy 注册表路径
+            try
+            {
+                var gogPath = Microsoft.Win32.Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\GOG.com\Games\1453375253",
+                    "PATH",
+                    null) as string;
+
+                if (!string.IsNullOrEmpty(gogPath) && Directory.Exists(gogPath) && 
+                    IsValidGamePath(gogPath) && !checkedPaths.Contains(gogPath))
+                {
+                    results.Add(gogPath);
+                    checkedPaths.Add(gogPath);
+                    Log.Info($"[AutoDetect] 从 GOG 注册表找到游戏: {gogPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[AutoDetect] 读取 GOG 注册表失败: {ex.Message}");
+            }
+
+            // 方法3: Xbox Game Pass 路径
+            try
+            {
+                var xboxPaths = new[]
+                {
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "ModifiableWindowsApps", "StardewValley"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ModifiableWindowsApps", "StardewValley"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WindowsApps", "StardewValley")
+                };
+
+                foreach (var xboxPath in xboxPaths)
+                {
+                    if (Directory.Exists(xboxPath) && IsValidGamePath(xboxPath) && !checkedPaths.Contains(xboxPath))
+                    {
+                        // Xbox 版本的游戏可能在子目录中
+                        var contentPath = Path.Combine(xboxPath, "Content");
+                        if (Directory.Exists(contentPath) && IsValidGamePath(contentPath))
+                        {
+                            results.Add(contentPath);
+                            checkedPaths.Add(contentPath);
+                            Log.Info($"[AutoDetect] 从 Xbox Game Pass 找到游戏: {contentPath}");
+                        }
+                        else
+                        {
+                            results.Add(xboxPath);
+                            checkedPaths.Add(xboxPath);
+                            Log.Info($"[AutoDetect] 从 Xbox Game Pass 找到游戏: {xboxPath}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[AutoDetect] 检查 Xbox Game Pass 路径失败: {ex.Message}");
+            }
+
+            // 方法4: 扫描所有驱动器的常见路径
             foreach (var drive in DriveInfo.GetDrives())
             {
                 if (!drive.IsReady) continue;
@@ -655,16 +757,23 @@ public static class GamePathService
                     var searchPaths = new[]
                     {
                         Path.Combine(drive.Name, "Games", "Stardew Valley"),
+                        Path.Combine(drive.Name, "Games", "StardewValley"),
+                        Path.Combine(drive.Name, "Game", "Stardew Valley"),
+                        Path.Combine(drive.Name, "Stardew Valley"),
+                        Path.Combine(drive.Name, "StardewValley"),
                         Path.Combine(drive.Name, "Program Files (x86)", "Steam", "steamapps", "common", "Stardew Valley"),
                         Path.Combine(drive.Name, "Program Files", "Steam", "steamapps", "common", "Stardew Valley"),
-                        Path.Combine(drive.RootDirectory.FullName, "Stardew Valley")
+                        Path.Combine(drive.Name, "SteamLibrary", "steamapps", "common", "Stardew Valley"),
+                        Path.Combine(drive.Name, "Steam", "steamapps", "common", "Stardew Valley"),
                     };
 
                     foreach (var path in searchPaths)
                     {
-                        if (Directory.Exists(path) && IsValidGamePath(path))
+                        if (Directory.Exists(path) && IsValidGamePath(path) && !checkedPaths.Contains(path))
                         {
                             results.Add(path);
+                            checkedPaths.Add(path);
+                            Log.Info($"[AutoDetect] 从驱动器扫描找到游戏: {path}");
                         }
                     }
                 }
@@ -673,13 +782,51 @@ public static class GamePathService
                     // 忽略无法访问的驱动器
                 }
             }
+
+            Log.Info($"[AutoDetect] 检测完成，共找到 {results.Count} 个游戏路径");
         }
-        catch
+        catch (Exception ex)
         {
-            // 忽略错误
+            Log.Error($"[AutoDetect] 自动检测失败: {ex.Message}");
         }
 
         return results.ToArray();
+    }
+
+    /// <summary>
+    /// 解析 Steam libraryfolders.vdf 文件
+    /// </summary>
+    private static List<string> ParseSteamLibraryFolders(string vdfPath)
+    {
+        var results = new List<string>();
+
+        try
+        {
+            var lines = File.ReadAllLines(vdfPath);
+            foreach (var line in lines)
+            {
+                var trimmedLine = line.Trim();
+                // 查找 "path" 行
+                if (trimmedLine.StartsWith("\"path\"", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = trimmedLine.Split('"');
+                    if (parts.Length >= 4)
+                    {
+                        var path = parts[3].Replace(@"\\", @"\");
+                        if (Directory.Exists(path))
+                        {
+                            results.Add(path);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[AutoDetect] 解析 Steam 库文件失败: {ex.Message}");
+        }
+
+        return results;
     }
 
     /// <summary>

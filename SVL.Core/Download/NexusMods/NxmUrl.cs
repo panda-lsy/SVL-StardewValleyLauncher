@@ -13,7 +13,8 @@ public enum NxmUrlType
     Mod,
     Collection,
     OAuth,
-    Premium
+    Premium,
+    Test
 }
 
 /// <summary>
@@ -150,6 +151,11 @@ public class NxmUrl
             {
                 result.IsPremium = true;
             }
+            else if (uri.Host == "test")
+            {
+                // 测试 URL: nxm://test/link
+                result.GameId = "test";
+            }
             else
             {
                 throw new ArgumentException($"未识别的NXM URL类型: {nxmUrlString}");
@@ -222,6 +228,8 @@ public class NxmUrl
                 return NxmUrlType.OAuth;
             if (IsPremium)
                 return NxmUrlType.Premium;
+            if (GameId == "test")
+                return NxmUrlType.Test;
             if (CollectionId.HasValue || !string.IsNullOrEmpty(CollectionSlug))
                 return NxmUrlType.Collection;
             return NxmUrlType.Mod;

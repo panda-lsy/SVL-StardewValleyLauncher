@@ -22,7 +22,6 @@ public enum DownloadSubPageType
     SMAPI,
     Mods,
     Modpacks,
-    Utilities,
     ModDetails
 }
 
@@ -568,7 +567,6 @@ public partial class MainWindowViewModel : ObservableObject
         switch (CurrentDownloadSubPage)
         {
             case DownloadSubPageType.SMAPI:
-            case DownloadSubPageType.Utilities:
                 RightPanelContent = new DownloadRightViewModel(this);
                 break;
             case DownloadSubPageType.Mods:

@@ -6,8 +6,8 @@
     <Company>SVL Community</Company>
     <Product>SVL.Core</Product>
     <Copyright>Copyright © SVL Community</Copyright>
-    <AssemblyVersion>1.1.4.0</AssemblyVersion>
-    <FileVersion>1.1.4.0</FileVersion>
+    <AssemblyVersion>1.1.5.0</AssemblyVersion>
+    <FileVersion>1.1.5.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -50,24 +50,14 @@
     <!-- Language and System Features -->
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageReference Include="SharpCompress" Version="0.38.0" />
-    <PackageReference Include="System.Management" Version="5.0.0" />
 
     <!-- Archive Files -->
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
 
-    <!-- Configuration and Database -->
+    <!-- Configuration -->
     <PackageReference Include="System.Text.Json" Version="6.0.9" />
     <PackageReference Include="System.Net.Http.Json" Version="6.0.0" />
     <PackageReference Include="YamlDotNet" Version="13.7.1" />
-    <PackageReference Include="LiteDB" Version="5.0.21" />
-
-    <!-- Network -->
-    <PackageReference Include="Ae.Dns.Client" Version="3.1.0" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="6.0.0" />
-    <PackageReference Include="Polly" Version="7.2.4" />
-
-    <!-- Localization -->
-    <PackageReference Include="Humanizer.Core.zh-CN" Version="2.14.1" />
   </ItemGroup>
 
   <ItemGroup>

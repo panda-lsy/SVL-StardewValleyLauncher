@@ -24,8 +24,7 @@ public enum DownloadTaskType
 {
     SMAPI,          // SMAPI 安装
     Mod,            // Mod 下载
-    Modpack,        // 整合包
-    Utility         // 实用工具
+    Modpack         // 整合包
 }
 
 /// <summary>

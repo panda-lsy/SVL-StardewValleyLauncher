@@ -6,6 +6,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Logging;
 using WinForms = System.Windows.Forms;
 using System.IO;
 using SVL.Desktop.Controls;
@@ -114,6 +115,48 @@ public partial class InstanceSelectorViewModel : ObservableObject
             {
                 System.Diagnostics.Debug.WriteLine($"[InstanceSelector] Path entry: {entry.DisplayName}, {entry.Instances.Count} instances");
                 PathEntries.Add(entry);
+            }
+
+            // 如果没有已保存的实例，尝试自动检测游戏路径
+            if (!PathEntries.Any())
+            {
+                Log.Info("[InstanceSelector] 没有已保存的实例，开始自动检测游戏路径...");
+                var detectedPaths = GamePathService.AutoDetectGamePaths();
+                Log.Info($"[InstanceSelector] 自动检测到 {detectedPaths.Length} 个游戏路径");
+
+                foreach (var path in detectedPaths)
+                {
+                    try
+                    {
+                        Log.Info($"[InstanceSelector] 正在添加检测到的路径: {path}");
+                        var pathInfos = GamePathService.CreateGamePathInfos(path);
+                        var newEntry = new GamePathEntry
+                        {
+                            DisplayName = Path.GetFileName(path),
+                            GamePath = path,
+                            Version = pathInfos.First().Version,
+                            Instances = pathInfos
+                        };
+
+                        PathEntries.Add(newEntry);
+                        Log.Info($"[InstanceSelector] 成功添加路径: {newEntry.DisplayName} (版本: {newEntry.Version})");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error($"[InstanceSelector] 添加路径失败 {path}: {ex.Message}");
+                    }
+                }
+
+                // 如果检测到了路径，自动保存
+                if (PathEntries.Any())
+                {
+                    SaveAllInstances();
+                    Log.Info($"[InstanceSelector] 自动保存了 {PathEntries.Count} 个检测到的实例");
+                }
+                else
+                {
+                    Log.Info("[InstanceSelector] 未检测到任何游戏路径");
+                }
             }
 
             // 尝试恢复之前选中的路径

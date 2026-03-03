@@ -44,8 +44,46 @@ public class InstanceManager
             var existingInstances = SettingsService.LoadInstances();
             if (existingInstances == null || existingInstances.Count == 0)
             {
-                Log.Info("[InstanceManager] 没有现有实例，跳过刷新");
-                return;
+                Log.Info("[InstanceManager] 没有现有实例，尝试自动检测游戏路径...");
+                
+                // 自动检测游戏路径
+                var detectedPaths = GamePathService.AutoDetectGamePaths();
+                Log.Info($"[InstanceManager] 自动检测到 {detectedPaths.Length} 个游戏路径");
+
+                if (detectedPaths.Length > 0)
+                {
+                    // 为每个检测到的路径创建实例
+                    foreach (var path in detectedPaths)
+                    {
+                        try
+                        {
+                            var pathInfos = GamePathService.CreateGamePathInfos(path);
+                            existingInstances.AddRange(pathInfos);
+                            Log.Info($"[InstanceManager] 添加检测到的路径: {path} ({pathInfos.Count} 个实例)");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error($"[InstanceManager] 添加路径失败 {path}: {ex.Message}");
+                        }
+                    }
+
+                    // 保存检测到的实例
+                    if (existingInstances.Count > 0)
+                    {
+                        SettingsService.SaveInstances(existingInstances);
+                        Log.Info($"[InstanceManager] 自动保存了 {existingInstances.Count} 个检测到的实例");
+                    }
+                }
+                else
+                {
+                    Log.Info("[InstanceManager] 未检测到任何游戏路径");
+                }
+
+                // 如果仍然没有实例，跳过后续刷新
+                if (existingInstances == null || existingInstances.Count == 0)
+                {
+                    return;
+                }
             }
 
             // 2. 使用复合键 (GamePath, Name) 处理重复的实例
@@ -236,7 +274,8 @@ public class InstanceManager
         {
             var gamePathHash = GamePath?.ToUpperInvariant()?.GetHashCode() ?? 0;
             var nameHash = Name?.ToUpperInvariant()?.GetHashCode() ?? 0;
-            return HashCode.Combine(gamePathHash, nameHash);
+            // 使用简单的异或组合（.NET Framework 4.8 不支持 HashCode.Combine）
+            return gamePathHash ^ nameHash;
         }
     }
 

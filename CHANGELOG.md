@@ -2,6 +2,35 @@
 
 All notable changes to SVL (Stardew Valley Launcher) will be documented in this file.
 
+## [1.1.5] - 2026-03-03
+
+### Added
+
+- **游戏实例自动检测** - 首次启动时自动检测已安装的游戏
+  - 支持 Steam 安装检测（读取注册表 + libraryfolders.vdf）
+  - 支持 GOG Galaxy 安装检测
+  - 支持 Xbox Game Pass 安装检测
+  - 自动创建并保存检测到的实例
+- **NXM 协议测试支持** - 支持 `nxm://test/link` 测试 URL，用于 Wiki 测试 NXM 协议联动
+  - 收到测试 URL 时显示成功通知
+
+### Changed
+
+- **主页面优化** - 默认实例名称改为"未找到可用的游戏"，更清晰地提示用户
+- **依赖包精简** - 移除 6 个未使用的 NuGet 包，减少程序体积
+  - 移除: System.Management, Ae.Dns.Client, Humanizer.Core.zh-CN, LiteDB, Microsoft.Extensions.Http, Polly
+  - 保留: SharpCompress, SharpZipLib, YamlDotNet, System.Text.Json, CommunityToolkit.Mvvm
+
+### Removed
+
+- **下载页实用工具分类** - 简化下载页面布局
+
+### Fixed
+
+- **HashCode.Combine 兼容性** - 修复 .NET Framework 4.8 下 HashCode.Combine 不可用的问题
+
+---
+
 ## [1.1.4] - 2026-03-02
 
 ### Added

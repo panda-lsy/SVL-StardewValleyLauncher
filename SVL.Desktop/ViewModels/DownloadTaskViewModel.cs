@@ -40,7 +40,6 @@ public partial class DownloadTaskViewModel : ObservableObject
         DownloadTaskType.SMAPI => "SMAPI",
         DownloadTaskType.Mod => "Mod",
         DownloadTaskType.Modpack => "整合包",
-        DownloadTaskType.Utility => "实用工具",
         _ => "未知"
     };
 

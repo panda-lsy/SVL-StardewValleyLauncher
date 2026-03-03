@@ -15,8 +15,7 @@ public enum DownloadCategory
 {
     SMAPI,
     Mods,
-    Modpacks,
-    Utilities
+    Modpacks
 }
 
 /// <summary>
@@ -37,7 +36,6 @@ public partial class DownloadLeftViewModel : ObservableObject
         {
             DownloadSubPageType.Mods => DownloadCategory.Mods,
             DownloadSubPageType.Modpacks => DownloadCategory.Modpacks,
-            DownloadSubPageType.Utilities => DownloadCategory.Utilities,
             _ => DownloadCategory.SMAPI
         };
         _isInitializing = false;
@@ -78,9 +76,6 @@ public partial class DownloadLeftViewModel : ObservableObject
                 break;
             case DownloadCategory.Modpacks:
                 _mainViewModel.CurrentDownloadSubPage = DownloadSubPageType.Modpacks;
-                break;
-            case DownloadCategory.Utilities:
-                _mainViewModel.CurrentDownloadSubPage = DownloadSubPageType.Utilities;
                 break;
         }
 

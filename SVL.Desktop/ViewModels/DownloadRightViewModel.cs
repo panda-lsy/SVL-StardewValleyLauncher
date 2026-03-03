@@ -175,6 +175,21 @@ public partial class DownloadRightViewModel : ObservableObject
             BringMainWindowToFront();
         }
 
+        // 处理 Test 类型的 NXM URL（用于 Wiki 测试 NXM 协议联动）
+        if (nxmUrl.Type == SVL.Core.Download.NexusMods.NxmUrlType.Test)
+        {
+            Log.Info("[NxmDispatch] 收到 NXM 测试 URL，协议联动成功");
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                Controls.FloatingNotificationControl.Show(
+                    title: "NXM 协议联动测试成功",
+                    message: "SVL 已成功接收 NXM 协议回调，协议联动正常工作！",
+                    autoCloseDelay: 5000,
+                    notificationType: Controls.NotificationType.Success);
+            });
+            return;
+        }
+
         // 处理 Collection 类型的 NXM URL
         if (nxmUrl.IsCollection)
         {
@@ -696,7 +711,6 @@ public partial class DownloadRightViewModel : ObservableObject
         _currentCategory = mainViewModel.CurrentDownloadSubPage switch
         {
             DownloadSubPageType.Modpacks => DownloadCategory.Modpacks,
-            DownloadSubPageType.Utilities => DownloadCategory.Utilities,
             _ => DownloadCategory.SMAPI
         };
 
@@ -1185,7 +1199,6 @@ public partial class DownloadRightViewModel : ObservableObject
             DownloadCategory.SMAPI => "SMAPI",
             DownloadCategory.Mods => "社区资源 - Mod",
             DownloadCategory.Modpacks => "社区资源 - 整合包",
-            DownloadCategory.Utilities => "社区资源 - 实用工具",
             _ => "下载"
         };
 
@@ -1231,9 +1244,6 @@ public partial class DownloadRightViewModel : ObservableObject
                 break;
             case DownloadCategory.Modpacks:
                 LoadModpackItems();
-                break;
-            case DownloadCategory.Utilities:
-                LoadUtilityItems();
                 break;
         }
 
@@ -2599,25 +2609,7 @@ public partial class DownloadRightViewModel : ObservableObject
         Status = "整合包来源未就绪，请先配置 API 或登录账户";
     }
 
-    /// <summary>
-    /// 加载实用工具项目（占位）
-    /// </summary>
-    private void LoadUtilityItems()
-    {
-        Items = new List<DownloadItem>
-        {
-            new DownloadItem
-            {
-                Id = "utility-1",
-                Name = "示例工具 1",
-                Author = "示例作者",
-                Version = "1.0",
-                Description = "这是一个示例工具，功能待实现。",
-                Thumbnail = "🔧",
-                Category = "Utilities"
-            }
-        };
-    }
+    // Utilities category removed
 
     [RelayCommand]
     private async Task DownloadItemAsync(DownloadItem item)
@@ -2640,9 +2632,6 @@ public partial class DownloadRightViewModel : ObservableObject
                     break;
                 case DownloadCategory.Modpacks:
                     await DownloadModpackAsync(item);
-                    break;
-                case DownloadCategory.Utilities:
-                    DownloadStatus = "实用工具下载功能待实现";
                     break;
             }
         }

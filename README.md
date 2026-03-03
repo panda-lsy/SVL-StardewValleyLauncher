@@ -149,10 +149,8 @@ SVL/
 | 运行时   | .NET Framework 4.8                    |
 | UI 框架  | WPF (Windows Presentation Foundation) |
 | MVVM     | CommunityToolkit.Mvvm                 |
-| 数据库   | LiteDB                                |
 | 配置     | YamlDotNet / System.Text.Json         |
 | 压缩     | SharpZipLib / SharpCompress           |
-| 网络     | Polly (重试策略) / Ae.Dns.Client      |
 | 嵌入依赖 | Costura.Fody                          |
 
 ## 配置文件
