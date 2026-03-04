@@ -31,9 +31,9 @@
                     Margin="0,0,0,16">
                 <Border.Effect>
                     <DropShadowEffect Color="#000000"
-                                    BlurRadius="16"
+                                    BlurRadius="8"
                                     ShadowDepth="0"
-                                    Opacity="0.15"/>
+                                    Opacity="0.25"/>
                 </Border.Effect>
                 <Image Source="{Binding IconSource}"
                        Stretch="Uniform"

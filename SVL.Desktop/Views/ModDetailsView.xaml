@@ -227,7 +227,7 @@
                                         Cursor="Hand">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Background" Value="{DynamicResource ColorBrushMask}"/>
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
                                             <Style.Triggers>
                                                 <DataTrigger Value="True">
                                                     <DataTrigger.Binding>

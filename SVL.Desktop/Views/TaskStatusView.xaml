@@ -33,12 +33,12 @@
                                 <TextBlock Text="失败原因"
                                            FontSize="16"
                                            FontWeight="SemiBold"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrush1}"
                                            Margin="0,0,0,12"/>
 
                                 <TextBlock Text="{Binding ErrorMessage}"
                                            FontSize="18"
-                                           Foreground="#C2410C"
+                                           Foreground="{DynamicResource ColorBrushGray2}"
                                            TextWrapping="Wrap"
                                            FontWeight="SemiBold"
                                            LineHeight="26"/>
@@ -54,12 +54,12 @@
                                 <TextBlock Text="详细信息"
                                            FontSize="16"
                                            FontWeight="SemiBold"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrush1}"
                                            Margin="0,0,0,12"/>
 
                                 <TextBlock Text="{Binding DetailMessage}"
                                            FontSize="15"
-                                           Foreground="#1A1A1A"
+                                           Foreground="{DynamicResource ColorBrushGray1}"
                                            TextWrapping="Wrap"
                                            LineHeight="22"/>
                             </StackPanel>
@@ -75,12 +75,12 @@
                                 <TextBlock Text="内部错误"
                                            FontSize="16"
                                            FontWeight="SemiBold"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrush1}"
                                            Margin="0,0,0,12"/>
 
                                 <TextBlock Text="{Binding InnerErrorMessage}"
                                            FontSize="14"
-                                           Foreground="#C2410C"
+                                           Foreground="{DynamicResource ColorBrushGray2}"
                                            TextWrapping="Wrap"
                                            LineHeight="22"/>
                             </StackPanel>
@@ -95,7 +95,7 @@
                                 <TextBlock Text="{Binding AdviceTitle}"
                                            FontSize="16"
                                            FontWeight="SemiBold"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrush1}"
                                            Margin="0,0,0,16"/>
                                 <ItemsControl ItemsSource="{Binding SuggestedActions}">
                                     <ItemsControl.ItemTemplate>
@@ -119,21 +119,21 @@
                                 <TextBlock Text="技术信息"
                                            FontSize="16"
                                            FontWeight="SemiBold"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrush1}"
                                            Margin="0,0,0,12"/>
 
                                 <StackPanel>
-                                    <TextBlock Text="任务类型: SMAPI 安装"
+                                    <TextBlock Text="任务类型：SMAPI 安装"
                                                FontSize="14"
-                                               Foreground="#4A4A4A"
+                                               Foreground="{DynamicResource ColorBrushGray1}"
                                                Margin="0,0,0,8"/>
-                                    <TextBlock Text="错误类型: 下载/安装失败"
+                                    <TextBlock Text="错误类型：下载/安装失败"
                                                FontSize="14"
-                                               Foreground="#4A4A4A"
+                                               Foreground="{DynamicResource ColorBrushGray1}"
                                                Margin="0,0,0,8"/>
-                                    <TextBlock Text="日志位置: %LocalAppData%\SVL\logs\"
+                                    <TextBlock Text="日志位置：%LocalAppData%\SVL\logs\"
                                                FontSize="14"
-                                               Foreground="#4A4A4A"/>
+                                               Foreground="{DynamicResource ColorBrushGray1}"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -150,12 +150,12 @@
                                 <TextBlock Text="当前状态"
                                            FontSize="16"
                                            FontWeight="SemiBold"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrush1}"
                                            Margin="0,0,0,12"/>
 
                                 <TextBlock Text="{Binding StatusMessage}"
                                            FontSize="15"
-                                           Foreground="#1A1A1A"
+                                           Foreground="{DynamicResource ColorBrushGray1}"
                                            TextWrapping="Wrap"
                                            LineHeight="24"
                                            Margin="0,0,0,16"/>
@@ -176,10 +176,10 @@
                                     </Border>
                                 </Grid>
 
-                                <!-- 进度详情（橙色文字） -->
+                                <!-- 进度详情（主题色文字） -->
                                 <TextBlock Text="{Binding ProgressDetail}"
                                            FontSize="15"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrushGray2}"
                                            Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
@@ -195,7 +195,7 @@
                                     <TextBlock Text="{Binding AdviceTitle}"
                                                FontSize="16"
                                                FontWeight="SemiBold"
-                                               Foreground="#D4621F"
+                                               Foreground="{DynamicResource ColorBrush1}"
                                                Margin="0,0,0,12"/>
 
                                     <ItemsControl ItemsSource="{Binding SuggestedActions}">
@@ -203,7 +203,7 @@
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding StringFormat=• {0}}"
                                                            FontSize="14"
-                                                           Foreground="#2D2D2D"
+                                                           Foreground="{DynamicResource ColorBrushGray1}"
                                                            Margin="0,0,0,12"
                                                            LineHeight="22"/>
                                             </DataTemplate>
@@ -216,11 +216,11 @@
                                     <TextBlock Text="提示"
                                                FontSize="16"
                                                FontWeight="SemiBold"
-                                               Foreground="#D4621F"
+                                               Foreground="{DynamicResource ColorBrush1}"
                                                Margin="0,0,0,12"/>
 
                                     <TextBlock FontSize="14"
-                                               Foreground="#2D2D2D"
+                                               Foreground="{DynamicResource ColorBrushGray1}"
                                                TextWrapping="Wrap"
                                                LineHeight="22">
                                         <TextBlock.Style>
@@ -545,7 +545,7 @@
                                 <TextBlock Grid.Row="0" Text="Mod 列表"
                                            FontSize="16"
                                            FontWeight="SemiBold"
-                                           Foreground="#D4621F"
+                                           Foreground="{DynamicResource ColorBrush1}"
                                            Margin="0,0,0,12"/>
 
                                 <!-- 统一表头 -->

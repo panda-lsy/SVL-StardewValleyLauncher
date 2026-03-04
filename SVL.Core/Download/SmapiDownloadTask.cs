@@ -55,7 +55,7 @@ public class SmapiDownloadTask : DownloadTask
         _localZipPath = null;
 
         Type = DownloadTaskType.SMAPI;
-        Name = $"SMAPI {_smapiVersion} - {_instanceName}";
+        Name = BuildTaskName(_smapiVersion, _instanceName);
         StatusMessage = "准备安装 SMAPI...";
     }
 
@@ -76,12 +76,26 @@ public class SmapiDownloadTask : DownloadTask
         _smapiVersion = !string.IsNullOrEmpty(version) ? version : ExtractVersionFromPath(localZipPath);
 
         Type = DownloadTaskType.SMAPI;
-        // 使用与占位任务相同的名称格式："SMAPI {version} - {instanceName}"
-        // 如果版本号未知，使用 "SMAPI - {instanceName}"
-        Name = (!string.IsNullOrEmpty(_smapiVersion) && _smapiVersion != "从文件安装")
-            ? $"SMAPI {_smapiVersion} - {_instanceName}"
-            : $"SMAPI - {_instanceName}";
+        Name = BuildTaskName(_smapiVersion, _instanceName);
         StatusMessage = "准备安装 SMAPI...";
+    }
+
+    /// <summary>
+    /// 构建规范的任务名称，避免 "SMAPI SMAPI 4.5.1" 双重前缀
+    /// 格式："{version} - {instanceName}"，其中 version 已包含 SMAPI 前缀
+    /// </summary>
+    private static string BuildTaskName(string smapiVersion, string instanceName)
+    {
+        // 提取纯版本号（去掉 SMAPI 前缀）
+        var pureVersion = smapiVersion;
+        if (pureVersion.StartsWith("SMAPI ", StringComparison.OrdinalIgnoreCase))
+            pureVersion = pureVersion.Substring(6).Trim();
+
+        var displayVersion = string.IsNullOrEmpty(pureVersion) || pureVersion == "从文件安装"
+            ? "SMAPI"
+            : $"SMAPI {pureVersion}";
+
+        return $"{displayVersion} - {instanceName}";
     }
 
     /// <summary>
@@ -241,9 +255,14 @@ public class SmapiDownloadTask : DownloadTask
             }
             else if (_source == SmapiSource.Curseforge && !string.IsNullOrEmpty(_downloadUrl))
             {
+                Log.Info($"[DownloadManager] 开始下载：{_downloadUrl}");
+                StatusMessage = $"正在从 CurseForge 下载 SMAPI...";
+                
                 smapiZipPath = await DownloadSmapiWithProgressAsync(_downloadUrl, (progress) =>
                 {
                     Progress = 20 + (int)(progress * 30); // 20-50: 下载阶段 (30%范围)
+                    StatusMessage = $"正在从 CurseForge 下载 SMAPI... {progress * 100:F1}%";
+                    Log.Debug($"[SmapiDownload] CurseForge 下载进度：{progress * 100:F1}%");
                 });
             }
             else
@@ -616,7 +635,11 @@ public class SmapiDownloadTask : DownloadTask
         try
         {
             var tempPath = Path.GetTempPath();
-            var zipFileName = $"SMAPI-{_smapiVersion}.zip";
+            // 提取纯版本号用于文件名，避免 "SMAPI-SMAPI 4.5.1.zip"
+            var pureVersion = _smapiVersion;
+            if (pureVersion.StartsWith("SMAPI ", StringComparison.OrdinalIgnoreCase))
+                pureVersion = pureVersion.Substring(6).Trim();
+            var zipFileName = $"SMAPI-{pureVersion}.zip";
             var zipFilePath = Path.Combine(tempPath, zipFileName);
 
             // *** 检查缓存 ***
@@ -648,7 +671,7 @@ public class SmapiDownloadTask : DownloadTask
                 httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
 
                 Log.Info($"[DownloadManager] 开始下载: {downloadUrl}");
-                var response = await httpClient.GetAsync(downloadUrl, _cts.Token);
+                var response = await httpClient.GetAsync(downloadUrl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, _cts.Token);
 
                 response.EnsureSuccessStatusCode();
                 var totalBytes = response.Content.Headers.ContentLength ?? 0;

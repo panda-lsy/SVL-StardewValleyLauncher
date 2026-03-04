@@ -428,7 +428,7 @@
                     <TextBlock Text="高级管理"
                                FontSize="16"
                                FontWeight="SemiBold"
-                               Foreground="#D4621F"
+                               Foreground="{DynamicResource ColorBrush1}"
                                Margin="0,0,0,16"/>
 
                     <!-- 警告提示 -->

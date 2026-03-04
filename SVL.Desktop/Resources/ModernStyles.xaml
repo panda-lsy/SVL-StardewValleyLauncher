@@ -565,24 +565,31 @@
                                 CornerRadius="4"
                                 SnapsToDevicePixels="True">
                             <Grid>
-                                <ToggleButton Style="{StaticResource ComboBoxToggleButtonStyle}"
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <ToggleButton Grid.ColumnSpan="2"
+                                              Style="{StaticResource ComboBoxToggleButtonStyle}"
                                               IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                                               Background="Transparent"/>
                                 <ContentPresenter x:Name="ContentSite"
+                                                  Grid.Column="0"
                                                   IsHitTestVisible="False"
                                                   Content="{TemplateBinding SelectionBoxItem}"
                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                                   ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
                                                   Margin="{TemplateBinding Padding}"
                                                   VerticalAlignment="Center"
-                                                  HorizontalAlignment="Left"/>
+                                                  HorizontalAlignment="Stretch"/>
                                 <TextBox x:Name="PART_EditableTextBox"
+                                         Grid.Column="0"
                                          Visibility="Hidden"
                                          IsReadOnly="{TemplateBinding IsReadOnly}"
                                          Foreground="{TemplateBinding Foreground}"
                                          CaretBrush="{TemplateBinding Foreground}"
                                          Background="Transparent"
-                                         HorizontalAlignment="Left"
+                                         HorizontalAlignment="Stretch"
                                          VerticalAlignment="Center"
                                          Margin="{TemplateBinding Padding}"
                                          Focusable="True"/>
@@ -590,6 +597,7 @@
                         </Border>
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
+                               PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                IsOpen="{TemplateBinding IsDropDownOpen}"
                                AllowsTransparency="True"
                                Focusable="False"

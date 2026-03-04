@@ -18,8 +18,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </Window.Resources>
 
-    <!-- 背景遮罩 -->
-    <Grid Background="{DynamicResource ColorBrushMask}">
+    <Grid Margin="20">
         <Border Width="360"
                 Background="{DynamicResource ColorBrushBackground}"
                 CornerRadius="8"

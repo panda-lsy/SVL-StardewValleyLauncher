@@ -45,13 +45,10 @@
                            VerticalAlignment="Center"/>
                 <ComboBox x:Name="SourceComboBox"
                           Width="150"
-                          Height="28"
                           Margin="8,0,0,0"
                           SelectedIndex="0"
                           SelectionChanged="SourceComboBox_SelectionChanged"
-                          Background="{DynamicResource ColorBrush5}"
-                          Foreground="{DynamicResource ColorBrush1}"
-                          BorderBrush="{DynamicResource ColorBrushSemiTransparent}">
+                          Style="{StaticResource SettingComboBoxStyle}">
                     <ComboBoxItem Content="GitHub" Tag="GitHub"/>
                     <ComboBoxItem Content="NexusMods" Tag="NexusMods"/>
                     <ComboBoxItem Content="CurseForge" Tag="CurseForge"/>

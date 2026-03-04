@@ -50,9 +50,20 @@
                          SelectedItem="{Binding SelectedPathEntry}"
                          BorderThickness="0"
                          Background="Transparent"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto"
                          Margin="8,8,8,8">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ScrollViewer Style="{DynamicResource ModernScrollViewerStyle}"
+                                              Padding="{TemplateBinding Padding}"
+                                              Focusable="False">
+                                    <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                </ScrollViewer>
+                            </Border>
+                        </ControlTemplate>
+                    </ListBox.Template>
                     <ListBox.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="重命名"
@@ -136,7 +147,7 @@
                                 <TextBlock Grid.Row="1"
                                            Text="{Binding GamePath}"
                                            FontSize="11"
-                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                           Foreground="{DynamicResource ColorBrushGray2}"
                                            Margin="0,2,0,0"
                                            TextTrimming="CharacterEllipsis"
                                            ToolTip="{Binding GamePath}"/>
@@ -309,7 +320,7 @@
 
             <!-- 实例选择内容 -->
             <ScrollViewer Grid.Row="1"
-                          VerticalScrollBarVisibility="Auto"
+                          Style="{DynamicResource ModernScrollViewerStyle}"
                           Margin="20,16,20,20">
                 <StackPanel>
                     <!-- 未选择路径时的提示 -->

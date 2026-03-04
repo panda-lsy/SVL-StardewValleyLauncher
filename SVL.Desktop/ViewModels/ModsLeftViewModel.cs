@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Logging;
 using SVL.Desktop.Controls;
 
 namespace SVL.Desktop.ViewModels;
@@ -69,16 +70,46 @@ public partial class ModsLeftViewModel : ObservableObject
     [RelayCommand]
     private async Task InstallSMAPIAsync()
     {
+        Log.Info("[ModsLeftViewModel] InstallSMAPIAsync 开始执行");
+        
         // 获取当前选中的实例
         var currentInstance = _mainViewModel.SelectedInstance;
         if (currentInstance == null)
         {
+            Log.Warn("[ModsLeftViewModel] 未选择实例");
             SvlMessageBox.Info("请先选择一个游戏实例", "提示");
             return;
         }
 
+        Log.Info($"[ModsLeftViewModel] 当前实例路径：{currentInstance.Path}");
+        Log.Info("[ModsLeftViewModel] 准备显示游戏路径确认对话框");
+
+        // 显示游戏路径确认对话框
+        var dialog = new GamePathConfirmDialog
+        {
+            Owner = System.Windows.Application.Current.MainWindow
+        };
+        dialog.SetGamePath(currentInstance.Path);
+        
+        Log.Info("[ModsLeftViewModel] 对话框已显示，等待用户操作...");
+        
+        if (dialog.ShowDialog() != true)
+        {
+            Log.Info("[ModsLeftViewModel] 用户取消了 SMAPI 安装");
+            return;
+        }
+
+        var gamePath = dialog.GetSelectedPath();
+        if (string.IsNullOrEmpty(gamePath))
+        {
+            Log.Warn("[ModsLeftViewModel] 用户未选择有效的游戏路径");
+            return;
+        }
+
+        Log.Info($"[ModsLeftViewModel] 用户选择的游戏路径：{gamePath}");
+
         // 检查是否已安装 SMAPI
-        var alreadyInstalled = await SmapApiService.CheckInstalledVersionAsync(currentInstance.Path);
+        var alreadyInstalled = await SmapApiService.CheckInstalledVersionAsync(gamePath);
         if (alreadyInstalled)
         {
             if (!SvlMessageBox.Confirm(
@@ -112,7 +143,7 @@ public partial class ModsLeftViewModel : ObservableObject
                 });
 
                 // 安装 SMAPI
-                var installed = await SmapApiService.InstallAsync(currentInstance.Path, "latest");
+                var installed = await SmapApiService.InstallAsync(gamePath, "latest");
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {

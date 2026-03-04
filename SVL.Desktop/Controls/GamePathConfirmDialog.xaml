@@ -14,7 +14,7 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
 
-    <Grid Background="{DynamicResource ColorBrushMask}">
+    <Grid Margin="20">
         <Border Width="400"
                 Background="{DynamicResource ColorBrushBackground}"
                 CornerRadius="8"

@@ -3,16 +3,28 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="输入"
         Width="400"
+        Height="Auto"
         SizeToContent="Height"
-        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
         WindowStartupLocation="CenterOwner"
-        ShowInTaskbar="False"
-        Background="{DynamicResource ColorBrush1}">
-    <Border Background="{DynamicResource ColorBrush5}"
-            CornerRadius="8"
-            Padding="24,20">
-        <StackPanel>
-            <TextBlock x:Name="MessageText"
+        ResizeMode="NoResize">
+    <Grid Margin="20">
+        <Border Width="350"
+                Background="{DynamicResource ColorBrushBackground}"
+                CornerRadius="8"
+                BorderBrush="{DynamicResource ColorBrush3}"
+                BorderThickness="1">
+            <Border.Effect>
+                <DropShadowEffect Color="Black"
+                                  Opacity="0.3"
+                                  BlurRadius="20"
+                                  ShadowDepth="0"/>
+            </Border.Effect>
+
+            <StackPanel Margin="24,20">
+                <TextBlock x:Name="MessageText"
                        Text="请输入："
                        FontSize="14"
                        Foreground="{DynamicResource ColorBrush1}"
@@ -61,6 +73,7 @@
                         BorderThickness="0"
                         Cursor="Hand"/>
             </StackPanel>
-        </StackPanel>
-    </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
 </Window>

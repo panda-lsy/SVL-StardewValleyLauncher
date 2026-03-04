@@ -689,10 +689,18 @@ public partial class ModDetailsViewModel : ObservableObject
                                         }
 
                                         // 转换为 ModVersionItem
+                                        // 如果是 SMAPI，清理版本名（去除重复前缀）
+                                        var curseVersionText = file.DisplayName;
+                                        if ((file.DisplayName?.IndexOf("SMAPI", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0 ||
+                                            (file.FileName?.IndexOf("SMAPI", StringComparison.OrdinalIgnoreCase) ?? -1) >= 0)
+                                        {
+                                            curseVersionText = CurseforgeHelper.ParseSmapiDisplayName(file.DisplayName ?? "", file.FileName ?? "");
+                                            Log.Info($"[ModDetailsViewModel] CurseForge MOD SMAPI 版本名清理：{file.DisplayName} → {curseVersionText}");
+                                        }
                                         var modVersion = new ModVersionItem
                                         {
                                             FileId = $"curse-file-{file.Id}",
-                                            Version = file.DisplayName,
+                                            Version = curseVersionText,
                                             FileName = file.FileName,
                                             GameVersion = gameVersion,
                                             FileSize = file.FileLength,
@@ -1166,7 +1174,7 @@ public partial class ModDetailsViewModel : ObservableObject
             }
             else
             {
-                // 其他来源：使用默认版本
+                // 其它来源：使用默认版本
                 AddDefaultModpackVersion(versionItems);
             }
 
@@ -1348,10 +1356,24 @@ public partial class ModDetailsViewModel : ObservableObject
                     // 如果有内置 downloadUrl 则使用，否则留空（后续通过 ResolveCurseforgeModpackDownloadUrlAsync 获取）
                     var downloadUrl = file.DownloadUrl ?? string.Empty;
 
+                    // 如果是 CurseForge 的 SMAPI，清理版本名（去除重复前缀）
+                    var versionText = file.DisplayName ?? file.FileName ?? $"v{file.Id}";
+                    var containsSmapiInDisplay = file.DisplayName?.IndexOf("SMAPI", StringComparison.OrdinalIgnoreCase) ?? -1;
+                    var containsSmapiInFile = file.FileName?.IndexOf("SMAPI", StringComparison.OrdinalIgnoreCase) ?? -1;
+                    
+                    Log.Info($"[ModDetailsViewModel] 检查文件：{file.FileName}, DisplayName={file.DisplayName}, Mod.Source={Mod.Source}, containsSmapiInDisplay={containsSmapiInDisplay}, containsSmapiInFile={containsSmapiInFile}");
+                    
+                    if (Mod.Source == "Curseforge" && (containsSmapiInDisplay >= 0 || containsSmapiInFile >= 0))
+                    {
+                        Log.Info($"[ModDetailsViewModel] 触发 SMAPI 版本名清理，原始：{versionText}");
+                        versionText = CurseforgeHelper.ParseSmapiDisplayName(file.DisplayName ?? "", file.FileName ?? "");
+                        Log.Info($"[ModDetailsViewModel] 清理后的 SMAPI 版本名：{versionText}");
+                    }
+
                     versionItems.Add(new ModVersionItem
                     {
                         FileId = file.Id.ToString(),
-                        Version = file.DisplayName ?? file.FileName ?? $"v{file.Id}",
+                        Version = versionText,
                         FileName = file.FileName ?? $"{Mod.Name}_{file.Id}.zip",
                         GameVersion = "整合包",
                         FileSize = file.FileLength,
@@ -2649,10 +2671,7 @@ public partial class ModDetailsViewModel : ObservableObject
         {
             var basePathConfirmDialog = new SVL.Desktop.Controls.GamePathConfirmDialog();
             basePathConfirmDialog.SetGamePath(gameBasePath);
-            if (owner != null)
-            {
-                basePathConfirmDialog.Owner = owner;
-            }
+            basePathConfirmDialog.Owner = System.Windows.Application.Current.MainWindow;
 
             var basePathResult = basePathConfirmDialog.ShowDialog();
             if (basePathResult == true)
@@ -3265,48 +3284,59 @@ public partial class ModDetailsViewModel : ObservableObject
 
             // 获取游戏基础路径
             var gameBasePath = currentInstance.Path;
+            Log.Info($"[ModDetailsViewModel] 默认游戏基础路径：{gameBasePath}");
 
+            // 显示 BASE 路径确认对话框
+            string confirmedGameBasePath = null;
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var basePathConfirmDialog = new SVL.Desktop.Controls.GamePathConfirmDialog();
+                basePathConfirmDialog.SetGamePath(gameBasePath);
+                basePathConfirmDialog.Owner = System.Windows.Application.Current.MainWindow;
+
+                var basePathResult = basePathConfirmDialog.ShowDialog();
+                if (basePathResult == true)
+                {
+                    confirmedGameBasePath = basePathConfirmDialog.GetSelectedPath() ?? gameBasePath;
+                    Log.Info($"[ModDetailsViewModel] 用户确认游戏路径：{confirmedGameBasePath}");
+                }
+            });
+
+            if (string.IsNullOrEmpty(confirmedGameBasePath))
+            {
+                Log.Info("[ModDetailsViewModel] 用户取消了游戏路径确认");
+                return;
+            }
+
+            gameBasePath = confirmedGameBasePath;
+
+            
             // 提示用户输入实例名称
             string smapiVersion = version.Version;
+            // 确保 smapiVersion 不会重复 "SMAPI " 前缀
+            string instanceDefaultName = smapiVersion;
+            if (!instanceDefaultName.StartsWith("SMAPI", StringComparison.OrdinalIgnoreCase))
+            {
+                instanceDefaultName = $"SMAPI {smapiVersion}";
+            }
             string instanceName = null;
 
-            // 在 UI 线程上显示输入对话框（带版本名重复验证）
+            // 在 UI 线程上显示实例名称对话框（复用 Curseforge 整合包的验证逻辑）
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 var mainWindow = System.Windows.Application.Current.MainWindow;
 
-                // 创建版本名验证函数
-                bool isFirstValidation = true;
-
-                instanceName = SVL.Desktop.Controls.InputDialog.Show(
-                    mainWindow,
-                    "请输入新实例的名称：",
-                    $"SMAPI {smapiVersion}",
-                    (name) =>
+                // 使用 InstanceNameDialog，自动包含非法字符检测和版本名重复验证
+                instanceName = SVL.Desktop.Controls.InstanceNameDialog.Show(
+                    owner: mainWindow,
+                    defaultName: instanceDefaultName,
+                    checkNameExists: (name) =>
                     {
-                        // 第一次显示时不验证默认值，让用户看到提示
-                        if (isFirstValidation)
-                        {
-                            isFirstValidation = false;
-                            return (true, "");  // 允许显示默认值
-                        }
-
-                        // 验证版本名是否为空
-                        if (string.IsNullOrWhiteSpace(name))
-                        {
-                            return (false, "实例名称不能为空");
-                        }
-
-                        // 验证版本名是否已存在
-                        var versionPath = InstanceIsolationService.GetVersionPath(gameBasePath, name);
-                        if (System.IO.Directory.Exists(versionPath))
-                        {
-                            return (false, $"实例名称 '{name}' 已存在，请使用不同的名称");
-                        }
-
-                        return (true, "");
-                    }
-                ) ?? "";
+                        // 使用完整的验证逻辑：检查实例列表 + 文件系统版本目录
+                        var (isValid, errorMessage) = InstanceIsolationService.ValidateInstanceName(name, gameBasePath);
+                        return !isValid; // 如果无效（名称已存在），返回 true
+                    },
+                    autoSanitize: true);
             });
 
             if (string.IsNullOrEmpty(instanceName))

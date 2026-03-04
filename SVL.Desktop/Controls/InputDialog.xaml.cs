@@ -102,19 +102,7 @@ public partial class InputDialog : Window
             Owner = owner
         };
 
-        // 应用模糊效果
-        if (dialog.Owner is MainWindow mainWindow)
-        {
-            mainWindow.ApplyBlurEffect();
-        }
-
         var result = dialog.ShowDialog();
-
-        // 移除模糊效果
-        if (dialog.Owner is MainWindow main)
-        {
-            main.RemoveBlurEffect();
-        }
 
         if (result == true)
         {
@@ -139,19 +127,7 @@ public partial class InputDialog : Window
             _validateFunc = validateFunc
         };
 
-        // 应用模糊效果
-        if (dialog.Owner is MainWindow mainWindow)
-        {
-            mainWindow.ApplyBlurEffect();
-        }
-
         var result = dialog.ShowDialog();
-
-        // 移除模糊效果
-        if (dialog.Owner is MainWindow main)
-        {
-            main.RemoveBlurEffect();
-        }
 
         if (result == true)
         {

@@ -282,10 +282,12 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
             return;
         }
 
-        Log.Info($"[LocalCurseforgeModpack] 找到最新版 SMAPI: {latestSmapi.DisplayName} (FileId: {latestSmapi.Id})");
+        // 解析并清理 SMAPI 版本名（去除重复前缀）
+        var smapiDisplayName = CurseforgeHelper.ParseSmapiDisplayName(latestSmapi.DisplayName, latestSmapi.FileName);
+        Log.Info($"[LocalCurseforgeModpack] 找到最新版 SMAPI: {smapiDisplayName} (原始：{latestSmapi.DisplayName}, FileId: {latestSmapi.Id})");
 
-        // 使用缓存服务下载 SMAPI
-        var smapiCacheKey = DownloadCacheService.GenerateCacheKey("smapi", latestSmapi.Id.ToString(), latestSmapi.DisplayName);
+        // 使用缓存服务下载 SMAPI（使用清理后的 displayName）
+        var smapiCacheKey = DownloadCacheService.GenerateCacheKey("smapi", latestSmapi.Id.ToString(), smapiDisplayName);
         string? smapiZipPath = null;
 
         try
@@ -317,14 +319,14 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
                 Log.Info($"[LocalCurseforgeModpack] 使用 SMAPI 缓存: {smapiZipPath}");
             }
 
-            // 创建 SMAPI 安装任务
+            // 创建 SMAPI 安装任务（使用清理后的 displayName）
             var smapiTask = new SmapiDownloadTask(
                 _gameBasePath,
                 _instanceName,
                 smapiZipPath,
                 SmapiSource.Curseforge,
                 false,
-                latestSmapi.DisplayName
+                smapiDisplayName
             );
 
             Progress = 45;

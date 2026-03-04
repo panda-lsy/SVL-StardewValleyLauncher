@@ -186,22 +186,42 @@
                            Margin="0,0,0,12"/>
 
                 <!-- 游戏路径 -->
-                <TextBlock Text="选择游戏路径"
-                           Style="{StaticResource LabelText}"
-                           Margin="0,0,0,6"/>
-                <ComboBox ItemsSource="{Binding GamePaths}"
-                          SelectedItem="{Binding SelectedGamePath}"
-                          Style="{StaticResource SettingComboBoxStyle}"
-                          Margin="0,0,0,16">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel>
-                                <TextBlock Text="{Binding Name}" FontWeight="Medium"/>
-                                <TextBlock Text="{Binding GamePath}" FontSize="11" Foreground="{DynamicResource ColorBrushTextSecondary}"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    
+                    <TextBlock Grid.Row="0" Text="选择游戏路径"
+                               Style="{StaticResource LabelText}"
+                               Margin="0,0,0,6"/>
+                    
+                    <ComboBox Grid.Row="1" 
+                              ItemsSource="{Binding GamePaths}"
+                              SelectedItem="{Binding SelectedGamePath}"
+                              Style="{StaticResource SettingComboBoxStyle}"
+                              MaxDropDownHeight="200"
+                              Margin="0,0,0,12"
+                              ToolTip="{Binding SelectedGamePath.GamePath}"
+                              VerticalAlignment="Top">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontWeight="Medium"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding GamePath}" FontSize="11"
+                                               Foreground="{DynamicResource ColorBrushTextSecondary}"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxWidth="420"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    
+                    <!-- 占位空间，确保下拉框有足够展开空间 -->
+                    <Border Grid.Row="2" Height="200" Visibility="Collapsed"/>
+                </Grid>
 
             </StackPanel>
         </Grid>
