@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net;
 using System.Text.Json;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -31,6 +32,8 @@ public class ModDownloadTask : DownloadTask
     private readonly string? _sourceProjectId; // 来源项目 ID
     private readonly string? _sourceFileId; // 来源文件 ID
     private readonly bool _isModpack;  // 是否为整合包
+    private readonly string? _modpackIconUrl; // 整合包图标 URL（用于另存为时内嵌）
+    private readonly string? _modpackIconLocalPath; // 整合包本地图标路径（用于另存为时内嵌）
     private readonly CancellationTokenSource _cts;
     private readonly CancellationToken _linkedToken;
     private readonly bool _isChildTask;  // 是否为整合包的子任务
@@ -49,6 +52,11 @@ public class ModDownloadTask : DownloadTask
     /// 临时解压目录（用于整合包MOD安装，确保取消时能完全清理）
     /// </summary>
     private string? _tempExtractPath;
+
+    /// <summary>
+    /// 临时下载的图标文件路径（用于 finally 清理）
+    /// </summary>
+    private string? _tempDownloadedIconPath;
 
     /// <summary>
     /// 构造函数：从网络下载 MOD 到指定路径
@@ -74,6 +82,8 @@ public class ModDownloadTask : DownloadTask
         string? sourceProjectId = null,
         string? sourceFileId = null,
         bool isModpack = false,
+        string? modpackIconUrl = null,
+        string? modpackIconLocalPath = null,
         CancellationToken parentCancellationToken = default)
     {
         _modId = modId;
@@ -88,6 +98,8 @@ public class ModDownloadTask : DownloadTask
         _sourceProjectId = sourceProjectId;
         _sourceFileId = sourceFileId;
         _isModpack = isModpack;
+        _modpackIconUrl = modpackIconUrl;
+        _modpackIconLocalPath = modpackIconLocalPath;
         _isChildTask = parentCancellationToken.CanBeCanceled;
 
         // 创建取消令牌源，如果提供了父令牌则链接
@@ -143,6 +155,8 @@ public class ModDownloadTask : DownloadTask
         string? sourceProjectId = null,
         string? sourceFileId = null,
         bool isModpack = false,
+        string? modpackIconUrl = null,
+        string? modpackIconLocalPath = null,
         CancellationToken parentCancellationToken = default)
     {
         _modId = modId;
@@ -157,6 +171,8 @@ public class ModDownloadTask : DownloadTask
         _sourceProjectId = sourceProjectId;
         _sourceFileId = sourceFileId;
         _isModpack = isModpack;
+        _modpackIconUrl = modpackIconUrl;
+        _modpackIconLocalPath = modpackIconLocalPath;
         _isChildTask = parentCancellationToken.CanBeCanceled;
 
         // 创建取消令牌源，如果提供了父令牌则链接
@@ -272,6 +288,13 @@ public class ModDownloadTask : DownloadTask
                 File.Copy(zipFilePath, targetPath, overwrite: true);
                 Log.Info($"[ModDownloadTask] ZIP 文件已保存到: {targetPath}");
 
+                // 整合包另存为：将图标写入压缩包内部（zip/cfmodpack）
+                if (_isModpack)
+                {
+                    await TryEmbedModpackIconAsync(targetPath);
+                    _linkedToken.ThrowIfCancellationRequested();
+                }
+
                 Progress = 100;
                 Status = DownloadTaskStatus.Completed;
                 StatusMessage = $"✓ {_modName} 已保存到: {targetPath}";
@@ -339,6 +362,14 @@ public class ModDownloadTask : DownloadTask
                 Log.Info($"[ModDownloadTask] ✓ MOD 下载安装成功: {_modName}");
             }
         }
+        catch (OperationCanceledException)
+        {
+            Status = DownloadTaskStatus.Cancelled;
+            StatusMessage = "已取消";
+            CompletedTime = DateTime.Now;
+            CleanupCreatedTargetDirectory();
+            throw;
+        }
         catch (Exception ex)
         {
             Status = DownloadTaskStatus.Failed;
@@ -350,6 +381,170 @@ public class ModDownloadTask : DownloadTask
             CleanupCreatedTargetDirectory();
 
             throw;
+        }
+        finally
+        {
+            CleanupTempIconFile();
+        }
+    }
+
+    private async Task TryEmbedModpackIconAsync(string targetPath)
+    {
+        try
+        {
+            if (!_saveOnly || !_isModpack || string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath))
+                return;
+
+            var ext = Path.GetExtension(targetPath).ToLowerInvariant();
+            if (ext != ".zip" && ext != ".cfmodpack")
+            {
+                Log.Info($"[ModDownloadTask] 非 ZIP 类整合包，跳过图标内嵌: {targetPath}");
+                return;
+            }
+
+            var (iconPath, iconExt) = await ResolveModpackIconAsync();
+            if (string.IsNullOrWhiteSpace(iconPath) || !File.Exists(iconPath))
+                return;
+
+            var tempPath = targetPath + ".svl.icon.tmp";
+            ReplaceZipWithEmbeddedIcon(targetPath, tempPath, iconPath, iconExt);
+
+            File.Copy(tempPath, targetPath, true);
+            File.Delete(tempPath);
+
+            Log.Info($"[ModDownloadTask] 已将整合包图标写入压缩包内部: {Path.GetFileName(targetPath)}");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[ModDownloadTask] 内嵌整合包图标失败: {ex.Message}");
+        }
+    }
+
+    private async Task<(string? iconPath, string iconExt)> ResolveModpackIconAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_modpackIconLocalPath) && File.Exists(_modpackIconLocalPath))
+        {
+            var extLocal = NormalizeIconExtension(Path.GetExtension(_modpackIconLocalPath));
+            return (_modpackIconLocalPath, extLocal);
+        }
+
+        if (string.IsNullOrWhiteSpace(_modpackIconUrl))
+            return (null, ".png");
+
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        _linkedToken.ThrowIfCancellationRequested();
+        var bytes = await httpClient.GetByteArrayAsync(_modpackIconUrl);
+        _linkedToken.ThrowIfCancellationRequested();
+
+        if (bytes == null || bytes.Length == 0)
+            return (null, ".png");
+
+        var extFromUrl = ".png";
+        try
+        {
+            extFromUrl = NormalizeIconExtension(Path.GetExtension(new Uri(_modpackIconUrl).AbsolutePath));
+        }
+        catch
+        {
+            extFromUrl = ".png";
+        }
+
+        var tempPath = Path.Combine(Path.GetTempPath(), "SVL", "modpack_icon", $"{Guid.NewGuid():N}{extFromUrl}");
+        Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
+        File.WriteAllBytes(tempPath, bytes);
+        _tempDownloadedIconPath = tempPath;
+
+        return (tempPath, extFromUrl);
+    }
+
+    private static string NormalizeIconExtension(string? ext)
+    {
+        if (string.IsNullOrWhiteSpace(ext))
+            return ".png";
+
+        var normalized = ext.StartsWith(".", StringComparison.Ordinal) ? ext.ToLowerInvariant() : ".png";
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"
+        };
+
+        return allowed.Contains(normalized) ? normalized : ".png";
+    }
+
+    private static void ReplaceZipWithEmbeddedIcon(string sourceZipPath, string targetZipPath, string iconPath, string iconExt)
+    {
+        var iconEntryName = $"modpack-icon{iconExt}";
+        var iconCandidateNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "modpack-icon.png", "modpack-icon.jpg", "modpack-icon.jpeg", "modpack-icon.webp", "modpack-icon.bmp", "modpack-icon.gif",
+            "pack-icon.png", "pack-icon.jpg", "pack-icon.jpeg", "pack-icon.webp", "pack-icon.bmp", "pack-icon.gif",
+            "icon.png", "icon.jpg", "icon.jpeg", "icon.webp", "icon.bmp", "icon.gif",
+            "logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.bmp", "logo.gif",
+            "thumbnail.png", "thumbnail.jpg", "thumbnail.jpeg", "thumbnail.webp", "thumbnail.bmp", "thumbnail.gif",
+            "cover.png", "cover.jpg", "cover.jpeg", "cover.webp", "cover.bmp", "cover.gif"
+        };
+
+        using var inputZip = new ZipFile(sourceZipPath);
+        using var outputStream = File.Create(targetZipPath);
+        using var outputZip = new ZipOutputStream(outputStream);
+        outputZip.SetLevel(9);
+
+        foreach (ZipEntry entry in inputZip)
+        {
+            if (entry.IsDirectory)
+                continue;
+
+            var fileName = Path.GetFileName(entry.Name);
+            if (iconCandidateNames.Contains(fileName))
+                continue;
+
+            var newEntry = new ZipEntry(entry.Name)
+            {
+                DateTime = entry.DateTime
+            };
+            outputZip.PutNextEntry(newEntry);
+
+            using (var entryStream = inputZip.GetInputStream(entry))
+            {
+                entryStream.CopyTo(outputZip);
+            }
+
+            outputZip.CloseEntry();
+        }
+
+        var iconEntry = new ZipEntry(iconEntryName)
+        {
+            DateTime = DateTime.Now,
+            Size = new FileInfo(iconPath).Length
+        };
+        outputZip.PutNextEntry(iconEntry);
+        using (var iconStream = File.OpenRead(iconPath))
+        {
+            iconStream.CopyTo(outputZip);
+        }
+        outputZip.CloseEntry();
+
+        outputZip.Finish();
+    }
+
+    private void CleanupTempIconFile()
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_tempDownloadedIconPath) && File.Exists(_tempDownloadedIconPath))
+                File.Delete(_tempDownloadedIconPath);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[ModDownloadTask] 清理临时图标失败: {ex.Message}");
+        }
+        finally
+        {
+            _tempDownloadedIconPath = null;
         }
     }
 

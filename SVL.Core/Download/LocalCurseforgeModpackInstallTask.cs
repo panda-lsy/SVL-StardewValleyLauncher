@@ -617,6 +617,8 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
 
     private async Task SaveInstanceInfoAsync()
     {
+        var versionIconPath = TrySavePackIconToVersionDirectory();
+
         // 获取现有实例列表
         var existingInstances = SettingsService.LoadInstances();
 
@@ -627,6 +629,10 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
             // 更新现有实例
             existingInstance.IsSMAPIInstance = true;
             existingInstance.EnableIsolation = true;
+            if (!string.IsNullOrEmpty(versionIconPath))
+            {
+                existingInstance.CustomIcon = versionIconPath;
+            }
         }
         else
         {
@@ -638,7 +644,8 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
                 GamePath = _gameBasePath,
                 Version = "1.6.0", // 默认版本
                 IsSMAPIInstance = true,
-                EnableIsolation = true
+                EnableIsolation = true,
+                CustomIcon = versionIconPath
             };
 
             existingInstances.Add(newInstance);
@@ -649,6 +656,50 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
         Log.Info($"[LocalCurseforgeModpack] 实例信息已保存: {_instanceName}");
 
         await Task.CompletedTask;
+    }
+
+    private string? TrySavePackIconToVersionDirectory()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_extractDir) || !Directory.Exists(_extractDir) || string.IsNullOrEmpty(_versionRootPath))
+                return null;
+
+            var candidateNames = new[]
+            {
+                "modpack-icon.png", "modpack-icon.jpg", "modpack-icon.jpeg", "modpack-icon.gif",
+                "icon.png", "icon.jpg", "icon.jpeg", "icon.gif",
+                "logo.png", "logo.jpg", "logo.jpeg", "logo.gif",
+                "thumbnail.png", "thumbnail.jpg", "thumbnail.jpeg", "thumbnail.gif",
+                "cover.png", "cover.jpg", "cover.jpeg", "cover.gif"
+            };
+
+            string? sourceIconPath = null;
+            foreach (var candidate in candidateNames)
+            {
+                sourceIconPath = Directory.GetFiles(_extractDir, candidate, SearchOption.AllDirectories).FirstOrDefault();
+                if (!string.IsNullOrEmpty(sourceIconPath))
+                    break;
+            }
+
+            if (string.IsNullOrEmpty(sourceIconPath) || !File.Exists(sourceIconPath))
+                return null;
+
+            Directory.CreateDirectory(_versionRootPath);
+            var ext = Path.GetExtension(sourceIconPath);
+            if (string.IsNullOrEmpty(ext))
+                ext = ".png";
+
+            var targetPath = Path.Combine(_versionRootPath, $".svl-instance-icon{ext}");
+            File.Copy(sourceIconPath, targetPath, true);
+            Log.Info($"[LocalCurseforgeModpack] 已保存整合包图标到版本目录: {targetPath}");
+            return targetPath;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[LocalCurseforgeModpack] 保存整合包图标失败: {ex.Message}");
+            return null;
+        }
     }
 
     private async Task CleanupAsync()

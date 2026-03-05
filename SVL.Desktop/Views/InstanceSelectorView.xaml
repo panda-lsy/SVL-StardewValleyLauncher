@@ -83,49 +83,32 @@
                     </ListBox.ContextMenu>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
+                            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
-                                        <Border Background="{DynamicResource ColorBrush5}"
+                                        <Border x:Name="ItemBorder"
+                                                Background="{DynamicResource ColorBrush5}"
                                                 BorderBrush="Transparent"
                                                 BorderThickness="2"
                                                 CornerRadius="6"
                                                 Margin="0,4,0,4"
                                                 Padding="12,8"
                                                 Cursor="Hand">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource ColorBrushMask}"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
                                             <ContentPresenter/>
                                         </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrushMask}" TargetName="ItemBorder"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="ItemBorder"/>
+                                                <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush3}" TargetName="ItemBorder"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsSelected" Value="True">
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="ListBoxItem">
-                                                <Border Background="{DynamicResource ColorBrush2}"
-                                                        BorderBrush="{DynamicResource ColorBrush3}"
-                                                        BorderThickness="2"
-                                                        CornerRadius="6"
-                                                        Margin="0,4,0,4"
-                                                        Padding="12,8"
-                                                        Cursor="Hand">
-                                                    <ContentPresenter/>
-                                                </Border>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Trigger>
-                            </Style.Triggers>
                         </Style>
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
@@ -359,6 +342,9 @@
                                                     BorderThickness="1"
                                                     CornerRadius="8"
                                                     Padding="16">
+                                                <Border.RenderTransform>
+                                                    <TranslateTransform X="0" Y="0"/>
+                                                </Border.RenderTransform>
                                                 <Border.Effect>
                                                     <DropShadowEffect Color="#000000"
                                                                     BlurRadius="8"
@@ -543,34 +529,6 @@
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="CardBorder"/>
                                                     <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush3}" TargetName="CardBorder"/>
-                                                    <Trigger.EnterActions>
-                                                        <BeginStoryboard>
-                                                            <Storyboard>
-                                                                <DoubleAnimation Storyboard.TargetName="CardBorder"
-                                                                               Storyboard.TargetProperty="(Border.RenderTransform).(TranslateTransform.X)"
-                                                                               To="4"
-                                                                               Duration="0:0:0.15">
-                                                                    <DoubleAnimation.EasingFunction>
-                                                                        <CubicEase EasingMode="EaseOut"/>
-                                                                    </DoubleAnimation.EasingFunction>
-                                                                </DoubleAnimation>
-                                                            </Storyboard>
-                                                        </BeginStoryboard>
-                                                    </Trigger.EnterActions>
-                                                    <Trigger.ExitActions>
-                                                        <BeginStoryboard>
-                                                            <Storyboard>
-                                                                <DoubleAnimation Storyboard.TargetName="CardBorder"
-                                                                               Storyboard.TargetProperty="(Border.RenderTransform).(TranslateTransform.X)"
-                                                                               To="0"
-                                                                               Duration="0:0:0.15">
-                                                                    <DoubleAnimation.EasingFunction>
-                                                                        <CubicEase EasingMode="EaseOut"/>
-                                                                    </DoubleAnimation.EasingFunction>
-                                                                </DoubleAnimation>
-                                                            </Storyboard>
-                                                        </BeginStoryboard>
-                                                    </Trigger.ExitActions>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>

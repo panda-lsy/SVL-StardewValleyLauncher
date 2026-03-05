@@ -343,8 +343,11 @@ public class SvlModpackInstallTask : DownloadTask
             WriteSourceCredentials(sourcesList);
         }
 
+        // 保存整合包图标到版本目录（如果包内提供）
+        var versionIconPath = ExtractPackIconToVersionDirectory(zip, gameFilesPath);
+
         // 保存实例配置到 instances.json
-        await SaveInstanceConfigAsync(manifest, gameFilesPath);
+        await SaveInstanceConfigAsync(manifest, gameFilesPath, versionIconPath);
 
         // ========== 完成 ==========
         Progress = 95;
@@ -355,7 +358,7 @@ public class SvlModpackInstallTask : DownloadTask
 
         if (modsExtracted == 0 && downloadedMods == 0 && TotalMods > 0)
         {
-            StatusMessage = $"已完成：{manifest.Name}（仅导入元数据和设置，未包含 Mod 文件。请重新导出并勾选「打包 Mod 文件」）";
+            StatusMessage = $"已完成：{manifest.Name}（仅导入元数据和配置，未包含 Mod 文件）";
             Log.Warn($"[SvlModpackInstallTask] 整合包未包含 Mod 文件，仅有 {extractedFiles} 个设置文件。清单中列出了 {TotalMods} 个 Mod");
         }
         else
@@ -1217,7 +1220,7 @@ public class SvlModpackInstallTask : DownloadTask
     /// <summary>
     /// 保存实例配置到 instances.json
     /// </summary>
-    private async Task SaveInstanceConfigAsync(ModpackManifest manifest, string gameFilesPath)
+    private async Task SaveInstanceConfigAsync(ModpackManifest manifest, string gameFilesPath, string? versionIconPath)
     {
         try
         {
@@ -1244,6 +1247,10 @@ public class SvlModpackInstallTask : DownloadTask
                 existing.Version = gameVersion;
                 existing.IsSMAPIInstance = !string.IsNullOrEmpty(smapiVersion);
                 existing.EnableIsolation = true;
+                if (!string.IsNullOrEmpty(versionIconPath))
+                {
+                    existing.CustomIcon = versionIconPath;
+                }
                 Log.Info($"[SvlModpackInstallTask] 更新现有实例配置: {_instanceName}");
             }
             else
@@ -1258,7 +1265,8 @@ public class SvlModpackInstallTask : DownloadTask
                     IsSMAPIInstance = !string.IsNullOrEmpty(smapiVersion),
                     SMAPIVersion = smapiVersion ?? string.Empty,
                     HasSMAPIInstalled = !string.IsNullOrEmpty(smapiVersion),
-                    EnableIsolation = true
+                    EnableIsolation = true,
+                    CustomIcon = versionIconPath
                 };
                 existingInstances.Add(newInstance);
                 Log.Info($"[SvlModpackInstallTask] 创建新实例配置: {_instanceName}");
@@ -1273,6 +1281,68 @@ public class SvlModpackInstallTask : DownloadTask
         }
 
         await Task.CompletedTask;
+    }
+
+    private string? ExtractPackIconToVersionDirectory(ZipFile zip, string versionRootPath)
+    {
+        try
+        {
+            var candidates = new[]
+            {
+                "modpack-icon.png", "modpack-icon.jpg", "modpack-icon.jpeg", "modpack-icon.gif",
+                "icon.png", "icon.jpg", "icon.jpeg", "icon.gif",
+                "logo.png", "logo.jpg", "logo.jpeg", "logo.gif",
+                "thumbnail.png", "thumbnail.jpg", "thumbnail.jpeg", "thumbnail.gif",
+                "cover.png", "cover.jpg", "cover.jpeg", "cover.gif",
+                "pack-icon.png", "pack-icon.jpg", "pack-icon.jpeg", "pack-icon.gif"
+            };
+
+            ZipEntry iconEntry = null;
+
+            foreach (var candidate in candidates)
+            {
+                iconEntry = zip.GetEntry(candidate);
+                if (iconEntry != null)
+                    break;
+            }
+
+            if (iconEntry == null)
+            {
+                foreach (ZipEntry entry in zip)
+                {
+                    if (entry.IsDirectory)
+                        continue;
+
+                    var fileName = Path.GetFileName(entry.Name).ToLowerInvariant();
+                    if (candidates.Contains(fileName))
+                    {
+                        iconEntry = entry;
+                        break;
+                    }
+                }
+            }
+
+            if (iconEntry == null)
+                return null;
+
+            Directory.CreateDirectory(versionRootPath);
+            var ext = Path.GetExtension(iconEntry.Name);
+            if (string.IsNullOrWhiteSpace(ext))
+                ext = ".png";
+
+            var targetPath = Path.Combine(versionRootPath, $".svl-instance-icon{ext}");
+            using var iconStream = zip.GetInputStream(iconEntry);
+            using var outFile = File.Create(targetPath);
+            iconStream.CopyTo(outFile);
+
+            Log.Info($"[SvlModpackInstallTask] 已保存整合包图标到版本目录: {targetPath}");
+            return targetPath;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[SvlModpackInstallTask] 提取整合包图标失败: {ex.Message}");
+            return null;
+        }
     }
 
     #endregion

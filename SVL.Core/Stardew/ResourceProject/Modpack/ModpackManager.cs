@@ -209,9 +209,9 @@ public class ModpackManager
     /// <param name="version">整合包版本</param>
     /// <param name="author">整合包作者</param>
     /// <param name="description">整合包描述</param>
-    /// <param name="bundleModFiles">是否打包 Mod 文件</param>
     /// <param name="includeModSettings">是否导出 Mod 设置</param>
     /// <param name="includeSvlLauncher">是否包含 SVL 启动器</param>
+    /// <param name="modpackIconPath">整合包图标路径（可选）</param>
     /// <param name="progressCallback">进度回调 (0-100, 消息)</param>
     /// <param name="smapiVersion">SMAPI 版本</param>
     /// <param name="gameVersion">游戏版本</param>
@@ -222,9 +222,9 @@ public class ModpackManager
         string version,
         string author,
         string description,
-        bool bundleModFiles,
         bool includeModSettings,
         bool includeSvlLauncher,
+        string? modpackIconPath = null,
         Action<int, string> progressCallback = null,
         string smapiVersion = "",
         string gameVersion = "")
@@ -252,6 +252,11 @@ public class ModpackManager
             }
 
             progressCallback?.Invoke(5, "正在构建清单...");
+
+            // 合规策略：不导出 Mod 本体文件。
+            // - 有来源凭证：仅导出来源信息。
+            // - 无来源凭证：导出来源信息 + 配置文件（最低可迁移信息）。
+            var exportRows = new List<(SdVMod Mod, object? Source, bool HasSourceCredential, bool ExportSettings)>();
 
             // 构建 manifest
             var manifest = new ModpackManifest
@@ -284,13 +289,18 @@ public class ModpackManager
                     sourceInfo = SynthesizeSourceFromMod(mod);
                 }
 
+                var hasSourceCredential = sourceInfo != null;
+                var exportSettings = Directory.Exists(mod.ModPath) && (includeModSettings || !hasSourceCredential);
+
+                exportRows.Add((mod, sourceInfo, hasSourceCredential, exportSettings));
+
                 sources.Add(new
                 {
                     uniqueId = mod.UniqueId ?? string.Empty,
                     name = mod.Name ?? string.Empty,
                     version = mod.Version ?? string.Empty,
                     enabled = mod.IsEnabled,
-                    bundled = bundleModFiles && Directory.Exists(mod.ModPath),
+                    bundled = false,
                     source = sourceInfo
                 });
             }
@@ -316,31 +326,20 @@ public class ModpackManager
                         await WriteZipEntryAsync(innerArchive, ManifestFileName, manifestJson, innerFileList);
                         await WriteZipEntryAsync(innerArchive, "sources.json", sourcesJson, innerFileList);
 
-                        var processedCount = 0;
-                        var totalMods = mods.Count(m => Directory.Exists(m.ModPath));
+                        await AddModpackIconToArchiveAsync(innerArchive, modpackIconPath, innerFileList);
 
-                        if (bundleModFiles)
+                        var settingsRows = exportRows.Where(x => x.ExportSettings).ToList();
+                        if (settingsRows.Count > 0)
                         {
-                            progressCallback?.Invoke(15, "正在打包 Mod 文件...");
-                            foreach (var mod in mods.Where(m => Directory.Exists(m.ModPath)))
+                            progressCallback?.Invoke(40, "正在导出 Mod 配置...");
+                            var processedCount = 0;
+                            foreach (var row in settingsRows)
                             {
                                 processedCount++;
-                                var modName = Path.GetFileName(mod.ModPath);
-                                var percent = 15 + (int)(processedCount * 55.0 / Math.Max(totalMods, 1));
-                                progressCallback?.Invoke(Math.Min(percent, 70), $"正在打包: {modName} ({processedCount}/{totalMods})");
-                                await AddModToArchiveAsync(innerArchive, mod.ModPath, innerFileList, includeModSettings);
-                            }
-                        }
-                        else if (includeModSettings)
-                        {
-                            progressCallback?.Invoke(40, "正在导出 Mod 设置...");
-                            foreach (var mod in mods.Where(m => Directory.Exists(m.ModPath)))
-                            {
-                                processedCount++;
-                                var modName = Path.GetFileName(mod.ModPath);
-                                var percent = 40 + (int)(processedCount * 30.0 / Math.Max(totalMods, 1));
-                                progressCallback?.Invoke(Math.Min(percent, 70), $"正在导出设置: {modName}");
-                                await AddModSettingsToArchiveAsync(innerArchive, mod.ModPath, innerFileList);
+                                var modName = Path.GetFileName(row.Mod.ModPath);
+                                var percent = 40 + (int)(processedCount * 30.0 / Math.Max(settingsRows.Count, 1));
+                                progressCallback?.Invoke(Math.Min(percent, 70), $"正在导出配置: {modName}");
+                                await AddModSettingsToArchiveAsync(innerArchive, row.Mod.ModPath, innerFileList);
                             }
                         }
 
@@ -394,31 +393,20 @@ public class ModpackManager
                     progressCallback?.Invoke(10, "正在收集来源信息...");
                     await WriteZipEntryAsync(archive, "sources.json", sourcesJson, fileList);
 
-                    var processedCount = 0;
-                    var totalMods = mods.Count(m => Directory.Exists(m.ModPath));
+                    await AddModpackIconToArchiveAsync(archive, modpackIconPath, fileList);
 
-                    if (bundleModFiles)
+                    var settingsRows = exportRows.Where(x => x.ExportSettings).ToList();
+                    if (settingsRows.Count > 0)
                     {
-                        progressCallback?.Invoke(15, "正在打包 Mod 文件...");
-                        foreach (var mod in mods.Where(m => Directory.Exists(m.ModPath)))
+                        progressCallback?.Invoke(40, "正在导出 Mod 配置...");
+                        var processedCount = 0;
+                        foreach (var row in settingsRows)
                         {
                             processedCount++;
-                            var modName = Path.GetFileName(mod.ModPath);
-                            var percent = 15 + (int)(processedCount * 60.0 / Math.Max(totalMods, 1));
-                            progressCallback?.Invoke(Math.Min(percent, 75), $"正在打包: {modName} ({processedCount}/{totalMods})");
-                            await AddModToArchiveAsync(archive, mod.ModPath, fileList, includeModSettings);
-                        }
-                    }
-                    else if (includeModSettings)
-                    {
-                        progressCallback?.Invoke(40, "正在导出 Mod 设置...");
-                        foreach (var mod in mods.Where(m => Directory.Exists(m.ModPath)))
-                        {
-                            processedCount++;
-                            var modName = Path.GetFileName(mod.ModPath);
-                            var percent = 40 + (int)(processedCount * 35.0 / Math.Max(totalMods, 1));
-                            progressCallback?.Invoke(Math.Min(percent, 75), $"正在导出设置: {modName}");
-                            await AddModSettingsToArchiveAsync(archive, mod.ModPath, fileList);
+                            var modName = Path.GetFileName(row.Mod.ModPath);
+                            var percent = 40 + (int)(processedCount * 35.0 / Math.Max(settingsRows.Count, 1));
+                            progressCallback?.Invoke(Math.Min(percent, 75), $"正在导出配置: {modName}");
+                            await AddModSettingsToArchiveAsync(archive, row.Mod.ModPath, fileList);
                         }
                     }
 
@@ -430,7 +418,7 @@ public class ModpackManager
                     archive.Close();
 
                     progressCallback?.Invoke(95, "正在完成...");
-                    Log.Info($"[Export] Created enhanced modpack: {name} v{version} with {mods.Count} mods (bundled={bundleModFiles})");
+                    Log.Info($"[Export] Created enhanced modpack: {name} v{version} with {mods.Count} mods (bundled=false)");
                 }
             }
 
@@ -522,6 +510,43 @@ public class ModpackManager
 
             archive.CloseEntry();
             fileList.Add(entryName);
+        }
+    }
+
+    /// <summary>
+    /// 将整合包图标写入 ZIP 根目录（modpack-icon.*）
+    /// </summary>
+    private static async Task AddModpackIconToArchiveAsync(ZipOutputStream archive, string? iconPath, List<string> fileList)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(iconPath) || !Path.IsPathRooted(iconPath) || !File.Exists(iconPath))
+                return;
+
+            var ext = Path.GetExtension(iconPath)?.ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ext))
+                ext = ".png";
+
+            var entryName = $"modpack-icon{ext}";
+            var entry = new ZipEntry(entryName)
+            {
+                DateTime = DateTime.Now,
+                Size = new FileInfo(iconPath).Length
+            };
+
+            archive.PutNextEntry(entry);
+            using (var stream = File.OpenRead(iconPath))
+            {
+                await stream.CopyToAsync(archive);
+            }
+            archive.CloseEntry();
+
+            fileList.Add(entryName);
+            Log.Info($"[Export] 已写入整合包图标: {entryName}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[Export] 写入整合包图标失败: {ex.Message}");
         }
     }
 

@@ -272,6 +272,8 @@
     <Style x:Key="ModernScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Focusable" Value="False"/>
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ScrollViewer}">
@@ -297,37 +299,8 @@
                                      Maximum="{TemplateBinding ScrollableHeight}"
                                      ViewportSize="{TemplateBinding ViewportHeight}"
                                      Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"
+                                     Style="{DynamicResource ModernScrollBarStyle}"
                                      AutomationProperties.AutomationId="VerticalScrollBar">
-                            <ScrollBar.Template>
-                                <ControlTemplate TargetType="{x:Type ScrollBar}">
-                                    <Grid Background="Transparent" Width="10" SnapsToDevicePixels="True">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="*"/>
-                                        </Grid.RowDefinitions>
-
-                                        <Track Grid.Row="0" Name="PART_Track" IsDirectionReversed="True">
-                                            <Track.Thumb>
-                                                <Thumb>
-                                                    <Thumb.Template>
-                                                        <ControlTemplate TargetType="{x:Type Thumb}">
-                                                            <Border Background="{StaticResource ColorBrushGray4}"
-                                                                    CornerRadius="4"
-                                                                    Width="8"
-                                                                    Margin="1"
-                                                                    SnapsToDevicePixels="True"/>
-                                                            <ControlTemplate.Triggers>
-                                                                <Trigger Property="IsMouseOver" Value="True">
-                                                                    <Setter Property="Background" Value="{StaticResource ColorBrushGray3}"/>
-                                                                </Trigger>
-                                                            </ControlTemplate.Triggers>
-                                                        </ControlTemplate>
-                                                    </Thumb.Template>
-                                                </Thumb>
-                                            </Track.Thumb>
-                                        </Track>
-                                    </Grid>
-                                </ControlTemplate>
-                            </ScrollBar.Template>
                         </ScrollBar>
 
                         <ScrollBar Grid.Column="0" Grid.Row="1" Name="PART_HorizontalScrollBar"
@@ -336,37 +309,8 @@
                                      Maximum="{TemplateBinding ScrollableWidth}"
                                      ViewportSize="{TemplateBinding ViewportWidth}"
                                      Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
+                                     Style="{DynamicResource ModernScrollBarStyle}"
                                      AutomationProperties.AutomationId="HorizontalScrollBar">
-                            <ScrollBar.Template>
-                                <ControlTemplate TargetType="{x:Type ScrollBar}">
-                                    <Grid Background="Transparent" Height="10" SnapsToDevicePixels="True">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <Track Grid.Column="0" Name="PART_Track">
-                                            <Track.Thumb>
-                                                <Thumb>
-                                                    <Thumb.Template>
-                                                        <ControlTemplate TargetType="{x:Type Thumb}">
-                                                            <Border Background="{StaticResource ColorBrushGray4}"
-                                                                    CornerRadius="4"
-                                                                    Height="8"
-                                                                    Margin="1"
-                                                                    SnapsToDevicePixels="True"/>
-                                                            <ControlTemplate.Triggers>
-                                                                <Trigger Property="IsMouseOver" Value="True">
-                                                                    <Setter Property="Background" Value="{StaticResource ColorBrushGray3}"/>
-                                                                </Trigger>
-                                                            </ControlTemplate.Triggers>
-                                                        </ControlTemplate>
-                                                    </Thumb.Template>
-                                                </Thumb>
-                                            </Track.Thumb>
-                                        </Track>
-                                    </Grid>
-                                </ControlTemplate>
-                            </ScrollBar.Template>
                         </ScrollBar>
                     </Grid>
                 </ControlTemplate>
@@ -389,16 +333,16 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <RepeatButton Grid.Row="0" Style="{StaticResource ScrollBarButton}"
+                        <RepeatButton Grid.Row="0" Style="{DynamicResource ScrollBarButton}"
                                       Command="ScrollBar.LineUpCommand"/>
 
                         <Track Grid.Row="1" Name="PART_Track" IsDirectionReversed="True">
                             <Track.Thumb>
-                                <Thumb Style="{StaticResource ScrollBarThumb}"/>
+                                <Thumb Style="{DynamicResource ScrollBarThumb}"/>
                             </Track.Thumb>
                         </Track>
 
-                        <RepeatButton Grid.Row="2" Style="{StaticResource ScrollBarButton}"
+                        <RepeatButton Grid.Row="2" Style="{DynamicResource ScrollBarButton}"
                                       Command="ScrollBar.LineDownCommand"/>
                     </Grid>
                 </ControlTemplate>
@@ -419,16 +363,16 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <RepeatButton Grid.Column="0" Style="{StaticResource ScrollBarButton}"
-                                              Command="ScrollBar.LineLeftCommand}"/>
+                                <RepeatButton Grid.Column="0" Style="{DynamicResource ScrollBarButton}"
+                                              Command="ScrollBar.LineLeftCommand"/>
 
                                 <Track Grid.Column="1" Name="PART_Track">
                                     <Track.Thumb>
-                                        <Thumb Style="{StaticResource ScrollBarThumb}"/>
+                                        <Thumb Style="{DynamicResource ScrollBarThumb}"/>
                                     </Track.Thumb>
                                 </Track>
 
-                                <RepeatButton Grid.Column="2" Style="{StaticResource ScrollBarButton}"
+                                <RepeatButton Grid.Column="2" Style="{DynamicResource ScrollBarButton}"
                                               Command="ScrollBar.LineRightCommand"/>
                             </Grid>
                         </ControlTemplate>
@@ -455,22 +399,26 @@
 
     <!-- ScrollBar 滑块样式 -->
     <Style x:Key="ScrollBarThumb" TargetType="{x:Type Thumb}">
-        <Setter Property="Background" Value="{StaticResource ColorBrushGray4}"/>
+        <Setter Property="Background" Value="{DynamicResource ColorBrushGray4}"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Width" Value="8"/>
-        <Setter Property="Height" Value="8"/>
+        <Setter Property="MinWidth" Value="8"/>
+        <Setter Property="MinHeight" Value="8"/>
         <Setter Property="Margin" Value="1"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Thumb}">
-                    <Border Background="{TemplateBinding Background}"
+                    <Border x:Name="ThumbBorder"
+                            Background="{TemplateBinding Background}"
                             CornerRadius="4"
-                            Width="8"
-                            Height="8"
-                            Margin="1"/>
+                            Margin="{TemplateBinding Margin}"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"/>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{StaticResource ColorBrushGray3}"/>
+                            <Setter Property="Background" Value="{DynamicResource ColorBrushGray3}" TargetName="ThumbBorder"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="ThumbBorder"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

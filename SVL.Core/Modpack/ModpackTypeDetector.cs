@@ -48,6 +48,7 @@ public class ModpackDetectionResult
     public string? ModpackDescription { get; set; }
     public int ModCount { get; set; }
     public string? ErrorMessage { get; set; }
+    public string? ModpackIconPath { get; set; }
 
     /// <summary>
     /// Curseforge manifest（如果是 Curseforge 类型）
@@ -81,6 +82,9 @@ public static class ModpackTypeDetector
         {
             FilePath = filePath
         };
+
+        // 优先尝试读取与整合包同名的 sidecar 图标（另存为场景兼容）
+        result.ModpackIconPath = FindSidecarIconPath(filePath);
 
         try
         {
@@ -132,6 +136,7 @@ public static class ModpackTypeDetector
             if (!string.IsNullOrEmpty(collectionJsonPath))
             {
                 result.Type = ModpackType.NexusCollection;
+                result.ModpackIconPath ??= FindModpackIconInDirectory(tempDir);
 
                 // 解析 collection.json 获取整合包信息
                 try
@@ -179,6 +184,7 @@ public static class ModpackTypeDetector
             if (!string.IsNullOrEmpty(modpackJsonPath) || !string.IsNullOrEmpty(nestedModpackZip))
             {
                 result.Type = ModpackType.SVL;
+                result.ModpackIconPath ??= FindModpackIconInDirectory(tempDir);
 
                 // 如果是嵌套结构（有 modpack.zip），先解压内层 zip 以获取 modpack.json
                 if (string.IsNullOrEmpty(modpackJsonPath) && !string.IsNullOrEmpty(nestedModpackZip))
@@ -187,6 +193,7 @@ public static class ModpackTypeDetector
                     if (!string.IsNullOrEmpty(innerTempDir))
                     {
                         modpackJsonPath = FindFileInDirectory(innerTempDir, "modpack.json");
+                        result.ModpackIconPath ??= FindModpackIconInDirectory(innerTempDir);
                         // 保存内层解压路径到 TempExtractPath，供后续安装使用
                         // 我们保留外层 tempDir 不变，因为它包含完整结构
                     }
@@ -234,6 +241,7 @@ public static class ModpackTypeDetector
             if (!string.IsNullOrEmpty(manifestJsonPath))
             {
                 result.Type = ModpackType.Curseforge;
+                result.ModpackIconPath ??= FindModpackIconInDirectory(tempDir);
 
                 // 解析 manifest
                 try
@@ -368,6 +376,96 @@ public static class ModpackTypeDetector
         catch (Exception ex)
         {
             Log.Warn($"[ModpackTypeDetector] 清理临时目录失败: {tempDir}", ex);
+        }
+    }
+
+    private static string? FindModpackIconInDirectory(string directory)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                return null;
+
+            var candidates = new[]
+            {
+                "modpack-icon.png", "modpack-icon.jpg", "modpack-icon.jpeg", "modpack-icon.webp", "modpack-icon.gif",
+                "pack-icon.png", "pack-icon.jpg", "pack-icon.jpeg", "pack-icon.webp", "pack-icon.gif",
+                "icon.png", "icon.jpg", "icon.jpeg", "icon.webp", "icon.gif",
+                "logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "logo.gif",
+                "thumbnail.png", "thumbnail.jpg", "thumbnail.jpeg", "thumbnail.webp", "thumbnail.gif",
+                "cover.png", "cover.jpg", "cover.jpeg", "cover.webp", "cover.gif"
+            };
+
+            foreach (var name in candidates)
+            {
+                var root = Path.Combine(directory, name);
+                if (File.Exists(root))
+                    return root;
+
+                var any = Directory.GetFiles(directory, name, SearchOption.AllDirectories).FirstOrDefault();
+                if (!string.IsNullOrEmpty(any))
+                    return any;
+            }
+
+            // 兼容 SVL.exe + modpack.zip 嵌套结构：从内层 modpack.zip 中提取 icon
+            var nestedZip = FindFileInDirectory(directory, "modpack.zip");
+            if (!string.IsNullOrEmpty(nestedZip) && File.Exists(nestedZip))
+            {
+                using var zip = new ZipFile(nestedZip);
+                foreach (var candidate in candidates)
+                {
+                    var entry = zip.GetEntry(candidate);
+                    if (entry == null)
+                        continue;
+
+                    var extractedPath = Path.Combine(directory, $"__detected-{Path.GetFileName(candidate)}");
+                    using var input = zip.GetInputStream(entry);
+                    using var output = File.Create(extractedPath);
+                    input.CopyTo(output);
+                    return extractedPath;
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[ModpackTypeDetector] 查找整合包图标失败: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string? FindSidecarIconPath(string modpackFilePath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(modpackFilePath) || !File.Exists(modpackFilePath))
+                return null;
+
+            var dir = Path.GetDirectoryName(modpackFilePath);
+            var baseName = Path.GetFileNameWithoutExtension(modpackFilePath);
+            if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(baseName))
+                return null;
+
+            var candidates = new[]
+            {
+                Path.Combine(dir, $"{baseName}.png"),
+                Path.Combine(dir, $"{baseName}.jpg"),
+                Path.Combine(dir, $"{baseName}.jpeg"),
+                Path.Combine(dir, $"{baseName}.webp"),
+                Path.Combine(dir, $"{baseName}.gif"),
+                Path.Combine(dir, $"{baseName}.icon.png"),
+                Path.Combine(dir, $"{baseName}.icon.jpg"),
+                Path.Combine(dir, $"{baseName}.icon.jpeg"),
+                Path.Combine(dir, $"{baseName}.icon.webp"),
+                Path.Combine(dir, $"{baseName}.icon.gif")
+            };
+
+            return candidates.FirstOrDefault(File.Exists);
+        }
+        catch
+        {
+            return null;
         }
     }
 }

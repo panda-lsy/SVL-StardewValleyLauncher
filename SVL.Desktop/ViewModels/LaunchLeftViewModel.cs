@@ -20,6 +20,7 @@ public partial class LaunchLeftViewModel : ObservableObject
     public LaunchLeftViewModel(MainWindowViewModel mainViewModel)
     {
         _mainViewModel = mainViewModel;
+        GlobalEvents.InstanceChanged += OnGlobalInstanceChanged;
         LoadSelectedInstance();
     }
 
@@ -107,11 +108,56 @@ public partial class LaunchLeftViewModel : ObservableObject
     /// </summary>
     private void OnSelectedGamePathPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        // 当自定义图标改变时，更新图标显示
-        if (e.PropertyName == nameof(GamePathInfo.CustomIcon))
+        // 当核心显示属性改变时，刷新头部信息和图标
+        if (e.PropertyName == nameof(GamePathInfo.CustomIcon) ||
+            e.PropertyName == nameof(GamePathInfo.Name) ||
+            e.PropertyName == nameof(GamePathInfo.Version) ||
+            e.PropertyName == nameof(GamePathInfo.IsSMAPIInstance) ||
+            e.PropertyName == nameof(GamePathInfo.SMAPIVersion))
         {
+            if (SelectedGamePath != null)
+            {
+                InstanceName = SelectedGamePath.Name;
+                GameVersion = string.IsNullOrEmpty(SelectedGamePath.Version) ? "未知版本" : SelectedGamePath.Version;
+                HasSMAPI = SelectedGamePath.IsSMAPIInstance;
+                SMAPIVersion = SelectedGamePath.SMAPIVersion;
+                IsVersionDetected = !string.IsNullOrEmpty(SelectedGamePath.Version);
+            }
             UpdateIconSource();
         }
+    }
+
+    private void OnGlobalInstanceChanged(object? sender, InstanceChangedEventArgs e)
+    {
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            var savedInstances = SettingsService.LoadInstances();
+            if (savedInstances.Count == 0)
+            {
+                SelectedGamePath = null;
+                return;
+            }
+
+            GamePathInfo? target = null;
+
+            if (!string.IsNullOrWhiteSpace(e.InstanceId))
+            {
+                target = savedInstances.FirstOrDefault(i => i.Id == e.InstanceId);
+            }
+
+            if (target == null && SelectedGamePath != null)
+            {
+                target = savedInstances.FirstOrDefault(i => i.Id == SelectedGamePath.Id);
+            }
+
+            if (target == null)
+            {
+                var defaultId = SettingsService.LoadDefaultInstanceId();
+                target = savedInstances.FirstOrDefault(i => i.Id == defaultId) ?? savedInstances[0];
+            }
+
+            SelectedGamePath = target;
+        }), System.Windows.Threading.DispatcherPriority.Input);
     }
 
     [ObservableProperty]

@@ -48,7 +48,7 @@ public partial class IconPickerDialog : Window
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Title = "选择图标文件",
-                Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.ico|所有文件|*.*",
+                Filter = "图片文件|*.png;*.jpg;*.jpeg;*.bmp;*.ico;*.gif|所有文件|*.*",
                 CheckFileExists = true,
                 CheckPathExists = true
             };

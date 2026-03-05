@@ -176,15 +176,59 @@ public class GamePathInfo : System.ComponentModel.INotifyPropertyChanged
         }
     }
 
+    private string _description = string.Empty;
+    /// <summary>
+    /// 实例描述
+    /// </summary>
+    public string Description
+    {
+        get => _description;
+        set
+        {
+            if (_description != value)
+            {
+                _description = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     /// <summary>
     /// 获取显示的图标路径
     /// </summary>
     public string GetIconPath()
     {
-        if (!string.IsNullOrEmpty(CustomIcon))
+        if (!string.IsNullOrEmpty(CustomIcon) && (CustomIcon.StartsWith("/") || File.Exists(CustomIcon)))
         {
             return CustomIcon;
         }
+
+        // 回退：自动从版本隔离目录加载实例图标
+        if (EnableIsolation && !string.IsNullOrEmpty(GamePath) && !string.IsNullOrEmpty(Name))
+        {
+            try
+            {
+                var versionPath = InstanceIsolationService.GetVersionPath(GamePath, Name);
+                if (Directory.Exists(versionPath))
+                {
+                    var extensions = new[] { ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif" };
+                    foreach (var ext in extensions)
+                    {
+                        var candidate = Path.Combine(versionPath, $".svl-instance-icon{ext}");
+                        if (File.Exists(candidate))
+                        {
+                            CustomIcon = candidate;
+                            return candidate;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略图标探测异常，回退默认图标
+            }
+        }
+
         return IsSMAPIInstance ? "/Images/Modded.png" : "/Images/Vanilla.png";
     }
 

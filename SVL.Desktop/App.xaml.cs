@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Threading.Tasks;
+using System.Windows.Media;
 using SVL.Core.App;
 using SVL.Core.Config;
 using SVL.Core.Logging;
@@ -119,6 +120,51 @@ public partial class App : System.Windows.Application
             if (e.ExceptionObject is Exception ex)
             {
                 Log.Error(ex, "Unhandled exception");
+
+                try
+                {
+                    var pageInfo = "unknown";
+                    var vm = Current?.MainWindow?.DataContext as SVL.Desktop.ViewModels.MainWindowViewModel;
+                    if (vm != null)
+                    {
+                        pageInfo = $"CurrentPage={vm.CurrentPage}, Left={vm.LeftPanelContent?.GetType().Name ?? "null"}, Right={vm.RightPanelContent?.GetType().Name ?? "null"}";
+                    }
+
+                    var focused = System.Windows.Input.Keyboard.FocusedElement as FrameworkElement;
+                    var over = System.Windows.Input.Mouse.DirectlyOver as FrameworkElement;
+                    var focusInfo = $"Focused={focused?.GetType().Name ?? "null"}, MouseOver={over?.GetType().Name ?? "null"}";
+
+                    var overTree = "MouseOverTree=null";
+                    if (over != null)
+                    {
+                        var cursor = over as DependencyObject;
+                        var depth = 0;
+                        var parts = new System.Collections.Generic.List<string>();
+                        while (cursor != null && depth < 8)
+                        {
+                            if (cursor is FrameworkElement fe)
+                            {
+                                var name = string.IsNullOrEmpty(fe.Name) ? "(no-name)" : fe.Name;
+                                parts.Add($"{fe.GetType().Name}#{name}");
+                            }
+                            else
+                            {
+                                parts.Add(cursor.GetType().Name);
+                            }
+
+                            cursor = VisualTreeHelper.GetParent(cursor);
+                            depth++;
+                        }
+
+                        overTree = $"MouseOverTree={string.Join(" <- ", parts)}";
+                    }
+
+                    Log.Error($"[UnhandledContext] {pageInfo}; {focusInfo}; {overTree}");
+                }
+                catch
+                {
+                    // ignore context logging errors
+                }
             }
         };
     }

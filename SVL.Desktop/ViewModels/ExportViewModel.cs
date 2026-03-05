@@ -99,7 +99,6 @@ public class ExportConfig
     public bool IncludeMods { get; set; } = true;
     public bool IncludeModSettings { get; set; } = true;
     public bool IncludeSvlLauncher { get; set; }
-    public bool BundleModFiles { get; set; } = true;
 
     /// <summary>
     /// 选中的 Mod UniqueId 列表（空 = 全选）
@@ -156,16 +155,6 @@ public partial class ExportViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _includeSvlLauncher;
-
-    #endregion
-
-    #region Card 3: 打包选项
-
-    /// <summary>
-    /// 打包 Mod 文件（避免导入时下载）
-    /// </summary>
-    [ObservableProperty]
-    private bool _bundleModFiles = true;
 
     #endregion
 
@@ -413,7 +402,6 @@ public partial class ExportViewModel : ObservableObject
                 IncludeMods = IncludeMods,
                 IncludeModSettings = IncludeModSettings,
                 IncludeSvlLauncher = IncludeSvlLauncher,
-                BundleModFiles = BundleModFiles,
                 SelectedModUniqueIds = ExportModItems
                     .Where(m => m.IsSelected)
                     .Select(m => m.UniqueId)
@@ -466,7 +454,6 @@ public partial class ExportViewModel : ObservableObject
             IncludeMods = config.IncludeMods;
             IncludeModSettings = config.IncludeModSettings;
             IncludeSvlLauncher = config.IncludeSvlLauncher;
-            BundleModFiles = config.BundleModFiles;
 
             // 恢复 Mod 勾选状态
             if (config.SelectedModUniqueIds != null && config.SelectedModUniqueIds.Length > 0)
@@ -544,6 +531,16 @@ public partial class ExportViewModel : ObservableObject
                 .Select(m => m.OriginalMod)
                 .ToList();
 
+            // 仅导出本地可用的实例图标，避免把内置资源路径写进压缩包
+            string? exportIconPath = null;
+            var instanceIconPath = _instance?.GetIconPath();
+            if (!string.IsNullOrWhiteSpace(instanceIconPath)
+                && Path.IsPathRooted(instanceIconPath)
+                && File.Exists(instanceIconPath))
+            {
+                exportIconPath = instanceIconPath;
+            }
+
             // 使用增强的导出方法
             var success = await ModpackManager.ExportModpackEnhancedAsync(
                 mods: modsToExport,
@@ -552,9 +549,9 @@ public partial class ExportViewModel : ObservableObject
                 version: ModpackVersion,
                 author: ModpackAuthor,
                 description: $"由 SVL 导出的 {_instance?.Name ?? ""} 整合包",
-                bundleModFiles: BundleModFiles,
                 includeModSettings: IncludeModSettings,
                 includeSvlLauncher: IncludeSvlLauncher,
+                modpackIconPath: exportIconPath,
                 progressCallback: (progress, message) =>
                 {
                     Application.Current?.Dispatcher?.Invoke(() =>

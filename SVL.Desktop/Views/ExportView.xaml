@@ -427,7 +427,7 @@
             </StackPanel>
         </Border>
 
-        <!-- ═══════════════ Card 3: 打包 Mod 文件 ═══════════════ -->
+        <!-- ═══════════════ Card 3: 导出策略说明 ═══════════════ -->
         <Border Background="{DynamicResource ColorBrushTransparentBackground}"
                 BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
                 BorderThickness="1"
@@ -441,27 +441,17 @@
                                   Opacity="0.1"/>
             </Border.Effect>
             <StackPanel>
-                <TextBlock Text="打包选项"
+                <TextBlock Text="导出策略"
                            FontSize="16"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource ColorBrush1}"
                            Margin="0,0,0,12"/>
 
-                <CheckBox IsChecked="{Binding BundleModFiles, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                          FontSize="14"
-                          Foreground="{DynamicResource ColorBrush1}"
-                          Cursor="Hand"
-                          Margin="0,0,0,8">
-                    <CheckBox.Content>
-                        <TextBlock Text="打包 Mod 文件" FontWeight="SemiBold"/>
-                    </CheckBox.Content>
-                </CheckBox>
-
-                <TextBlock Text="开启后，所有选中的 Mod 文件将被打包到整合包中，导入时无需重新下载。&#x0a;关闭时，仅导出 Mod 清单和来源信息，导入时需要从对应平台下载。"
+                <TextBlock Text="为遵循来源平台分发规则，SVL 不再导出 Mod 本体文件。&#x0a;有来源信息的 Mod 将仅导出清单和来源；无来源信息的 Mod 仅导出配置文件（config.json 等）。"
                            FontSize="12"
                            Foreground="{DynamicResource ColorBrushGray3}"
                            TextWrapping="Wrap"
-                           Margin="20,0,0,0"/>
+                           Margin="0,0,0,0"/>
             </StackPanel>
         </Border>
 

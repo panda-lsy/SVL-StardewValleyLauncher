@@ -436,7 +436,10 @@
                                                         <TextBlock Text="{Binding Description}"
                                                                    FontSize="11"
                                                                    Foreground="{DynamicResource ColorBrushGray3}"
-                                                                   Margin="0,2,0,0" />
+                                                                   Margin="0,2,0,0"
+                                                                   TextWrapping="Wrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxHeight="34" />
                                                     </StackPanel>
                                                     <Button Grid.Column="1"
                                                             Content="下载并安装"

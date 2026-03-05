@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:SVL.Desktop.ViewModels"
+        xmlns:converters="clr-namespace:SVL.Desktop.Converters"
         mc:Ignorable="d"
         Title="导入整合包"
         Height="500"
@@ -15,6 +16,9 @@
         WindowStyle="SingleBorderWindow">
 
     <Window.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+
         <Style TargetType="TextBlock" x:Key="LabelText">
             <Setter Property="Foreground" Value="{DynamicResource ColorBrushTextSecondary}"/>
             <Setter Property="FontSize" Value="13"/>
@@ -121,10 +125,16 @@
                                 CornerRadius="12"
                                 Margin="0,0,16,0"
                                 VerticalAlignment="Top">
-                            <TextBlock Text="📦"
-                                       FontSize="24"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                            <Grid>
+                                <Image Source="{Binding ModpackIconPath}"
+                                       Stretch="UniformToFill"
+                                       Visibility="{Binding HasModpackIcon, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                <TextBlock Text="📦"
+                                           FontSize="24"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding HasModpackIcon, Converter={StaticResource InverseBoolToVisibilityConverter}}"/>
+                            </Grid>
                         </Border>
 
                         <!-- 右侧信息 -->

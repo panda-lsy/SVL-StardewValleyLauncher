@@ -705,8 +705,8 @@ public class CurseforgeModpackDownloadTask : DownloadTask
                 var cachedIconPath = await ImageCacheService.DownloadAndCacheImageAsync(iconUrl);
                 if (!string.IsNullOrEmpty(cachedIconPath) && File.Exists(cachedIconPath))
                 {
-                    customIconPath = cachedIconPath;
-                    Log.Info($"[CurseforgeModpackDownload] 图标已缓存: {customIconPath}");
+                    customIconPath = SaveIconToVersionDirectory(cachedIconPath);
+                    Log.Info($"[CurseforgeModpackDownload] 图标已保存: {customIconPath}");
                 }
                 else
                 {
@@ -792,6 +792,31 @@ public class CurseforgeModpackDownloadTask : DownloadTask
         {
             Log.Warn("[CurseforgeModpackDownload] 保存实例配置失败", ex);
             // 不抛出异常，因为整合包已安装成功
+        }
+    }
+
+    private string? SaveIconToVersionDirectory(string sourceIconPath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(sourceIconPath) || !File.Exists(sourceIconPath))
+                return null;
+
+            var versionRootPath = Path.GetDirectoryName(_targetModsPath) ?? _targetModsPath;
+            Directory.CreateDirectory(versionRootPath);
+
+            var ext = Path.GetExtension(sourceIconPath);
+            if (string.IsNullOrWhiteSpace(ext))
+                ext = ".png";
+
+            var iconPath = Path.Combine(versionRootPath, $".svl-instance-icon{ext}");
+            File.Copy(sourceIconPath, iconPath, true);
+            return iconPath;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[CurseforgeModpackDownload] 保存图标到版本目录失败: {ex.Message}");
+            return sourceIconPath;
         }
     }
 

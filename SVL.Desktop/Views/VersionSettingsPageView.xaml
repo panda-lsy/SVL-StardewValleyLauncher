@@ -231,7 +231,8 @@
             </Grid.RowDefinitions>
 
             <!-- 浮动操作卡片 - 固定在窗口右下角 -->
-            <Grid Grid.Row="0" Grid.RowSpan="2" Panel.ZIndex="9999">
+            <Grid Grid.Row="0" Grid.RowSpan="2" Panel.ZIndex="9999"
+                Visibility="{Binding SelectedPage, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=ModManage}">
                 <!-- 外层Border：检查是否为MOD管理页面 -->
                 <Border HorizontalAlignment="Center"
                         VerticalAlignment="Bottom"
@@ -239,7 +240,7 @@
                         Background="Transparent"
                         Panel.ZIndex="9999"
                         Margin="0,0,0,20"
-                        Visibility="{Binding RightContent, Converter={StaticResource TypeToVisibilityConverter}, ConverterParameter='SVL.Desktop.ViewModels.VersionSettingsRightViewModel, SVL.Desktop'}">
+                    Visibility="Visible">
                     <!-- 内层Border：检查是否有选中项，并显示浮动卡片 -->
                     <Border Background="{DynamicResource ColorBrush2}"
                             BorderThickness="0"
@@ -450,16 +451,26 @@
                     Background="{DynamicResource ColorBrush5}"
                     Padding="16,12"
                     Margin="20,20,20,0">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="配置选项"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource ColorBrush1}"/>
-                    <TextBlock Text="{Binding SettingsViewModel.InstanceName, StringFormat=' - {0}'}"
-                               FontSize="14"
-                               Foreground="{DynamicResource ColorBrushGray3}"
-                               Margin="8,0,0,0"/>
-                </StackPanel>
+                <Grid>
+                    <!-- 左侧标题 -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="配置选项"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"/>
+                        <TextBlock Text="{Binding CurrentInstance.Name, StringFormat=' - {0}'}"
+                                   FontSize="14"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   Margin="8,0,0,0"/>
+                    </StackPanel>
+                    
+                    <!-- 右侧状态消息 -->
+                    <TextBlock Text="{Binding StatusMessage}"
+                               FontSize="13"
+                               Foreground="{DynamicResource ColorBrush2}"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"/>
+                </Grid>
             </Border>
 
             <!-- 内容区域 -->

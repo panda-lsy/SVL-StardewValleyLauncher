@@ -24,9 +24,21 @@
     <Company>SVL Community</Company>
     <Product>SVL.Desktop</Product>
     <Copyright>Copyright © SVL Community</Copyright>
-    <AssemblyVersion>1.1.5.0</AssemblyVersion>
-    <FileVersion>1.1.5.0</FileVersion>
+    <AssemblyVersion>1.1.5.1</AssemblyVersion>
+    <FileVersion>1.1.5.1</FileVersion>
+    <DisplayVersion>v$([System.Version]::Parse('$(AssemblyVersion)').ToString(3))</DisplayVersion>
   </PropertyGroup>
+
+  <Target Name="CreateNamedDesktopExe" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' Or '$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <_NamedExe>SVL.Desktop_$(DisplayVersion)_$(Configuration).exe</_NamedExe>
+    </PropertyGroup>
+
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFiles="$(TargetDir)$(_NamedExe)"
+          SkipUnchangedFiles="false"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
 
   <PropertyGroup>
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>

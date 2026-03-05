@@ -49,6 +49,11 @@ public class BoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
+        if (value == DependencyProperty.UnsetValue)
+        {
+            return Visibility.Collapsed;
+        }
+
         if (value is bool boolValue)
         {
             return boolValue ? Visibility.Visible : Visibility.Collapsed;
@@ -71,6 +76,11 @@ public class InverseBoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
+        if (value == DependencyProperty.UnsetValue)
+        {
+            return Visibility.Visible;
+        }
+
         if (value is bool boolValue)
         {
             return !boolValue ? Visibility.Visible : Visibility.Collapsed;
@@ -150,13 +160,7 @@ public class InstanceToIconConverter : IValueConverter
     {
         if (value is SVL.Core.Stardew.Instance.GamePathInfo instance)
         {
-            // 优先使用自定义图标
-            if (!string.IsNullOrEmpty(instance.CustomIcon))
-            {
-                return instance.CustomIcon;
-            }
-            // 否则根据类型返回默认图标
-            return instance.IsSMAPIInstance ? "/Images/Modded.png" : "/Images/Vanilla.png";
+            return instance.GetIconPath();
         }
         // 默认返回 Vanilla 图标
         return "/Images/Vanilla.png";

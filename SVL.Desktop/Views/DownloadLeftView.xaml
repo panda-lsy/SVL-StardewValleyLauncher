@@ -238,7 +238,9 @@
                                                        TextTrimming="CharacterEllipsis"/>
                                             <TextBlock FontSize="10"
                                                        Foreground="{DynamicResource ColorBrushGray3}"
-                                                       Margin="0,2,0,0">
+                                                       Margin="0,2,0,0"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap">
                                                 <Run Text="{Binding StatusMessage, Mode=OneWay}"/>
                                             </TextBlock>
                                         </StackPanel>

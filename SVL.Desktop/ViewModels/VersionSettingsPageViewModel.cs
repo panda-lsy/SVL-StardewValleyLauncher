@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -37,6 +38,7 @@ public class NavigationItem
 public partial class VersionSettingsViewModel : ObservableObject
 {
     private MainWindowViewModel _mainViewModel;
+    private VersionSettingsRightViewModel? _rightContentStatusSource;
 
     /// <summary>
     /// 当前正在配置的实例
@@ -66,6 +68,9 @@ public partial class VersionSettingsViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private ObservableObject? _rightContent;
+
+    [ObservableProperty]
+    private string _statusMessage = string.Empty;
 
     partial void OnSelectedPageChanged(VersionSettingsPageType value)
     {
@@ -103,6 +108,8 @@ public partial class VersionSettingsViewModel : ObservableObject
     {
         if (CurrentInstance == null)
         {
+            DetachRightContentStatusSource();
+            StatusMessage = string.Empty;
             RightContent = null;
             return;
         }
@@ -131,6 +138,41 @@ public partial class VersionSettingsViewModel : ObservableObject
             case VersionSettingsPageType.Export:
                 RightContent = new ExportViewModel(_mainViewModel, CurrentInstance);
                 break;
+        }
+
+        AttachRightContentStatusSource();
+    }
+
+    private void AttachRightContentStatusSource()
+    {
+        DetachRightContentStatusSource();
+
+        _rightContentStatusSource = RightContent as VersionSettingsRightViewModel;
+        if (_rightContentStatusSource != null)
+        {
+            StatusMessage = _rightContentStatusSource.StatusMessage;
+            _rightContentStatusSource.PropertyChanged += OnRightContentPropertyChanged;
+        }
+        else
+        {
+            StatusMessage = string.Empty;
+        }
+    }
+
+    private void DetachRightContentStatusSource()
+    {
+        if (_rightContentStatusSource != null)
+        {
+            _rightContentStatusSource.PropertyChanged -= OnRightContentPropertyChanged;
+            _rightContentStatusSource = null;
+        }
+    }
+
+    private void OnRightContentPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(VersionSettingsRightViewModel.StatusMessage) && sender is VersionSettingsRightViewModel vm)
+        {
+            StatusMessage = vm.StatusMessage;
         }
     }
 

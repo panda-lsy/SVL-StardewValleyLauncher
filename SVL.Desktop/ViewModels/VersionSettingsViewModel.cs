@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -32,6 +33,10 @@ public enum VersionSettingsPage
 public partial class VersionSettingsRightViewModel : ObservableObject
 {
     private MainWindowViewModel _mainViewModel;
+    private CancellationTokenSource? _nameSaveCts;
+    private CancellationTokenSource? _descriptionSaveCts;
+    private bool _isLoadingInstanceData;
+    private const int AutoSaveDelayMs = 800;
 
     [ObservableProperty]
     private VersionSettingsPage _currentPage;
@@ -41,6 +46,9 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     partial void OnSelectedInstanceChanged(GamePathInfo? value)
     {
+        _nameSaveCts?.Cancel();
+        _descriptionSaveCts?.Cancel();
+
         if (value != null)
         {
             LoadInstanceData(value);
@@ -53,6 +61,14 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     [ObservableProperty]
     private string _instanceName = string.Empty;
+
+    partial void OnInstanceNameChanged(string value)
+    {
+        if (_isLoadingInstanceData || SelectedInstance == null)
+            return;
+
+        ScheduleNameSave(value);
+    }
 
     [ObservableProperty]
     private string _instanceVersion = string.Empty;
@@ -67,8 +83,22 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [ObservableProperty]
     private string _description = string.Empty;
 
+    partial void OnDescriptionChanged(string value)
+    {
+        if (_isLoadingInstanceData || SelectedInstance == null)
+            return;
+
+        ScheduleDescriptionSave(value);
+    }
+
     [ObservableProperty]
     private bool _isFavorite;
+
+    /// <summary>
+    /// 当前状态信息（显示在右上角）
+    /// </summary>
+    [ObservableProperty]
+    private string _statusMessage = string.Empty;
 
     // 第三个卡片：快捷方式
     [ObservableProperty]
@@ -96,30 +126,114 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     private void LoadInstanceData(GamePathInfo instance)
     {
-        InstanceName = instance.Name;
-        InstanceVersion = instance.DisplayVersion;
-        IsSMAPIInstance = instance.IsSMAPIInstance;
-        // 使用实例的自定义图标（如果有）
-        InstanceIcon = instance.GetIconPath();
-        InstanceGamePath = instance.GamePath;
-
-        // 使用实例中已检测的 SMAPI 版本
-        if (instance.IsSMAPIInstance && !string.IsNullOrEmpty(instance.SMAPIVersion))
+        _isLoadingInstanceData = true;
+        try
         {
-            SmapiVersion = instance.SMAPIVersion;
+            InstanceName = instance.Name;
+            InstanceVersion = instance.DisplayVersion;
+            IsSMAPIInstance = instance.IsSMAPIInstance;
+            // 使用实例的自定义图标（如果有）
+            InstanceIcon = instance.GetIconPath();
+            InstanceGamePath = instance.GamePath;
+
+            // 使用实例中已检测的 SMAPI 版本
+            if (instance.IsSMAPIInstance && !string.IsNullOrEmpty(instance.SMAPIVersion))
+            {
+                SmapiVersion = instance.SMAPIVersion;
+            }
+            else if (instance.IsSMAPIInstance)
+            {
+                // 如果实例中没有版本信息，尝试从版本隔离目录检测
+                SmapiVersion = GetSMAPIVersionFromInstance(instance);
+            }
+
+            Description = instance.Description ?? string.Empty;
+            IsFavorite = instance.IsFavorite;
+
+            // 检查文件夹（传入实例信息以支持版本隔离）
+            CheckFolders(instance);
         }
-        else if (instance.IsSMAPIInstance)
+        finally
         {
-            // 如果实例中没有版本信息，尝试从版本隔离目录检测
-            SmapiVersion = GetSMAPIVersionFromInstance(instance);
+            _isLoadingInstanceData = false;
         }
+    }
 
-        // TODO: 从配置加载描述
-        Description = "这是我的游戏实例";
-        IsFavorite = instance.IsFavorite;
+    private void ScheduleNameSave(string value)
+    {
+        _nameSaveCts?.Cancel();
+        _nameSaveCts = new CancellationTokenSource();
+        _ = DebouncedSaveNameAsync(value, _nameSaveCts.Token);
+    }
 
-        // 检查文件夹（传入实例信息以支持版本隔离）
-        CheckFolders(instance);
+    private async Task DebouncedSaveNameAsync(string pendingName, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(AutoSaveDelayMs, token);
+            if (token.IsCancellationRequested)
+                return;
+
+            if (SelectedInstance == null)
+                return;
+
+            var normalizedName = (pendingName ?? string.Empty).Trim();
+            if (!IsValidInstanceName(normalizedName))
+            {
+                StatusMessage = "名称非法，未保存";
+                return;
+            }
+
+            if (SelectedInstance.Name == normalizedName)
+                return;
+
+            SelectedInstance.Name = normalizedName;
+            InstanceName = normalizedName;
+            SaveInstanceConfig("✓ 已保存");
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private void ScheduleDescriptionSave(string value)
+    {
+        _descriptionSaveCts?.Cancel();
+        _descriptionSaveCts = new CancellationTokenSource();
+        _ = DebouncedSaveDescriptionAsync(value, _descriptionSaveCts.Token);
+    }
+
+    private async Task DebouncedSaveDescriptionAsync(string pendingDescription, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(AutoSaveDelayMs, token);
+            if (token.IsCancellationRequested)
+                return;
+
+            if (SelectedInstance == null)
+                return;
+
+            if (SelectedInstance.Description == pendingDescription)
+                return;
+
+            SelectedInstance.Description = pendingDescription ?? string.Empty;
+            SaveInstanceConfig("✓ 已保存");
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private static bool IsValidInstanceName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        if (name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(" ", StringComparison.Ordinal))
+            return false;
+
+        return name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
     }
 
     private string GetSMAPIVersionFromInstance(GamePathInfo instance)
@@ -205,8 +319,11 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [RelayCommand]
     private void SaveDescription()
     {
-        // TODO: 保存描述到配置
-        SvlMessageBox.Success("描述已保存");
+        if (SelectedInstance == null)
+            return;
+
+        SelectedInstance.Description = Description ?? string.Empty;
+        SaveInstanceConfig("✓ 已保存");
     }
 
     /// <summary>
@@ -354,7 +471,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         }
     }
 
-    private void SaveInstanceConfig()
+    private void SaveInstanceConfig(string successMessage = "✓ 已保存")
     {
         try
         {
@@ -368,19 +485,6 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 allInstances[index] = SelectedInstance;
                 SVL.Core.Stardew.Instance.SettingsService.SaveInstances(allInstances);
 
-                // 重新加载实例以获取最新的对象引用
-                var reloadedInstances = SVL.Core.Stardew.Instance.SettingsService.LoadInstances();
-                var updatedInstance = reloadedInstances.FirstOrDefault(i => i.Id == SelectedInstance?.Id);
-
-                if (updatedInstance != null)
-                {
-                    // 更新当前选中的实例
-                    SelectedInstance = updatedInstance;
-
-                    // 刷新当前页面的显示
-                    LoadInstanceData(updatedInstance);
-                }
-
                 // 刷新主页面的显示
                 if (_mainViewModel.LeftPanelContent is LaunchLeftViewModel launchLeftVm)
                 {
@@ -393,12 +497,13 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                     GlobalEvents.OnInstanceChanged(SelectedInstance.Id);
                 }
 
-                SvlMessageBox.Success("图标已保存");
+                // 在右上角显示保存成功提示
+                StatusMessage = successMessage;
             }
         }
         catch (Exception ex)
         {
-            SvlMessageBox.Error($"保存图标失败：{ex.Message}");
+            StatusMessage = $"✗ 保存失败：{ex.Message}";
         }
     }
 
@@ -425,7 +530,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                     SelectedInstance.CustomIcon = selectedIcon;
 
                     // 保存配置到文件
-                    SaveInstanceConfig();
+                    SaveInstanceConfig("✓ 图标已保存");
                 }
             }
         }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -2817,7 +2818,9 @@ public partial class ModDetailsViewModel : ObservableObject
                     sourcePlatform: "Curseforge",
                     sourceProjectId: modId.ToString(),
                     sourceFileId: sourceFileId,
-                    isModpack: true  // 标记为整合包
+                    isModpack: true,  // 标记为整合包
+                    modpackIconUrl: Mod.IconUrl,
+                    modpackIconLocalPath: Mod.LocalIconPath
                 );
 
                 await DownloadManager.Instance.AddTaskAsync(modpackSaveTask);

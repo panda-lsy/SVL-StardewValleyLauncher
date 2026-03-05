@@ -662,15 +662,41 @@ public partial class InstanceSelectorViewModel : ObservableObject
 
         try
         {
-            // 重新创建该路径下的所有实例信息
-            var updatedInfos = GamePathService.CreateGamePathInfos(entry.GamePath);
+            // 重新检测基础实例（原版/SMAPI）
+            var detectedBaseInfos = GamePathService.CreateGamePathInfos(entry.GamePath);
 
-            // 扫描versions文件夹中的版本隔离实例
-            var existingInstances = updatedInfos.ToList();
-            var isolatedInstances = GamePathService.ScanVersionIsolatedInstances(entry.GamePath, existingInstances);
+            // 从配置中读取该路径已有实例，保留用户元数据（图标/描述/收藏等）
+            var savedInstances = SettingsService.LoadInstances()
+                .Where(i => i.GamePath.Equals(entry.GamePath, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var savedByName = savedInstances.ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
+
+            // 合并基础实例：优先保留已有实例对象，更新检测字段
+            var mergedBaseInfos = new List<GamePathInfo>();
+            foreach (var detected in detectedBaseInfos)
+            {
+                if (savedByName.TryGetValue(detected.Name, out var saved))
+                {
+                    saved.Version = detected.Version;
+                    saved.SMAPIVersion = detected.SMAPIVersion;
+                    saved.HasSMAPIInstalled = detected.HasSMAPIInstalled;
+                    saved.IsSMAPIInstance = detected.IsSMAPIInstance;
+                    saved.EnableIsolation = detected.EnableIsolation;
+                    mergedBaseInfos.Add(saved);
+                    savedByName.Remove(detected.Name);
+                }
+                else
+                {
+                    mergedBaseInfos.Add(detected);
+                }
+            }
+
+            // 扫描 versions 文件夹，传入已合并实例以便复用元数据
+            var isolatedInstances = GamePathService.ScanVersionIsolatedInstances(entry.GamePath, mergedBaseInfos);
 
             // 合并实例列表
-            var allInstances = existingInstances.Concat(isolatedInstances).ToList();
+            var allInstances = mergedBaseInfos.Concat(isolatedInstances).ToList();
 
             // 更新实例列表
             entry.Instances.Clear();
@@ -680,7 +706,7 @@ public partial class InstanceSelectorViewModel : ObservableObject
             }
 
             // 更新版本信息
-            entry.Version = updatedInfos.First().Version;
+            entry.Version = mergedBaseInfos.First().Version;
 
             SaveAllInstances();
 

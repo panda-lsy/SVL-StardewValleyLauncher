@@ -54,6 +54,14 @@ public partial class ModpackDropDialogViewModel : ObservableObject
     [ObservableProperty]
     private string _modpackTypeText = "-";
 
+    [ObservableProperty]
+    private string _modpackIconPath = string.Empty;
+
+    public bool HasModpackIcon =>
+        !string.IsNullOrWhiteSpace(ModpackIconPath)
+        && Path.IsPathRooted(ModpackIconPath)
+        && File.Exists(ModpackIconPath);
+
     private ModpackDetectionResult? _detectionResult;
 
     public ModpackDetectionResult? DetectionResult => _detectionResult;
@@ -91,6 +99,9 @@ public partial class ModpackDropDialogViewModel : ObservableObject
                 IsValid = false;
                 return;
             }
+
+            ModpackIconPath = _detectionResult.ModpackIconPath ?? string.Empty;
+            OnPropertyChanged(nameof(HasModpackIcon));
 
             // 根据类型更新 UI
             if (_detectionResult.Type == ModpackType.Curseforge)
