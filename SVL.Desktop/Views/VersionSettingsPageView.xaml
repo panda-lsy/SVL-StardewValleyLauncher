@@ -239,7 +239,7 @@
                         BorderThickness="0"
                         Background="Transparent"
                         Panel.ZIndex="9999"
-                        Margin="0,0,0,20"
+                        Margin="16,0,16,20"
                     Visibility="Visible">
                     <!-- 内层Border：检查是否有选中项，并显示浮动卡片 -->
                     <Border Background="{DynamicResource ColorBrush2}"
@@ -253,14 +253,59 @@
                                         ShadowDepth="0"
                                         Opacity="0.3"/>
                     </Border.Effect>
-                    <Grid Width="500">
+                    <Grid MaxWidth="980"
+                          MinWidth="420">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <TextBlock Text="{Binding RightContent.SelectedCount, StringFormat=已选择 {0} 个文件}"
                                    FontSize="16"
                                    FontWeight="SemiBold"
                                    Foreground="White"
-                                   VerticalAlignment="Center"/>
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Right">
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,10"/>
+                        <ScrollViewer Grid.Row="1"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled">
+                            <StackPanel Orientation="Horizontal">
+                            <Button Command="{Binding RightContent.BackupSelectedCommand}"
+                                    Height="36"
+                                    Margin="0,0,8,0"
+                                    Padding="16,0"
+                                    Cursor="Hand"
+                                    Visibility="{Binding RightContent.IsBackupFilterActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush3}"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="ButtonBorder"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Cursor="Hand">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}" TargetName="ButtonBorder"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="备份已选" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+
                             <Button Command="{Binding RightContent.UpdateSelectedCommand}"
                                     Height="36"
                                     Margin="0,0,8,0"
@@ -297,11 +342,48 @@
                                 <TextBlock Text="更新" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
 
+                            <Button Command="{Binding RightContent.UpdateSelectedCommand}"
+                                    Height="36"
+                                    Margin="0,0,8,0"
+                                    Padding="16,0"
+                                    Cursor="Hand"
+                                    Visibility="{Binding RightContent.IsBackupFilterActive, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush3}"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="ButtonBorder"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Cursor="Hand">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}" TargetName="ButtonBorder"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="替换" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+
                             <Button Command="{Binding RightContent.EnableSelectedCommand}"
                                     Height="36"
                                     Margin="0,0,8,0"
                                     Padding="16,0"
-                                    Cursor="Hand">
+                                    Cursor="Hand"
+                                    Visibility="{Binding RightContent.IsBackupFilterActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="White"/>
@@ -336,7 +418,8 @@
                                     Height="36"
                                     Margin="0,0,8,0"
                                     Padding="16,0"
-                                    Cursor="Hand">
+                                    Cursor="Hand"
+                                    Visibility="{Binding RightContent.IsBackupFilterActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="White"/>
@@ -439,7 +522,8 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                        </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
                 </Border>
                 <!-- 关闭外层Border -->
@@ -479,7 +563,7 @@
                           Background="Transparent"
                           Focusable="True"
                           IsHitTestVisible="True"
-                          Margin="20,16,20,20">
+                          Margin="20,16,20,84">
                 <ContentControl Content="{Binding RightContent}">
                     <ContentControl.Resources>
                         <!-- 概览页面 -->

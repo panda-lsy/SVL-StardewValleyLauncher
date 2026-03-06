@@ -678,7 +678,8 @@
                         </Border>
 
                     <!-- SMAPI 实例时显示 MOD 管理界面 -->
-                    <StackPanel Visibility="{Binding IsSMAPIInstance, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel Visibility="{Binding IsSMAPIInstance, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Margin="0,0,0,92">
                     <!-- 第一个卡片：本地搜索 -->
                     <Border Background="{DynamicResource ColorBrushTransparentBackground}"
                             BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
@@ -700,6 +701,7 @@
                             <TextBlock Grid.Column="0"
                                        Text="🔍"
                                        FontSize="20"
+                                       Foreground="{DynamicResource ColorBrush1}"
                                        VerticalAlignment="Center"
                                        Margin="0,0,12,0"/>
                             <TextBox Grid.Column="1"
@@ -748,7 +750,9 @@
                                             ShadowDepth="0"
                                             Opacity="0.1"/>
                         </Border.Effect>
-                        <WrapPanel Orientation="Horizontal">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Orientation="Horizontal">
                             <Button Command="{Binding OpenModsFolderCommand}"
                                     Height="40"
                                     Margin="0,0,8,8"
@@ -781,8 +785,45 @@
                                     </Style>
                                 </Button.Style>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📁" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="📁" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="打开文件夹" FontSize="14" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
+                            <Button Command="{Binding OpenBackupFolderCommand}"
+                                    Height="40"
+                                    Margin="0,0,8,8"
+                                    Padding="16,0"
+                                    Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="ButtonBorder"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Cursor="Hand">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🗂" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="打开备份栏" FontSize="14" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
 
@@ -791,7 +832,8 @@
                                     Margin="0,0,8,8"
                                     Padding="16,0"
                                     Cursor="Hand"
-                                    IsEnabled="{Binding IsCheckingUpdates, Converter={StaticResource InverseBoolConverter}}">
+                                    IsEnabled="{Binding IsCheckingUpdates, Converter={StaticResource InverseBoolConverter}}"
+                                    Visibility="{Binding IsBackupFilterActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
@@ -822,12 +864,12 @@
                                     </Style>
                                 </Button.Style>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🔍" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="🔍" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="检测更新" FontSize="14" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
 
-                            <Button Command="{Binding DownloadNewModCommand}"
+                            <Button Command="{Binding SelectAllCommand}"
                                     Height="40"
                                     Margin="0,0,8,8"
                                     Padding="16,0"
@@ -859,51 +901,14 @@
                                     </Style>
                                 </Button.Style>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🌐" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="下载新 MOD" FontSize="14" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-
-                            <Button Command="{Binding SelectAllCommand}"
-                                    Height="40"
-                                    Margin="0,0,0,8"
-                                    Padding="16,0"
-                                    Cursor="Hand">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                        <Setter Property="BorderThickness" Value="0"/>
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="ButtonBorder"
-                                                            Background="{TemplateBinding Background}"
-                                                            CornerRadius="6"
-                                                            Padding="{TemplateBinding Padding}"
-                                                            Cursor="Hand">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                        VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="✓" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="✓" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="全选" FontSize="14" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
 
                             <Button Command="{Binding RefreshModsCommand}"
                                     Height="40"
-                                    Margin="8,0,0,8"
+                                    Margin="0,0,0,8"
                                     Padding="16,0"
                                     Cursor="Hand">
                                 <Button.Style>
@@ -934,11 +939,12 @@
                                     </Style>
                                 </Button.Style>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🔄" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="🔄" FontSize="16" Foreground="{DynamicResource ColorBrush1}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="刷新" FontSize="14" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Button>
-                        </WrapPanel>
+                        </StackPanel>
+                        </ScrollViewer>
                     </Border>
 
                     <!-- MOD 列表卡片 -->
@@ -975,7 +981,9 @@
                                                             <Setter.Value>
                                                                 <ControlTemplate TargetType="RadioButton">
                                                                     <Border x:Name="Border"
-                                                                            Background="Transparent"
+                                                                            Background="{DynamicResource ColorBrush5}"
+                                                                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                                                            BorderThickness="1"
                                                                             Padding="8,4"
                                                                             Cursor="Hand">
                                                                         <StackPanel Orientation="Horizontal" Margin="0">
@@ -989,9 +997,14 @@
                                                                         </StackPanel>
                                                                     </Border>
                                                                     <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush4}" TargetName="Border"/>
+                                                                        </Trigger>
                                                                         <Trigger Property="IsChecked" Value="True">
                                                                             <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="Border"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush2}" TargetName="Border"/>
                                                                             <Setter Property="Foreground" Value="White"/>
+                                                                            <Setter Property="TextElement.Foreground" Value="White" TargetName="Border"/>
                                                                         </Trigger>
                                                                     </ControlTemplate.Triggers>
                                                                 </ControlTemplate>
@@ -1011,7 +1024,9 @@
                                                             <Setter.Value>
                                                                 <ControlTemplate TargetType="RadioButton">
                                                                     <Border x:Name="Border"
-                                                                            Background="Transparent"
+                                                                            Background="{DynamicResource ColorBrush5}"
+                                                                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                                                            BorderThickness="1"
                                                                             Padding="8,4"
                                                                             Cursor="Hand">
                                                                         <StackPanel Orientation="Horizontal" Margin="0">
@@ -1025,9 +1040,59 @@
                                                                         </StackPanel>
                                                                     </Border>
                                                                     <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush4}" TargetName="Border"/>
+                                                                        </Trigger>
                                                                         <Trigger Property="IsChecked" Value="True">
                                                                             <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="Border"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush2}" TargetName="Border"/>
                                                                             <Setter Property="Foreground" Value="White"/>
+                                                                            <Setter Property="TextElement.Foreground" Value="White" TargetName="Border"/>
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </RadioButton.Style>
+                                            </RadioButton>
+
+                                            <RadioButton Content="备份"
+                                                         IsChecked="{Binding CurrentFilterCategory, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Backup}"
+                                                         FontSize="14"
+                                                         Foreground="{DynamicResource ColorBrush1}"
+                                                         Margin="16,0,0,0"
+                                                         GroupName="ModFilter">
+                                                <RadioButton.Style>
+                                                    <Style TargetType="RadioButton">
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="RadioButton">
+                                                                    <Border x:Name="Border"
+                                                                            Background="{DynamicResource ColorBrush5}"
+                                                                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                                                            BorderThickness="1"
+                                                                            Padding="8,4"
+                                                                            Cursor="Hand">
+                                                                        <StackPanel Orientation="Horizontal" Margin="0">
+                                                                            <ContentPresenter HorizontalAlignment="Center"
+                                                                                            VerticalAlignment="Center"/>
+                                                                            <TextBlock Text="{Binding BackupModsCount, StringFormat=({0})}"
+                                                                                       FontSize="12"
+                                                                                       Foreground="{TemplateBinding Foreground}"
+                                                                                       Margin="8,0,0,0"
+                                                                                       VerticalAlignment="Center"/>
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush4}" TargetName="Border"/>
+                                                                        </Trigger>
+                                                                        <Trigger Property="IsChecked" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="Border"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush2}" TargetName="Border"/>
+                                                                            <Setter Property="Foreground" Value="White"/>
+                                                                            <Setter Property="TextElement.Foreground" Value="White" TargetName="Border"/>
                                                                         </Trigger>
                                                                     </ControlTemplate.Triggers>
                                                                 </ControlTemplate>
@@ -1136,6 +1201,26 @@
                                                              FontSize="12"
                                                              Foreground="{DynamicResource ColorBrushGray3}"/>
                                                     </TextBlock>
+
+                                                      <TextBlock Margin="0,2,0,0"
+                                                               Visibility="{Binding TagsDisplay, Converter={StaticResource StringNotEmptyToVisibilityConverter}}">
+                                                         <Run Text="标签："
+                                                             FontSize="12"
+                                                             Foreground="{DynamicResource ColorBrushGray3}"/>
+                                                         <Run Text="{Binding TagsDisplay, Mode=OneWay}"
+                                                             FontSize="12"
+                                                             Foreground="{DynamicResource ColorBrushGray3}"/>
+                                                      </TextBlock>
+
+                                                      <TextBlock Margin="0,2,0,0"
+                                                               Visibility="{Binding IsBackupItem, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                         <Run Text="备份时间："
+                                                             FontSize="12"
+                                                             Foreground="{DynamicResource ColorBrushGray3}"/>
+                                                         <Run Text="{Binding BackupTime, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}"
+                                                             FontSize="12"
+                                                             Foreground="{DynamicResource ColorBrushGray3}"/>
+                                                      </TextBlock>
                                                 </StackPanel>
 
                                                 <!-- 操作按钮组 -->
@@ -1176,6 +1261,7 @@
                                                                                     Cursor="Hand">
                                                                                 <TextBlock Text="ℹ️"
                                                                                            FontSize="16"
+                                                                                           Foreground="{DynamicResource ColorBrush1}"
                                                                                            HorizontalAlignment="Center"
                                                                                            VerticalAlignment="Center"/>
                                                                             </Border>
@@ -1214,6 +1300,85 @@
                                                                                     Cursor="Hand">
                                                                                 <TextBlock Text="📁"
                                                                                            FontSize="14"
+                                                                                           Foreground="{DynamicResource ColorBrush1}"
+                                                                                           HorizontalAlignment="Center"
+                                                                                           VerticalAlignment="Center"/>
+                                                                            </Border>
+                                                                            <ControlTemplate.Triggers>
+                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush5}" TargetName="ButtonBorder"/>
+                                                                                </Trigger>
+                                                                            </ControlTemplate.Triggers>
+                                                                        </ControlTemplate>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+
+                                                    <Button Command="{Binding DataContext.BackupModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            Width="32"
+                                                            Height="32"
+                                                            Margin="4,0"
+                                                            Cursor="Hand"
+                                                            ToolTip="备份模组"
+                                                            Visibility="{Binding IsBackupItem, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
+                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                <Setter Property="BorderThickness" Value="0"/>
+                                                                <Setter Property="Template">
+                                                                    <Setter.Value>
+                                                                        <ControlTemplate TargetType="Button">
+                                                                            <Border x:Name="ButtonBorder"
+                                                                                    Background="{TemplateBinding Background}"
+                                                                                    CornerRadius="4"
+                                                                                    Width="32"
+                                                                                    Height="32"
+                                                                                    Cursor="Hand">
+                                                                                <TextBlock Text="💾"
+                                                                                           FontSize="14"
+                                                                                           Foreground="{DynamicResource ColorBrush1}"
+                                                                                           HorizontalAlignment="Center"
+                                                                                           VerticalAlignment="Center"/>
+                                                                            </Border>
+                                                                            <ControlTemplate.Triggers>
+                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush5}" TargetName="ButtonBorder"/>
+                                                                                </Trigger>
+                                                                            </ControlTemplate.Triggers>
+                                                                        </ControlTemplate>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+
+                                                    <Button Command="{Binding DataContext.RestoreBackupModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            Width="32"
+                                                            Height="32"
+                                                            Margin="4,0"
+                                                            Cursor="Hand"
+                                                            ToolTip="替换到 Mods（互换）"
+                                                            Visibility="{Binding IsBackupItem, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
+                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                <Setter Property="BorderThickness" Value="0"/>
+                                                                <Setter Property="Template">
+                                                                    <Setter.Value>
+                                                                        <ControlTemplate TargetType="Button">
+                                                                            <Border x:Name="ButtonBorder"
+                                                                                    Background="{TemplateBinding Background}"
+                                                                                    CornerRadius="4"
+                                                                                    Width="32"
+                                                                                    Height="32"
+                                                                                    Cursor="Hand">
+                                                                                <TextBlock Text="🔁"
+                                                                                           FontSize="14"
+                                                                                           Foreground="{DynamicResource ColorBrush1}"
                                                                                            HorizontalAlignment="Center"
                                                                                            VerticalAlignment="Center"/>
                                                                             </Border>
@@ -1236,7 +1401,8 @@
                                                             Height="32"
                                                             Margin="4,0"
                                                             Cursor="Hand"
-                                                            ToolTip="{Binding IsEnabled, Converter={StaticResource BoolToEnableDisableTipConverter}}">
+                                                            ToolTip="{Binding IsEnabled, Converter={StaticResource BoolToEnableDisableTipConverter}}"
+                                                            Visibility="{Binding IsBackupItem, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                                         <Button.Style>
                                                             <Style TargetType="Button">
                                                                 <Setter Property="Background" Value="Transparent"/>
@@ -1252,6 +1418,7 @@
                                                                                     Cursor="Hand">
                                                                                 <TextBlock Text="{Binding IsEnabled, Converter={StaticResource BoolToEnableDisableIconConverter}}"
                                                                                            FontSize="14"
+                                                                                           Foreground="{DynamicResource ColorBrush1}"
                                                                                            HorizontalAlignment="Center"
                                                                                            VerticalAlignment="Center"/>
                                                                             </Border>
@@ -1290,6 +1457,7 @@
                                                                                     Cursor="Hand">
                                                                                 <TextBlock Text="🗑️"
                                                                                            FontSize="14"
+                                                                                           Foreground="{DynamicResource ColorBrush1}"
                                                                                            HorizontalAlignment="Center"
                                                                                            VerticalAlignment="Center"/>
                                                                             </Border>
@@ -1310,6 +1478,174 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <Border BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                    BorderThickness="0,1,0,0"
+                                    Padding="16,10"
+                                    Background="{DynamicResource ColorBrushTransparentBackground}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding TotalFilteredCount, StringFormat=共 {0} 项}"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource ColorBrushGray3}"/>
+
+                                    <StackPanel Grid.Column="2"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center">
+                                        <Button Command="{Binding PreviousPageCommand}"
+                                                Content="上一页"
+                                                Width="70"
+                                                Height="32"
+                                                Margin="0,0,8,0"
+                                                FontSize="12"
+                                                Background="{DynamicResource ColorBrush2}"
+                                                Foreground="White"
+                                                BorderThickness="0"
+                                                Cursor="Hand"
+                                                IsEnabled="{Binding HasPreviousPage}"
+                                                FocusVisualStyle="{x:Null}"
+                                                IsTabStop="False">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="{TemplateBinding Background}"
+                                                                        CornerRadius="4"
+                                                                        Padding="{TemplateBinding Padding}">
+                                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                                    VerticalAlignment="Center" />
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter Property="Opacity" Value="0.5" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+
+                                        <ItemsControl ItemsSource="{Binding PageNumbers}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="..."
+                                                                   FontSize="14"
+                                                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="4,0"
+                                                                   Visibility="{Binding ., Converter={StaticResource NegativeIntToCollapsedConverter}}" />
+
+                                                        <Button Content="{Binding .}"
+                                                                Width="36"
+                                                                Height="32"
+                                                                Margin="2,0"
+                                                                FontSize="12"
+                                                                Command="{Binding DataContext.GoToPageCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding .}"
+                                                                Visibility="{Binding ., Converter={StaticResource PositiveIntToCollapsedConverter}}"
+                                                                FocusVisualStyle="{x:Null}"
+                                                                IsTabStop="False">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button">
+                                                                    <Setter Property="Background" Value="{DynamicResource ColorBrushGray5}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}" />
+                                                                    <Setter Property="BorderThickness" Value="0" />
+                                                                    <Setter Property="Cursor" Value="Hand" />
+                                                                    <Setter Property="Template">
+                                                                        <Setter.Value>
+                                                                            <ControlTemplate TargetType="Button">
+                                                                                <Border Background="{TemplateBinding Background}"
+                                                                                        CornerRadius="4"
+                                                                                        Padding="{TemplateBinding Padding}">
+                                                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                                                    VerticalAlignment="Center" />
+                                                                                </Border>
+                                                                            </ControlTemplate>
+                                                                        </Setter.Value>
+                                                                    </Setter>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Value="True">
+                                                                            <DataTrigger.Binding>
+                                                                                <MultiBinding Converter="{StaticResource PageNumberToBoolConverter}">
+                                                                                    <Binding Path="." />
+                                                                                    <Binding Path="DataContext.CurrentPageIndex" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                                                                                </MultiBinding>
+                                                                            </DataTrigger.Binding>
+                                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}" />
+                                                                            <Setter Property="Foreground" Value="White" />
+                                                                            <Setter Property="FontWeight" Value="Bold" />
+                                                                        </DataTrigger>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Button Command="{Binding NextPageCommand}"
+                                                Content="下一页"
+                                                Width="70"
+                                                Height="32"
+                                                Margin="8,0,0,0"
+                                                FontSize="12"
+                                                Background="{DynamicResource ColorBrush2}"
+                                                Foreground="White"
+                                                BorderThickness="0"
+                                                Cursor="Hand"
+                                                IsEnabled="{Binding HasNextPage}"
+                                                FocusVisualStyle="{x:Null}"
+                                                IsTabStop="False">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="{TemplateBinding Background}"
+                                                                        CornerRadius="4"
+                                                                        Padding="{TemplateBinding Padding}">
+                                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                                    VerticalAlignment="Center" />
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter Property="Opacity" Value="0.5" />
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
 
                                 <!-- 空状态 -->
                                 <TextBlock Text="暂无 MOD"

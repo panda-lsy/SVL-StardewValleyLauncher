@@ -46,9 +46,43 @@ public static class LauncherUpdateService
     {
         get
         {
-            var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version ?? new Version(1, 1, 1, 0);
+            return ResolveCurrentVersion();
         }
+    }
+
+    private static Version ResolveCurrentVersion()
+    {
+        try
+        {
+            // 1) 优先入口程序集（桌面启动器）
+            var entryVersion = Assembly.GetEntryAssembly()?.GetName().Version;
+            if (entryVersion != null)
+                return entryVersion;
+
+            // 2) 回退到当前域中名称包含 SVL.Desktop 的程序集
+            var desktopAssembly = AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a =>
+                {
+                    var n = a.GetName().Name ?? string.Empty;
+                    return n.Equals("SVL.Desktop", StringComparison.OrdinalIgnoreCase)
+                        || n.StartsWith("SVL.Desktop", StringComparison.OrdinalIgnoreCase);
+                });
+
+            var desktopVersion = desktopAssembly?.GetName().Version;
+            if (desktopVersion != null)
+                return desktopVersion;
+
+            // 3) 最后回退到当前程序集版本
+            var coreVersion = Assembly.GetExecutingAssembly().GetName().Version;
+            if (coreVersion != null)
+                return coreVersion;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[LauncherUpdateService] 解析当前版本失败，使用默认值: {ex.Message}");
+        }
+
+        return new Version(1, 1, 1, 0);
     }
 
     /// <summary>
@@ -224,13 +258,16 @@ public static class LauncherUpdateService
     private static UpdateCheckResult CreateResult(ReleaseInfo release)
     {
         var latestVersion = ParseVersion(release.TagName);
-        var hasUpdate = latestVersion > CurrentVersion;
+        var currentVersion = CurrentVersion;
+        var hasUpdate = latestVersion > currentVersion;
+
+        Log.Info($"[LauncherUpdateService] 版本比较: 当前={currentVersion}, 最新={latestVersion}, HasUpdate={hasUpdate}");
 
         return new UpdateCheckResult
         {
             Success = true,
             LatestVersion = latestVersion,
-            CurrentVersion = CurrentVersion,
+            CurrentVersion = currentVersion,
             HasUpdate = hasUpdate,
             ReleaseInfo = release
         };

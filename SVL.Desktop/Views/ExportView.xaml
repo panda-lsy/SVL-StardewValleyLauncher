@@ -52,6 +52,8 @@
                              Padding="8,6"
                              VerticalContentAlignment="Center"
                              FontSize="13"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             CaretBrush="{DynamicResource ColorBrush1}"
                              BorderBrush="{DynamicResource ColorBrushSemiTransparent}">
                         <TextBox.Style>
                             <Style TargetType="TextBox">
@@ -95,6 +97,8 @@
                              Padding="8,6"
                              VerticalContentAlignment="Center"
                              FontSize="13"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             CaretBrush="{DynamicResource ColorBrush1}"
                              BorderBrush="{DynamicResource ColorBrushSemiTransparent}">
                         <TextBox.Style>
                             <Style TargetType="TextBox">
@@ -138,6 +142,8 @@
                              Padding="8,6"
                              VerticalContentAlignment="Center"
                              FontSize="13"
+                             Foreground="{DynamicResource ColorBrush1}"
+                             CaretBrush="{DynamicResource ColorBrush1}"
                              BorderBrush="{DynamicResource ColorBrushSemiTransparent}">
                         <TextBox.Style>
                             <Style TargetType="TextBox">

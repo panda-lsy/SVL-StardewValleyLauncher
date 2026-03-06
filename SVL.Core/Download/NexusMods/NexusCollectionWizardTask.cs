@@ -1642,83 +1642,8 @@ public class NexusCollectionWizardTask : DownloadTask
     {
         await Task.Run(() =>
         {
-            var normalized = new HashSet<string>(manifestDirs, StringComparer.OrdinalIgnoreCase);
-
-            try
-            {
-                var topDirs = Directory.GetDirectories(targetModsPath);
-                foreach (var topDir in topDirs)
-                {
-                    var topManifest = Path.Combine(topDir, "manifest.json");
-                    if (File.Exists(topManifest))
-                        continue;
-
-                    var childDirs = Directory.GetDirectories(topDir);
-                    if (childDirs.Length == 0)
-                        continue;
-
-                    var childManifestDirs = childDirs
-                        .Where(d => File.Exists(Path.Combine(d, "manifest.json")))
-                        .ToList();
-
-                    if (childManifestDirs.Count == 0)
-                        continue;
-
-                    Log.Info($"[CollectionWizard] 发现嵌套容器目录，准备展开: {topDir} ({childManifestDirs.Count} 个子MOD)");
-
-                    foreach (var childDir in childManifestDirs)
-                    {
-                        if (!Directory.Exists(childDir))
-                        {
-                            continue;
-                        }
-
-                        var childName = Path.GetFileName(childDir);
-                        var destination = Path.Combine(targetModsPath, childName);
-
-                        if (string.Equals(destination.TrimEnd('\\'), childDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
-                        {
-                            normalized.Add(destination);
-                            continue;
-                        }
-
-                        // 如果目标目录存在，先删除
-                        if (Directory.Exists(destination))
-                        {
-                            Log.Warn($"[CollectionWizard] 展开嵌套时目标已存在，先删除: {destination}");
-                            Directory.Delete(destination, true);
-                        }
-
-                        try
-                        {
-                            Directory.Move(childDir, destination);
-                            normalized.Add(destination);
-                            Log.Info($"[CollectionWizard] 展开嵌套: {childDir} -> {destination}");
-                        }
-                        catch (IOException ex)
-                        {
-                            Log.Warn($"[CollectionWizard] 移动失败，尝试复制: {ex.Message}");
-                            CopyDirectoryRecursive(childDir, destination);
-                            Directory.Delete(childDir, true);
-                            if (File.Exists(Path.Combine(destination, "manifest.json")))
-                                normalized.Add(destination);
-                        }
-                    }
-
-                    // 清理空的父目录
-                    if (Directory.Exists(topDir) && !Directory.EnumerateFileSystemEntries(topDir).Any())
-                    {
-                        Directory.Delete(topDir, false);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("[CollectionWizard] 处理嵌套目录结构时发生错误", ex);
-            }
-
-            // 写入源凭证文件
-            WriteSourceCredentialFilesAsync(normalized, mod);
+            // 不再展开嵌套目录；保留原有目录结构。
+            WriteSourceCredentialFilesAsync(manifestDirs.Distinct(StringComparer.OrdinalIgnoreCase), mod);
         });
     }
 

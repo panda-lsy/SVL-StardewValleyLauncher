@@ -184,16 +184,48 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 return;
             }
 
+            if (IsDuplicateInstanceName(normalizedName))
+            {
+                if (SelectedInstance != null)
+                {
+                    InstanceName = SelectedInstance.Name;
+                }
+
+                StatusMessage = "名称已存在，未保存";
+                return;
+            }
+
             if (SelectedInstance.Name == normalizedName)
                 return;
 
+            var oldName = SelectedInstance.Name;
             SelectedInstance.Name = normalizedName;
+
+            // Name setter 在隔离目录重命名失败时会拒绝更新，这里同步回滚输入框显示。
+            if (!string.Equals(SelectedInstance.Name, normalizedName, StringComparison.OrdinalIgnoreCase))
+            {
+                InstanceName = SelectedInstance.Name;
+                StatusMessage = "重命名失败，未保存";
+                return;
+            }
+
             InstanceName = normalizedName;
             SaveInstanceConfig("✓ 已保存");
         }
         catch (TaskCanceledException)
         {
         }
+    }
+
+    private bool IsDuplicateInstanceName(string name)
+    {
+        if (SelectedInstance == null)
+            return false;
+
+        var allInstances = SettingsService.LoadInstances();
+        return allInstances.Any(i =>
+            !string.Equals(i.Id, SelectedInstance.Id, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     private void ScheduleDescriptionSave(string value)
@@ -596,7 +628,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     public enum ModFilterCategory
     {
         All,        // 全部
-        Updatable   // 可更新
+        Updatable,  // 可更新
+        Backup      // 备份
     }
 
     // MOD 列表
@@ -605,6 +638,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     [ObservableProperty]
     private ObservableCollection<SdVMod> _filteredMods = new();
+
+    [ObservableProperty]
+    private ObservableCollection<SdVMod> _backupMods = new();
+
+    private readonly List<SdVMod> _filteredSource = [];
+    private const int ModsPageSize = 10;
 
     // 搜索关键词
     [ObservableProperty]
@@ -625,7 +664,25 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedUpdatableCount = 0;
 
-    public bool HasSelectedUpdatable => SelectedUpdatableCount > 0;
+    [ObservableProperty]
+    private int _currentPageIndex = 1;
+
+    [ObservableProperty]
+    private int _totalPages = 1;
+
+    [ObservableProperty]
+    private int _totalFilteredCount = 0;
+
+    [ObservableProperty]
+    private List<int> _pageNumbers = [];
+
+    public bool HasSelectedUpdatable => CurrentFilterCategory != ModFilterCategory.Backup && SelectedUpdatableCount > 0;
+    public bool IsBackupFilterActive => CurrentFilterCategory == ModFilterCategory.Backup;
+    public bool HasPreviousPage => CurrentPageIndex > 1;
+    public bool HasNextPage => CurrentPageIndex < TotalPages;
+    public bool CanGoPreviousPage => CurrentPageIndex > 1;
+    public bool CanGoNextPage => CurrentPageIndex < TotalPages;
+    public string PageInfo => $"{CurrentPageIndex}/{TotalPages}";
 
     // MOD 统计数量
     [ObservableProperty]
@@ -633,6 +690,9 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     [ObservableProperty]
     private int _updatableModsCount = 0;
+
+    [ObservableProperty]
+    private int _backupModsCount = 0;
 
     // 更新检查状态
     [ObservableProperty]
@@ -663,12 +723,38 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     partial void OnSearchKeywordChanged(string value)
     {
+        CurrentPageIndex = 1;
         ApplyFilter();
     }
 
     partial void OnCurrentFilterCategoryChanged(ModFilterCategory value)
     {
+        ClearSelection();
+        CurrentPageIndex = 1;
         ApplyFilter();
+        OnPropertyChanged(nameof(IsBackupFilterActive));
+        OnPropertyChanged(nameof(HasSelectedUpdatable));
+    }
+
+    partial void OnCurrentPageIndexChanged(int value)
+    {
+        RefreshPagedMods();
+        UpdatePageNumbers();
+        OnPropertyChanged(nameof(HasPreviousPage));
+        OnPropertyChanged(nameof(HasNextPage));
+        OnPropertyChanged(nameof(CanGoPreviousPage));
+        OnPropertyChanged(nameof(CanGoNextPage));
+        OnPropertyChanged(nameof(PageInfo));
+    }
+
+    partial void OnTotalPagesChanged(int value)
+    {
+        UpdatePageNumbers();
+        OnPropertyChanged(nameof(HasPreviousPage));
+        OnPropertyChanged(nameof(HasNextPage));
+        OnPropertyChanged(nameof(CanGoPreviousPage));
+        OnPropertyChanged(nameof(CanGoNextPage));
+        OnPropertyChanged(nameof(PageInfo));
     }
 
     /// <summary>
@@ -736,24 +822,15 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 System.Diagnostics.Debug.WriteLine($"[VersionSettings] FilteredMods count: {FilteredMods.Count}");
             });
 
-            // 检测嵌套文件夹问题
-            _ = Task.Run(async () =>
+            var backups = ModBackupService.LoadBackups(modsPath);
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                try
+                BackupMods.Clear();
+                foreach (var backup in backups)
                 {
-                    var issues = await _modManager.DetectNestedFolderIssuesAsync(modsPath);
-                    if (issues.Count > 0)
-                    {
-                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                        {
-                            ShowNestedFolderFixDialog(issues, modsPath);
-                        });
-                    }
+                    BackupMods.Add(backup);
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[VersionSettings] 嵌套文件夹检测失败：{ex.Message}");
-                }
+                ApplyFilter();
             });
         }
         catch (Exception ex)
@@ -783,6 +860,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [RelayCommand]
     private async Task CheckModUpdatesAsync()
     {
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            UpdateStatus = "备份栏不执行更新检测";
+            return;
+        }
+
         if (SelectedInstance == null || Mods.Count == 0)
         {
             UpdateStatus = "请先选择实例并加载 MOD";
@@ -817,34 +900,15 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 显示嵌套文件夹修复对话框
-    /// </summary>
-    private void ShowNestedFolderFixDialog(List<ModManager.NestedFolderIssue> issues, string modsPath)
-    {
-        try
-        {
-            var dialog = new Controls.NestedFolderFixDialog(
-                issues,
-                _modManager ?? new ModManager(),
-                async () => await LoadModsAsync());
-
-            dialog.Owner = System.Windows.Application.Current.MainWindow;
-            dialog.ShowDialog();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[VersionSettings] 显示嵌套文件夹对话框失败：{ex.Message}");
-        }
-    }
-
-    /// <summary>
     /// 应用过滤条件
     /// </summary>
     private void ApplyFilter()
     {
-        FilteredMods.Clear();
+        var source = CurrentFilterCategory == ModFilterCategory.Backup
+            ? BackupMods.AsEnumerable()
+            : Mods.AsEnumerable();
 
-        var filtered = Mods.AsEnumerable();
+        var filtered = source;
 
         // 搜索过滤
         if (!string.IsNullOrWhiteSpace(SearchKeyword))
@@ -862,13 +926,86 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             filtered = filtered.Where(m => m.HasUpdate);
         }
 
-        foreach (var mod in filtered)
-        {
-            FilteredMods.Add(mod);
-        }
+        _filteredSource.Clear();
+        _filteredSource.AddRange(filtered);
+
+        TotalFilteredCount = _filteredSource.Count;
+        TotalPages = Math.Max(1, (int)Math.Ceiling(TotalFilteredCount / (double)ModsPageSize));
+        if (CurrentPageIndex > TotalPages)
+            CurrentPageIndex = TotalPages;
+        if (CurrentPageIndex < 1)
+            CurrentPageIndex = 1;
+
+        RefreshPagedMods();
 
         // 更新数量统计
         UpdateModsCount();
+        UpdateSelectionState();
+        OnPropertyChanged(nameof(CanGoPreviousPage));
+        OnPropertyChanged(nameof(CanGoNextPage));
+        OnPropertyChanged(nameof(PageInfo));
+    }
+
+    private void RefreshPagedMods()
+    {
+        FilteredMods.Clear();
+
+        var pageItems = _filteredSource
+            .Skip((Math.Max(CurrentPageIndex, 1) - 1) * ModsPageSize)
+            .Take(ModsPageSize);
+
+        foreach (var mod in pageItems)
+        {
+            FilteredMods.Add(mod);
+        }
+    }
+
+    private void UpdatePageNumbers()
+    {
+        var pages = new List<int>();
+        var totalPages = Math.Max(1, TotalPages);
+
+        if (totalPages <= 7)
+        {
+            for (int i = 1; i <= totalPages; i++)
+            {
+                pages.Add(i);
+            }
+        }
+        else
+        {
+            pages.Add(1);
+
+            if (CurrentPageIndex <= 3)
+            {
+                for (int i = 2; i <= 5; i++)
+                {
+                    pages.Add(i);
+                }
+
+                pages.Add(-1);
+                pages.Add(totalPages);
+            }
+            else if (CurrentPageIndex >= totalPages - 2)
+            {
+                pages.Add(-1);
+                for (int i = totalPages - 4; i <= totalPages; i++)
+                {
+                    pages.Add(i);
+                }
+            }
+            else
+            {
+                pages.Add(-1);
+                pages.Add(CurrentPageIndex - 1);
+                pages.Add(CurrentPageIndex);
+                pages.Add(CurrentPageIndex + 1);
+                pages.Add(-1);
+                pages.Add(totalPages);
+            }
+        }
+
+        PageNumbers = pages;
     }
 
     /// <summary>
@@ -878,6 +1015,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     {
         TotalModsCount = Mods.Count;
         UpdatableModsCount = Mods.Count(m => m.HasUpdate);
+        BackupModsCount = BackupMods.Count;
     }
 
     /// <summary>
@@ -897,9 +1035,13 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     /// </summary>
     private void UpdateSelectionState()
     {
-        SelectedCount = Mods.Count(m => m.IsSelected);
-        SelectedUpdatableCount = Mods.Count(m => m.IsSelected && m.HasUpdate);
+        var selectionSource = CurrentFilterCategory == ModFilterCategory.Backup ? BackupMods : Mods;
+        SelectedCount = selectionSource.Count(m => m.IsSelected);
+        SelectedUpdatableCount = CurrentFilterCategory == ModFilterCategory.Backup
+            ? 0
+            : Mods.Count(m => m.IsSelected && m.HasUpdate);
         ShowSelectionActions = SelectedCount > 0;
+        OnPropertyChanged(nameof(HasSelectedUpdatable));
     }
 
     partial void OnSelectedUpdatableCountChanged(int value)
@@ -928,6 +1070,9 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [RelayCommand]
     private void SelectAll()
     {
+        if (FilteredMods.Count == 0)
+            return;
+
         var allSelected = FilteredMods.All(m => m.IsSelected);
 
         foreach (var mod in FilteredMods)
@@ -936,6 +1081,33 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         }
 
         UpdateSelectionState();
+    }
+
+    [RelayCommand]
+    private void PreviousPage()
+    {
+        if (!CanGoPreviousPage)
+            return;
+
+        CurrentPageIndex--;
+    }
+
+    [RelayCommand]
+    private void NextPage()
+    {
+        if (!CanGoNextPage)
+            return;
+
+        CurrentPageIndex++;
+    }
+
+    [RelayCommand]
+    private void GoToPage(int pageNumber)
+    {
+        if (pageNumber >= 1 && pageNumber <= TotalPages && pageNumber != CurrentPageIndex)
+        {
+            CurrentPageIndex = pageNumber;
+        }
     }
 
     /// <summary>
@@ -971,6 +1143,141 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             SvlMessageBox.Error($"无法打开文件夹：{ex.Message}");
         }
+    }
+
+    [RelayCommand]
+    private void OpenBackupFolder()
+    {
+        var modsPath = GetCurrentModsPath();
+        if (string.IsNullOrWhiteSpace(modsPath))
+            return;
+
+        try
+        {
+            var backupPath = ModBackupService.EnsureBackupRoot(modsPath);
+            System.Diagnostics.Process.Start("explorer.exe", backupPath);
+        }
+        catch (Exception ex)
+        {
+            SvlMessageBox.Error($"无法打开备份文件夹：{ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task BackupSelectedAsync()
+    {
+        var modsPath = GetCurrentModsPath();
+        if (string.IsNullOrWhiteSpace(modsPath))
+            return;
+
+        var selectedMods = Mods.Where(m => m.IsSelected).ToList();
+        if (selectedMods.Count == 0)
+            return;
+
+        var success = 0;
+        foreach (var mod in selectedMods)
+        {
+            if (!string.IsNullOrWhiteSpace(ModBackupService.BackupDirectory(modsPath, mod.ModPath, mod)))
+                success++;
+        }
+
+        await LoadModsAsync();
+        SvlMessageBox.Success($"已备份 {success}/{selectedMods.Count} 个模组");
+    }
+
+    [RelayCommand]
+    private async Task RestoreSelectedBackupAsync()
+    {
+        var modsPath = GetCurrentModsPath();
+        if (string.IsNullOrWhiteSpace(modsPath))
+            return;
+
+        var selectedBackups = BackupMods.Where(m => m.IsSelected).ToList();
+        if (selectedBackups.Count == 0)
+            return;
+
+        foreach (var backup in selectedBackups)
+        {
+            var active = ModBackupService.FindActiveMod(modsPath, backup);
+            if (active != null)
+            {
+                var backupTimeText = backup.BackupTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "未知";
+                if (!SvlMessageBox.Confirm(
+                    $"Mods 中已存在同名/同 UniqueId 模组：\n\n" +
+                    $"当前版本: {active.Version}\n" +
+                    $"备份版本: {backup.Version}\n" +
+                    $"备份时间: {backupTimeText}\n\n" +
+                    "是否执行互换替换？（不会覆盖文件）",
+                    "确认替换"))
+                {
+                    continue;
+                }
+            }
+
+            if (!ModBackupService.SwapBackupWithActive(modsPath, backup, out var message))
+            {
+                SvlMessageBox.Error($"恢复失败：{backup.Name}\n{message}");
+            }
+        }
+
+        await LoadModsAsync();
+    }
+
+    [RelayCommand]
+    private async Task BackupModAsync(SdVMod mod)
+    {
+        if (mod == null)
+            return;
+
+        var modsPath = GetCurrentModsPath();
+        if (string.IsNullOrWhiteSpace(modsPath))
+            return;
+
+        var backup = ModBackupService.BackupDirectory(modsPath, mod.ModPath, mod);
+        if (string.IsNullOrWhiteSpace(backup))
+        {
+            SvlMessageBox.Error("备份失败，请查看日志");
+            return;
+        }
+
+        await LoadModsAsync();
+        SvlMessageBox.Success($"已备份模组：{mod.Name}");
+    }
+
+    [RelayCommand]
+    private async Task RestoreBackupModAsync(SdVMod mod)
+    {
+        if (mod == null)
+            return;
+
+        var modsPath = GetCurrentModsPath();
+        if (string.IsNullOrWhiteSpace(modsPath))
+            return;
+
+        var active = ModBackupService.FindActiveMod(modsPath, mod);
+        if (active != null)
+        {
+            var backupTimeText = mod.BackupTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "未知";
+            if (!SvlMessageBox.Confirm(
+                $"Mods 中已存在同名/同 UniqueId 模组：\n\n" +
+                $"当前版本: {active.Version}\n" +
+                $"备份版本: {mod.Version}\n" +
+                $"备份时间: {backupTimeText}\n\n" +
+                "是否执行互换替换？（不会覆盖文件）",
+                "确认替换"))
+            {
+                return;
+            }
+        }
+
+        if (!ModBackupService.SwapBackupWithActive(modsPath, mod, out var message))
+        {
+            SvlMessageBox.Error($"恢复失败：{message}");
+            return;
+        }
+
+        await LoadModsAsync();
+        SvlMessageBox.Success("已完成备份互换替换");
     }
 
     /// <summary>
@@ -1051,6 +1358,9 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [RelayCommand]
     private async Task EnableSelectedAsync()
     {
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+            return;
+
         if (SelectedInstance == null) return;
 
         var selectedMods = Mods.Where(m => m.IsSelected && !m.IsEnabled).ToList();
@@ -1098,6 +1408,9 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [RelayCommand]
     private async Task DisableSelectedAsync()
     {
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+            return;
+
         if (SelectedInstance == null) return;
 
         var selectedMods = Mods.Where(m => m.IsSelected && m.IsEnabled).ToList();
@@ -1147,6 +1460,40 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     {
         if (SelectedInstance == null) return;
 
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            var selectedBackups = BackupMods.Where(m => m.IsSelected).ToList();
+            if (selectedBackups.Count == 0)
+                return;
+
+            if (!SvlMessageBox.Confirm(
+                $"确定要删除选中的 {selectedBackups.Count} 个备份吗？\n\n此操作将移动到系统回收站。",
+                "确认删除")) return;
+
+            var deleted = 0;
+            foreach (var backup in selectedBackups)
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(backup.ModPath) && Directory.Exists(backup.ModPath))
+                    {
+                        if (ModBackupService.MovePathToRecycleBin(backup.ModPath))
+                        {
+                            deleted++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"[VersionSettings] 删除备份失败: {backup.ModPath}, {ex.Message}");
+                }
+            }
+
+            await LoadModsAsync();
+            SvlMessageBox.Success($"已删除 {deleted}/{selectedBackups.Count} 个备份");
+            return;
+        }
+
         var selectedMods = Mods.Where(m => m.IsSelected).ToList();
         if (selectedMods.Count == 0) return;
 
@@ -1188,6 +1535,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [RelayCommand]
     private async Task UpdateSelectedAsync()
     {
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            await RestoreSelectedBackupAsync();
+            return;
+        }
+
         if (SelectedInstance == null)
         {
             Log.Warn("[VersionSettings] 批量更新: 未选择实例");
@@ -1463,6 +1816,10 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             mod.IsSelected = false;
         }
+        foreach (var mod in BackupMods)
+        {
+            mod.IsSelected = false;
+        }
         UpdateSelectionState();
     }
 
@@ -1656,6 +2013,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     {
         if (mod == null || SelectedInstance == null) return;
 
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            await RestoreBackupModAsync(mod);
+            return;
+        }
+
         try
         {
             string modsPath;
@@ -1696,6 +2059,33 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     private async Task DeleteModAsync(SdVMod mod)
     {
         if (mod == null || SelectedInstance == null) return;
+
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            if (!SvlMessageBox.Confirm(
+                $"确定要删除备份 \"{mod.Name}\" 吗？",
+                "确认删除备份")) return;
+
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(mod.ModPath) && Directory.Exists(mod.ModPath))
+                {
+                    if (!ModBackupService.MovePathToRecycleBin(mod.ModPath))
+                    {
+                        SvlMessageBox.Error("删除备份失败：无法移动到回收站");
+                        return;
+                    }
+                }
+
+                await LoadModsAsync();
+                return;
+            }
+            catch (Exception ex)
+            {
+                SvlMessageBox.Error($"删除备份失败：{ex.Message}");
+                return;
+            }
+        }
 
         if (!SvlMessageBox.Confirm(
             $"确定要删除 MOD \"{mod.Name}\" 吗？\n\n将移动到系统回收站。",

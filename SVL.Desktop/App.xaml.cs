@@ -430,7 +430,9 @@ public partial class App : System.Windows.Application
 
             // 获取当前版本
             var currentVersion = LauncherUpdateService.CurrentVersion;
-            var versionString = $"v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
+            var versionString = currentVersion.Revision > 0 
+                ? $"v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}.{currentVersion.Revision}"
+                : $"v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
 
             // 尝试从更新源获取最新版本的更新日志
             string updateLog;

@@ -10,6 +10,7 @@ using SVL.Core.Config;
 using SVL.Core.Download;
 using SVL.Core.IO;
 using SVL.Core.Logging;
+using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.ResourceProject.NexusMods;
 using SVL.Desktop.Controls;
 using SVL.Desktop.Models;
@@ -3065,8 +3066,14 @@ public partial class DownloadRightViewModel : ObservableObject
                     {
                         if (System.IO.File.Exists(downloadedZipPath))
                         {
-                            System.IO.File.Delete(downloadedZipPath);
-                            Log.Info($"[DownloadRightViewModel] 已删除已下载的文件: {downloadedZipPath}");
+                            if (ModBackupService.MovePathToRecycleBin(downloadedZipPath))
+                            {
+                                Log.Info($"[DownloadRightViewModel] 已将已下载文件移到回收站: {downloadedZipPath}");
+                            }
+                            else
+                            {
+                                Log.Warn($"[DownloadRightViewModel] 无法将已下载文件移到回收站: {downloadedZipPath}");
+                            }
                         }
                     }
                     catch (Exception ex)

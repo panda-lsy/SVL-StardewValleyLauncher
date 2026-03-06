@@ -25,6 +25,12 @@ public class SdVMod : INotifyPropertyChanged
     public List<string> Dependencies { get; set; } = [];
     public List<string> ConflictingMods { get; set; } = [];
     public string Thumbnail { get; set; }
+    public List<string> Tags { get; set; } = [];
+    public bool IsBackupItem { get; set; }
+    public DateTime? BackupTime { get; set; }
+    public string BackupLabel { get; set; } = string.Empty;
+    public string OriginalRelativePath { get; set; } = string.Empty;
+    public string TagsDisplay => Tags == null || Tags.Count == 0 ? string.Empty : string.Join(" / ", Tags);
 
     /// <summary>
     /// 源文件名（原始压缩包名称）

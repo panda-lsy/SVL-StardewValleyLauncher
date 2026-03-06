@@ -29,47 +29,24 @@ public class ModManager : IModManager
             return _loadedMods;
         }
 
-        var modDirectories = Directory.GetDirectories(modsPath);
+        var manifestFiles = Directory.GetFiles(modsPath, "manifest.json", SearchOption.AllDirectories);
 
-        foreach (var modDir in modDirectories)
+        foreach (var manifestFile in manifestFiles)
         {
             try
             {
-                var manifestPath = Path.Combine(modDir, "manifest.json");
-                if (!File.Exists(manifestPath))
-                {
-                    var mod = new SdVMod
-                    {
-                        Id = Path.GetFileName(modDir),
-                        Name = Path.GetFileName(modDir),
-                        ModPath = modDir,
-                        IsEnabled = !modDir.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase),
-                        InstalledDate = Directory.GetCreationTime(modDir)
-                    };
-
-                    var sourceCredentialWithoutManifest = TryLoadSourceCredential(modDir);
-                    if (sourceCredentialWithoutManifest != null)
-                    {
-                        if (string.Equals(sourceCredentialWithoutManifest.Platform, "Curseforge", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var curseId = ExtractIntId(sourceCredentialWithoutManifest.ProjectId);
-                            mod.CurseforgeProjectId = curseId > 0 ? curseId.ToString() : (sourceCredentialWithoutManifest.ProjectId ?? string.Empty);
-                            mod.UpdateSource = "Curseforge";
-                        }
-                        else if (string.Equals(sourceCredentialWithoutManifest.Platform, "NexusMods", StringComparison.OrdinalIgnoreCase)
-                                 || string.Equals(sourceCredentialWithoutManifest.Platform, "Nexus", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var nexusId = ExtractLongId(sourceCredentialWithoutManifest.ProjectId);
-                            mod.NexusModsProjectId = nexusId > 0 ? nexusId.ToString() : (sourceCredentialWithoutManifest.ProjectId ?? string.Empty);
-                            mod.UpdateSource = "NexusMods";
-                        }
-                    }
-
-                    _loadedMods.Add(mod);
+                var modDir = Path.GetDirectoryName(manifestFile);
+                if (string.IsNullOrWhiteSpace(modDir))
                     continue;
-                }
 
-                var manifestJson = await FileEx.ReadAllTextAsync(manifestPath);
+                var relative = GetRelativePathPortable(modsPath, modDir);
+                var relativeParts = relative
+                    .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+
+                if (relativeParts.Length == 0)
+                    continue;
+
+                var manifestJson = await FileEx.ReadAllTextAsync(manifestFile);
 
                 // 使用更宽容的JSON解析选项
                 var options = new JsonSerializerOptions
@@ -83,7 +60,7 @@ public class ModManager : IModManager
 
                 var sdvMod = new SdVMod
                 {
-                    Id = Path.GetFileName(modDir),
+                    Id = relative.Replace(Path.DirectorySeparatorChar, '/'),
                     Name = manifest.Name,
                     Author = manifest.Author,
                     Version = manifest.Version,
@@ -95,7 +72,10 @@ public class ModManager : IModManager
                     InstalledDate = Directory.GetCreationTime(modDir),
                     Manifest = manifest,
                     Dependencies = manifest.Dependencies?.Select(d => d.UniqueId).ToList() ?? [],
-                    Thumbnail = Path.Combine(modDir, "icon.png")
+                    Thumbnail = Path.Combine(modDir, "icon.png"),
+                    Tags = relativeParts.Length > 1
+                        ? relativeParts.Take(relativeParts.Length - 1).ToList()
+                        : []
                 };
 
                 // 尝试从来源凭证文件恢复溯源信息（用于下载页跳转与更新检测）
@@ -126,12 +106,29 @@ public class ModManager : IModManager
             }
             catch (Exception ex)
             {
-                Log.Error(ex, $"Failed to load mod: {modDir}");
+                Log.Error(ex, $"Failed to load mod: {manifestFile}");
             }
         }
 
         Log.Info($"Loaded {_loadedMods.Count} mods from {modsPath}");
         return _loadedMods;
+    }
+
+    private static string GetRelativePathPortable(string basePath, string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(basePath) || string.IsNullOrWhiteSpace(fullPath))
+            return fullPath;
+
+        var normalizedBase = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedFull = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (normalizedFull.StartsWith(normalizedBase, StringComparison.OrdinalIgnoreCase))
+        {
+            var relative = normalizedFull.Substring(normalizedBase.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.IsNullOrWhiteSpace(relative) ? Path.GetFileName(normalizedFull) : relative;
+        }
+
+        return fullPath;
     }
 
     public async Task<bool> InstallModAsync(string modPath, string destinationModsPath)
@@ -148,6 +145,12 @@ public class ModManager : IModManager
                 ? modPath.Substring(0, modPath.Length - 4)
                 : modPath);
             var destPath = Path.Combine(destinationModsPath, modName);
+
+            if (Directory.Exists(destPath))
+            {
+                ModBackupService.BackupDirectory(destinationModsPath, destPath);
+                MovePathToRecycleBin(destPath);
+            }
 
             if (modPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {

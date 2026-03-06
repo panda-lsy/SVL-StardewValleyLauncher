@@ -30,7 +30,6 @@ public class GamePathInfo : System.ComponentModel.INotifyPropertyChanged
             if (_name != value)
             {
                 var oldName = _name;
-                _name = value;
 
                 // 如果开启了版本隔离，重命名隔离目录
                 if (EnableIsolation && !string.IsNullOrEmpty(oldName))
@@ -47,14 +46,17 @@ public class GamePathInfo : System.ComponentModel.INotifyPropertyChanged
                         if (!success)
                         {
                             Logging.Log.Warn($"[GamePathInfo] Failed to rename isolation directory from {oldName} to {value}");
-                            // 不阻止重命名，只是记录警告
+                            return;
                         }
                     }
                     catch (Exception ex)
                     {
                         Logging.Log.Error(ex, $"[GamePathInfo] Error renaming isolation directory: {oldName} -> {value}");
+                        return;
                     }
                 }
+
+                _name = value;
 
                 OnPropertyChanged();
             }

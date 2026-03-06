@@ -12,6 +12,7 @@ using ICSharpCode.SharpZipLib.Zip;
 using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Mod;
 
 namespace SVL.Core.Download;
 
@@ -831,6 +832,7 @@ public class ModDownloadTask : DownloadTask
                     if (Directory.Exists(trackedRootDir))
                     {
                         Log.Info($"[ModDownloadTask] 检测到已存在的根目录，将删除: {trackedRootDir}");
+                        ModBackupService.BackupDirectory(targetModsPath, trackedRootDir);
                         Directory.Delete(trackedRootDir, recursive: true);
                     }
 
@@ -849,6 +851,7 @@ public class ModDownloadTask : DownloadTask
                     if (Directory.Exists(extractPath))
                     {
                         Log.Info($"[ModDownloadTask] 检测到已存在的目录，将删除: {extractPath}");
+                        ModBackupService.BackupDirectory(targetModsPath, extractPath);
                         Directory.Delete(extractPath, recursive: true);
                     }
 
@@ -945,7 +948,7 @@ public class ModDownloadTask : DownloadTask
             var extractedFolders = Directory.GetDirectories(targetModsPath);
             Log.Info($"[ModDownloadTask] 解压完成，共 {extractedFolders.Length} 个 MOD 文件夹");
 
-            var normalizedManifestDirs = NormalizeExtractedModDirectories(targetModsPath, extractedManifestDirs);
+            var normalizedManifestDirs = extractedManifestDirs.Distinct(StringComparer.OrdinalIgnoreCase);
             await WriteSourceCredentialFilesAsync(normalizedManifestDirs);
 
             // 解压成功，清空跟踪的根目录列表（不需要清理）
@@ -961,136 +964,7 @@ public class ModDownloadTask : DownloadTask
         }
     }
 
-    private static System.Collections.Generic.IEnumerable<string> NormalizeExtractedModDirectories(
-        string targetModsPath,
-        System.Collections.Generic.IEnumerable<string> manifestDirs)
-    {
-        var normalized = new System.Collections.Generic.HashSet<string>(manifestDirs, StringComparer.OrdinalIgnoreCase);
-
-        try
-        {
-            var topDirs = Directory.GetDirectories(targetModsPath);
-            foreach (var topDir in topDirs)
-            {
-                var topManifest = Path.Combine(topDir, "manifest.json");
-                if (File.Exists(topManifest))
-                    continue;
-
-                var childDirs = Directory.GetDirectories(topDir);
-                if (childDirs.Length == 0)
-                    continue;
-
-                var childManifestDirs = childDirs
-                    .Where(d => File.Exists(Path.Combine(d, "manifest.json")))
-                    .ToList();
-
-                if (childManifestDirs.Count == 0)
-                    continue;
-
-                Log.Info($"[ModDownloadTask] 发现嵌套容器目录，准备展开: {topDir} ({childManifestDirs.Count} 个子MOD)");
-
-                foreach (var childDir in childManifestDirs)
-                {
-                    // 检查源目录是否还存在（可能在之前的循环中已被处理）
-                    if (!Directory.Exists(childDir))
-                    {
-                        Log.Debug($"[ModDownloadTask] 源目录已不存在，跳过: {childDir}");
-                        normalized.Remove(childDir);
-                        continue;
-                    }
-
-                    var childName = Path.GetFileName(childDir);
-                    var destination = Path.Combine(targetModsPath, childName);
-
-                    if (string.Equals(destination.TrimEnd('\\'), childDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
-                    {
-                        // 源目录已经在正确位置，添加到 normalized 集合
-                        normalized.Add(destination);
-                        continue;
-                    }
-
-                    // 移除旧路径（容器内的路径），后续会添加新路径
-                    normalized.Remove(childDir);
-
-                    // 如果目标目录存在，先删除
-                    if (Directory.Exists(destination))
-                    {
-                        Log.Warn($"[ModDownloadTask] 展开嵌套时目标已存在，先删除: {destination}");
-
-                        try
-                        {
-                            Directory.Delete(destination, true);
-
-                            // 等待删除操作完成
-                            for (int retry = 0; retry < 10; retry++)
-                            {
-                                if (!Directory.Exists(destination))
-                                    break;
-                                System.Threading.Thread.Sleep(50);
-                            }
-
-                            // 如果目标仍然存在，使用临时名称
-                            if (Directory.Exists(destination))
-                            {
-                                var tempName = $"{destination}_temp_{Guid.NewGuid():N}";
-                                Log.Warn($"[ModDownloadTask] 目标目录仍然存在，使用临时名称: {tempName}");
-                                destination = tempName;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Log.Warn($"[ModDownloadTask] 删除目标目录失败: {destination}, 错误: {ex.Message}");
-                            // 继续尝试移动，Windows 允许移动到已存在的目录
-                        }
-                    }
-
-                    try
-                    {
-                        Directory.Move(childDir, destination);
-                        Log.Info($"[ModDownloadTask] 已移动目录: {childDir} -> {destination}");
-
-                        if (File.Exists(Path.Combine(destination, "manifest.json")))
-                            normalized.Add(destination);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warn($"[ModDownloadTask] 移动目录失败: {childDir} -> {destination}, 错误: {ex.Message}");
-
-                        // 如果移动失败，尝试复制后删除
-                        try
-                        {
-                            Log.Info($"[ModDownloadTask] 尝试复制目录代替移动: {childDir} -> {destination}");
-
-                            // 复制目录
-                            CopyDirectoryRecursive(childDir, destination);
-
-                            // 删除源目录
-                            Directory.Delete(childDir, true);
-
-                            if (File.Exists(Path.Combine(destination, "manifest.json")))
-                                normalized.Add(destination);
-                        }
-                        catch (Exception copyEx)
-                        {
-                            Log.Warn($"[ModDownloadTask] 复制目录也失败: {copyEx.Message}");
-                        }
-                    }
-                }
-
-                // 清理空的父目录
-                if (Directory.Exists(topDir) && !Directory.EnumerateFileSystemEntries(topDir).Any())
-                {
-                    Directory.Delete(topDir, false);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("[ModDownloadTask] 处理嵌套目录结构时发生错误", ex);
-        }
-
-        return normalized;
-    }
+    // 不再对嵌套目录做展开；保留压缩包中的目录层级，让 SMAPI 自行加载。
 
     /// <summary>
     /// 递归复制目录
