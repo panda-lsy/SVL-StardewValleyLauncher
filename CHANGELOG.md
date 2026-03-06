@@ -2,6 +2,78 @@
 
 All notable changes to SVL (Stardew Valley Launcher) will be documented in this file.
 
+## [1.1.6.0] - 2026-03-06
+
+### Added
+
+- **MOD 备份管理系统** - 完整的 MOD 备份与恢复功能
+  - 新增 `ModBackupService` 服务，支持将 MOD 移动到回收站而非直接删除
+  - 使用 Windows API `SHFileOperation` 实现安全的文件删除（支持回收站恢复）
+  - 备份元数据管理（`.svl-backup.json`），记录原始路径、备份时间、MOD 信息
+  - 支持备份与活跃 MOD 一键互换（`SwapBackupWithActive`）
+  - MOD 列表显示备份标签（💾）和备份时间
+- **MOD 列表分页功能** - 优化大量 MOD 的展示性能
+  - 每页显示 10 个 MOD，支持页码导航
+  - 显示总页数和当前页码
+  - 支持上一页、下一页、跳转到指定页
+  - 页码按钮动态生成，最多显示 7 个页码（含省略号）
+- **MOD 标签支持** - 增强 MOD 分类与管理
+  - `SdVMod` 类新增 `Tags` 属性（`List<string>`）
+  - 自动从 `manifest.json` 加载标签
+  - UI 显示标签 badges（逗号分隔）
+  - 支持通过标签快速识别 MOD 类型
+- **MOD 嵌套目录支持** - 尊重 Mod 作者的目录结构
+  - `ModManager` 递归扫描 `Mods` 目录及其子目录
+  - 自动发现嵌套的 `manifest.json` 文件
+  - 保留原始目录结构，不强制展开到根目录
+  - 使用 `GetRelativePathPortable` 计算跨平台相对路径
+
+### Changed
+
+- **版本检测增强** - 3 级回退策略确保版本准确性
+  - 优先使用 Entry Assembly 获取版本号
+  - 回退到 SVL.Desktop Assembly
+  - 最终回退到当前 Assembly
+  - 增强日志记录，便于诊断版本比较问题
+- **MOD 删除流程优化** - 使用回收站替代永久删除
+  - `ModDownloadTask` 更新 MOD 时，旧版本移动到回收站
+  - `DownloadRightViewModel` 使用 `ModBackupService.MovePathToRecycleBin`
+  - 用户可从回收站恢复误删的 MOD
+- **MOD 列表 UI 重构** - 更直观的备份管理体验
+  - 新增"备份"筛选分类（全部 / 可更新 / 备份）
+  - 上下文感知操作按钮（备份图标 / 恢复图标）
+  - 选中项操作：备份选中、恢复选中备份
+  - 响应式动作栏，支持横向滚动
+- **实例名称保存逻辑优化** - 增强数据一致性
+  - 添加 `IsDuplicateInstanceName` 验证，避免重名
+  - 实例隔离目录重命名失败时回滚 UI 显示
+  - 详细的错误提示（名称已存在/重命名失败）
+
+### Fixed
+
+- **下拉框遮挡问题** - 修复 MOD 详情页面 ComboBox 被遮挡
+  - 调整 `ModDetailsView` 布局，增加底部间距
+  - 优化滚动区域高度计算
+- **ComboBox 样式统一** - 现代化下拉框样式
+  - 统一使用 `ModernComboBox` 样式
+  - 优化下拉箭头图标和动画
+  - 支持主题色高亮
+
+### Technical Details
+
+- **新增文件**:
+  - `SVL.Core/Stardew/Mod/ModBackupService.cs` (425 行)
+- **修改文件**:
+  - `SVL.Core/App/LauncherUpdateService.cs` - 版本检测逻辑
+  - `SVL.Core/Download/ModDownloadTask.cs` - 备份集成
+  - `SVL.Core/Stardew/Mod/ModManager.cs` - 递归扫描
+  - `SVL.Core/Stardew/Mod/SdVMod.cs` - 标签与备份属性
+  - `SVL.Desktop/ViewModels/VersionSettingsViewModel.cs` - 分页与备份命令
+  - `SVL.Desktop/Views/VersionSettingsContentView.xaml` - 分页 UI
+  - `SVL.Desktop/Views/VersionSettingsPageView.xaml` - 响应式动作栏
+
+---
+
 ## [1.1.5.1] - 2026-03-05
 
 ### Added

@@ -24,8 +24,8 @@
     <Company>SVL Community</Company>
     <Product>SVL.Desktop</Product>
     <Copyright>Copyright © SVL Community</Copyright>
-    <AssemblyVersion>1.1.5.1</AssemblyVersion>
-    <FileVersion>1.1.5.1</FileVersion>
+    <AssemblyVersion>1.1.6.0</AssemblyVersion>
+    <FileVersion>1.1.6.0</FileVersion>
     <DisplayVersion>v$(AssemblyVersion)</DisplayVersion>
   </PropertyGroup>
 
