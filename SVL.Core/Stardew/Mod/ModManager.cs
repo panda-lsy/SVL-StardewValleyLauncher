@@ -30,79 +30,17 @@ public class ModManager : IModManager
         }
 
         var manifestFiles = Directory.GetFiles(modsPath, "manifest.json", SearchOption.AllDirectories);
+        var discoveredMods = new List<SdVMod>();
 
         foreach (var manifestFile in manifestFiles)
         {
             try
             {
-                var modDir = Path.GetDirectoryName(manifestFile);
-                if (string.IsNullOrWhiteSpace(modDir))
-                    continue;
-
-                var relative = GetRelativePathPortable(modsPath, modDir);
-                var relativeParts = relative
-                    .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
-
-                if (relativeParts.Length == 0)
-                    continue;
-
-                var manifestJson = await FileEx.ReadAllTextAsync(manifestFile);
-
-                // 使用更宽容的JSON解析选项
-                var options = new JsonSerializerOptions
+                var loadedMod = await LoadModFromManifestAsync(modsPath, manifestFile);
+                if (loadedMod != null)
                 {
-                    ReadCommentHandling = JsonCommentHandling.Skip,
-                    AllowTrailingCommas = true,
-                    PropertyNameCaseInsensitive = true
-                };
-
-                var manifest = System.Text.Json.JsonSerializer.Deserialize<SdVModManifest>(manifestJson, options);
-
-                var sdvMod = new SdVMod
-                {
-                    Id = relative.Replace(Path.DirectorySeparatorChar, '/'),
-                    Name = manifest.Name,
-                    Author = manifest.Author,
-                    Version = manifest.Version,
-                    Description = manifest.Description,
-                    UniqueId = manifest.UniqueId,
-                    ModPath = modDir,
-                    IsEnabled = !modDir.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase),
-                    IsContentPack = manifest.ContentPackFor != null,
-                    InstalledDate = Directory.GetCreationTime(modDir),
-                    Manifest = manifest,
-                    Dependencies = manifest.Dependencies?.Select(d => d.UniqueId).ToList() ?? [],
-                    Thumbnail = Path.Combine(modDir, "icon.png"),
-                    Tags = relativeParts.Length > 1
-                        ? relativeParts.Take(relativeParts.Length - 1).ToList()
-                        : []
-                };
-
-                // 尝试从来源凭证文件恢复溯源信息（用于下载页跳转与更新检测）
-                var sourceCredential = TryLoadSourceCredential(modDir);
-                if (sourceCredential != null)
-                {
-                    if (string.Equals(sourceCredential.Platform, "Curseforge", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var curseId = ExtractIntId(sourceCredential.ProjectId);
-                        sdvMod.CurseforgeProjectId = curseId > 0 ? curseId.ToString() : (sourceCredential.ProjectId ?? string.Empty);
-                        sdvMod.UpdateSource = "Curseforge";
-                    }
-                    else if (string.Equals(sourceCredential.Platform, "NexusMods", StringComparison.OrdinalIgnoreCase) ||
-                             string.Equals(sourceCredential.Platform, "Nexus", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var nexusId = ExtractLongId(sourceCredential.ProjectId);
-                        sdvMod.NexusModsProjectId = nexusId > 0 ? nexusId.ToString() : (sourceCredential.ProjectId ?? string.Empty);
-                        sdvMod.UpdateSource = "NexusMods";
-                    }
+                    discoveredMods.Add(loadedMod);
                 }
-
-                if (!File.Exists(sdvMod.Thumbnail))
-                {
-                    sdvMod.Thumbnail = null;
-                }
-
-                _loadedMods.Add(sdvMod);
             }
             catch (Exception ex)
             {
@@ -110,8 +48,399 @@ public class ModManager : IModManager
             }
         }
 
+        BuildCompositeHierarchy(modsPath, discoveredMods);
+
+        _loadedMods.AddRange(discoveredMods
+            .OrderBy(mod => mod.IsChildMod ? 1 : 0)
+            .ThenBy(mod => mod.Name, StringComparer.OrdinalIgnoreCase));
+
         Log.Info($"Loaded {_loadedMods.Count} mods from {modsPath}");
         return _loadedMods;
+    }
+
+    private async Task<SdVMod?> LoadModFromManifestAsync(string modsPath, string manifestFile)
+    {
+        var modDir = Path.GetDirectoryName(manifestFile);
+        if (string.IsNullOrWhiteSpace(modDir))
+            return null;
+
+        var relative = GetRelativePathPortable(modsPath, modDir);
+        var relativeParts = relative
+            .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+
+        if (relativeParts.Length == 0)
+            return null;
+
+        var manifestJson = await FileEx.ReadAllTextAsync(manifestFile);
+        var options = new JsonSerializerOptions
+        {
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true,
+            PropertyNameCaseInsensitive = true
+        };
+
+        var manifest = JsonSerializer.Deserialize<SdVModManifest>(manifestJson, options);
+        if (manifest == null)
+            return null;
+
+        var sdvMod = new SdVMod
+        {
+            Id = relative.Replace(Path.DirectorySeparatorChar, '/'),
+            Name = manifest.Name,
+            Author = manifest.Author,
+            Version = manifest.Version,
+            Description = manifest.Description,
+            UniqueId = manifest.UniqueId,
+            ModPath = modDir,
+            IsEnabled = !relativeParts.Any(part => part.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)),
+            IsContentPack = manifest.ContentPackFor != null,
+            InstalledDate = Directory.GetCreationTime(modDir),
+            Manifest = manifest,
+            Dependencies = manifest.Dependencies?.Select(d => d.UniqueId).ToList() ?? [],
+            Thumbnail = Path.Combine(modDir, "icon.png"),
+            Tags = relativeParts.Length > 1
+                ? relativeParts.Take(relativeParts.Length - 1).Select(NormalizeFolderSegment).ToList()
+                : []
+        };
+
+        ApplySourceCredential(sdvMod, TryLoadSourceCredential(modDir));
+
+        if (!File.Exists(sdvMod.Thumbnail))
+        {
+            sdvMod.Thumbnail = null;
+        }
+
+        return sdvMod;
+    }
+
+    private void BuildCompositeHierarchy(string modsPath, List<SdVMod> discoveredMods)
+    {
+        if (discoveredMods.Count == 0)
+            return;
+
+        var modsByPath = discoveredMods
+            .Where(mod => !string.IsNullOrWhiteSpace(mod.ModPath))
+            .GroupBy(mod => NormalizePathKey(mod.ModPath), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        var sourceCredentialsByDir = Directory.GetFiles(modsPath, "svl-source.json", SearchOption.AllDirectories)
+            .Select(path => Path.GetDirectoryName(path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(dir => new { Dir = dir!, Credential = TryLoadSourceCredential(dir!) })
+            .Where(item => item.Credential != null)
+            .ToDictionary(item => NormalizePathKey(item.Dir), item => item.Credential!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mod in discoveredMods)
+        {
+            mod.ChildMods.Clear();
+            mod.IsChildMod = false;
+            mod.IsCompositeParent = false;
+            mod.ParentModId = string.Empty;
+            mod.ParentModName = string.Empty;
+        }
+
+        foreach (var entry in sourceCredentialsByDir)
+        {
+            var childPathKey = entry.Key;
+            var credential = entry.Value;
+            if (credential.ParentMod == null || string.IsNullOrWhiteSpace(credential.ParentMod.RelativePath))
+                continue;
+
+            if (!modsByPath.TryGetValue(childPathKey, out var child))
+                continue;
+
+            var parentPath = ResolveCredentialPath(modsPath, credential.ParentMod.RelativePath);
+            var parent = GetOrCreateCompositeParentMod(modsPath, parentPath, discoveredMods, modsByPath, sourceCredentialsByDir, child);
+            AttachChildToParent(parent, child);
+        }
+
+        foreach (var entry in sourceCredentialsByDir)
+        {
+            var credential = entry.Value;
+            if (!credential.IsParentMod)
+                continue;
+
+            var parentPath = entry.Key;
+            var parent = GetOrCreateCompositeParentMod(modsPath, parentPath, discoveredMods, modsByPath, sourceCredentialsByDir, null);
+
+            foreach (var childEntry in credential.ChildMods ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(childEntry.RelativePath))
+                    continue;
+
+                var childPath = ResolveCredentialPath(modsPath, childEntry.RelativePath);
+                if (!modsByPath.TryGetValue(NormalizePathKey(childPath), out var child))
+                    continue;
+
+                AttachChildToParent(parent, child);
+            }
+        }
+
+        foreach (var parent in discoveredMods.Where(mod => mod.IsCompositeParent))
+        {
+            var orderedChildren = parent.ChildMods
+                .OrderBy(child => child.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            parent.ChildMods.Clear();
+            foreach (var child in orderedChildren)
+            {
+                parent.ChildMods.Add(child);
+            }
+
+            PromoteCompositeSourceCredential(parent, orderedChildren, parent.ModPath);
+
+            if (string.IsNullOrWhiteSpace(parent.Description))
+            {
+                parent.Description = $"包含 {orderedChildren.Count} 个子 Mod";
+            }
+
+            if (string.IsNullOrWhiteSpace(parent.Author))
+            {
+                parent.Author = BuildCompositeAuthor(orderedChildren);
+            }
+
+            if (string.IsNullOrWhiteSpace(parent.Version))
+            {
+                parent.Version = BuildCompositeVersion(orderedChildren);
+            }
+        }
+    }
+
+    private SdVMod GetOrCreateCompositeParentMod(
+        string modsPath,
+        string parentPath,
+        List<SdVMod> discoveredMods,
+        IDictionary<string, SdVMod> modsByPath,
+        IReadOnlyDictionary<string, ModSourceCredential> sourceCredentialsByDir,
+        SdVMod? fallbackChild)
+    {
+        var parentPathKey = NormalizePathKey(parentPath);
+        if (modsByPath.TryGetValue(parentPathKey, out var existingParent))
+        {
+            existingParent.IsCompositeParent = true;
+            if (sourceCredentialsByDir.TryGetValue(parentPathKey, out var existingCredential))
+            {
+                ApplySourceCredential(existingParent, existingCredential);
+            }
+
+            return existingParent;
+        }
+
+        sourceCredentialsByDir.TryGetValue(parentPathKey, out var credential);
+        var children = discoveredMods
+            .Where(mod => IsDescendantOf(mod.ModPath, parentPath))
+            .OrderByDescending(item => item.InstalledDate)
+            .ToList();
+
+        if (fallbackChild != null && children.All(child => !ReferenceEquals(child, fallbackChild)))
+        {
+            children.Add(fallbackChild);
+        }
+
+        var newestInstalled = children.OrderByDescending(item => item.InstalledDate).FirstOrDefault() ?? fallbackChild;
+        var parent = new SdVMod
+        {
+            Id = GetRelativePathPortable(modsPath, parentPath).Replace(Path.DirectorySeparatorChar, '/'),
+            Name = !string.IsNullOrWhiteSpace(credential?.ModName)
+                ? credential.ModName
+                : NormalizeFolderSegment(Path.GetFileName(parentPath)),
+            Author = BuildCompositeAuthor(children),
+            Version = BuildCompositeVersion(children),
+            Description = children.Count > 0 ? $"包含 {children.Count} 个子 Mod" : string.Empty,
+            UniqueId = string.Empty,
+            ModPath = parentPath,
+            IsEnabled = !Path.GetFileName(parentPath).EndsWith(".disabled", StringComparison.OrdinalIgnoreCase),
+            IsContentPack = false,
+            InstalledDate = newestInstalled?.InstalledDate ?? (Directory.Exists(parentPath) ? Directory.GetCreationTime(parentPath) : DateTime.Now),
+            Manifest = null,
+            Thumbnail = children.Select(item => item.Thumbnail).FirstOrDefault(path => !string.IsNullOrWhiteSpace(path)),
+            IsCompositeParent = true
+        };
+
+        ApplySourceCredential(parent, credential);
+
+        discoveredMods.Add(parent);
+        modsByPath[parentPathKey] = parent;
+        return parent;
+    }
+
+    private static void AttachChildToParent(SdVMod parent, SdVMod child)
+    {
+        if (parent == null || child == null || ReferenceEquals(parent, child))
+            return;
+
+        parent.IsCompositeParent = true;
+        child.IsChildMod = true;
+        child.ParentModId = parent.Id;
+        child.ParentModName = parent.Name;
+
+        if (!parent.ChildMods.Any(existing => ReferenceEquals(existing, child) || PathsEqual(existing.ModPath, child.ModPath)))
+        {
+            parent.ChildMods.Add(child);
+        }
+    }
+
+    private static bool IsDescendantOf(string? candidatePath, string? parentPath)
+    {
+        if (string.IsNullOrWhiteSpace(candidatePath) || string.IsNullOrWhiteSpace(parentPath))
+            return false;
+
+        var parent = NormalizePathKey(parentPath);
+        var candidate = NormalizePathKey(candidatePath);
+        if (string.Equals(parent, candidate, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return candidate.StartsWith(parent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || candidate.StartsWith(parent + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveCredentialPath(string modsPath, string relativePath)
+    {
+        if (Path.IsPathRooted(relativePath))
+            return relativePath;
+
+        var normalizedRelative = relativePath
+            .Replace('/', Path.DirectorySeparatorChar)
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return Path.Combine(modsPath, normalizedRelative);
+    }
+
+    private static string NormalizePathKey(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private static bool PathsEqual(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        var normalizedLeft = left.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedRight = right.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeFolderSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return value.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+            ? value.Substring(0, value.Length - ".disabled".Length)
+            : value;
+    }
+
+    private static string BuildCompositeAuthor(IEnumerable<SdVMod> children)
+    {
+        var authors = children
+            .Select(item => item.Author)
+            .Where(author => !string.IsNullOrWhiteSpace(author))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (authors.Count == 0)
+            return string.Empty;
+
+        if (authors.Count == 1)
+            return authors[0];
+
+        return $"{authors.Count} 位作者";
+    }
+
+    private static string BuildCompositeVersion(IEnumerable<SdVMod> children)
+    {
+        return children
+            .Select(item => item.Version)
+            .FirstOrDefault(version => !string.IsNullOrWhiteSpace(version))
+            ?? string.Empty;
+    }
+
+    private void PromoteCompositeSourceCredential(SdVMod parent, IReadOnlyCollection<SdVMod> children, string rootPath)
+    {
+        if (!string.IsNullOrWhiteSpace(parent.CurseforgeProjectId) || !string.IsNullOrWhiteSpace(parent.NexusModsProjectId))
+            return;
+
+        var childCredentials = children
+            .Select(child => new { Child = child, Credential = TryLoadSourceCredential(child.ModPath) })
+            .Where(item => item.Credential != null && !string.IsNullOrWhiteSpace(item.Credential.ProjectId))
+            .ToList();
+
+        if (childCredentials.Count == 0)
+            return;
+
+        var grouped = childCredentials
+            .GroupBy(item => $"{NormalizePlatform(item.Credential!.Platform)}|{NormalizeId(item.Credential.ProjectId)}", StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .FirstOrDefault();
+
+        if (grouped == null)
+            return;
+
+        if (grouped.Count() != childCredentials.Count)
+            return;
+
+        var candidate = grouped.First().Credential;
+        if (candidate == null || string.IsNullOrWhiteSpace(candidate.ProjectId))
+            return;
+
+        ApplySourceCredential(parent, candidate);
+
+        if (string.IsNullOrWhiteSpace(parent.Version) && !string.IsNullOrWhiteSpace(candidate.FileName))
+        {
+            parent.Version = ExtractVersionFromText(candidate.FileName);
+        }
+
+        if (string.IsNullOrWhiteSpace(parent.Name) && !string.IsNullOrWhiteSpace(candidate.ModName))
+        {
+            parent.Name = candidate.ModName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(parent.ModPath) && !Directory.Exists(parent.ModPath) && Directory.Exists(rootPath))
+        {
+            parent.ModPath = rootPath;
+        }
+    }
+
+    private void ApplySourceCredential(SdVMod mod, ModSourceCredential? sourceCredential)
+    {
+        if (mod == null || sourceCredential == null)
+            return;
+
+        if (string.Equals(sourceCredential.Platform, "Curseforge", StringComparison.OrdinalIgnoreCase))
+        {
+            var curseId = ExtractIntId(sourceCredential.ProjectId);
+            mod.CurseforgeProjectId = curseId > 0 ? curseId.ToString() : (sourceCredential.ProjectId ?? string.Empty);
+            mod.UpdateSource = "Curseforge";
+        }
+        else if (string.Equals(sourceCredential.Platform, "NexusMods", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(sourceCredential.Platform, "Nexus", StringComparison.OrdinalIgnoreCase))
+        {
+            var nexusId = ExtractLongId(sourceCredential.ProjectId);
+            mod.NexusModsProjectId = nexusId > 0 ? nexusId.ToString() : (sourceCredential.ProjectId ?? string.Empty);
+            mod.UpdateSource = "NexusMods";
+        }
+
+        if (string.IsNullOrWhiteSpace(mod.SourceFileName) && !string.IsNullOrWhiteSpace(sourceCredential.FileName))
+        {
+            mod.SourceFileName = sourceCredential.FileName;
+        }
+
+        if (string.IsNullOrWhiteSpace(mod.Version) && !string.IsNullOrWhiteSpace(sourceCredential.FileName))
+        {
+            mod.Version = ExtractVersionFromText(sourceCredential.FileName);
+        }
+
+        if (string.IsNullOrWhiteSpace(mod.Name) && !string.IsNullOrWhiteSpace(sourceCredential.ModName))
+        {
+            mod.Name = sourceCredential.ModName;
+        }
     }
 
     private static string GetRelativePathPortable(string basePath, string fullPath)
@@ -316,12 +645,11 @@ public class ModManager : IModManager
         {
             Log.Info($"[CheckModUpdates] 检查 MOD: {mod.Name} (UniqueId: {mod.UniqueId})");
 
-            // 检查是否有manifest
-            if (mod.Manifest == null)
+            if (mod.IsChildMod)
             {
-                Log.Warn($"[CheckModUpdates] MOD {mod.Name} 没有 manifest，跳过");
+                Log.Info($"[CheckModUpdates] MOD {mod.Name} 是子 Mod，跳过独立更新检查");
                 mod.HasUpdate = false;
-                mod.UpdateSource = "NoManifest";
+                mod.UpdateSource = string.IsNullOrWhiteSpace(mod.UpdateSource) ? "ParentManaged" : mod.UpdateSource;
                 continue;
             }
 
@@ -339,6 +667,15 @@ public class ModManager : IModManager
                 {
                     mod.IsCheckingUpdate = false;
                 }
+                continue;
+            }
+
+            // 检查是否有manifest
+            if (mod.Manifest == null)
+            {
+                Log.Warn($"[CheckModUpdates] MOD {mod.Name} 没有 manifest，且无可用来源凭证，跳过");
+                mod.HasUpdate = false;
+                mod.UpdateSource = string.IsNullOrWhiteSpace(mod.UpdateSource) ? "NoManifest" : mod.UpdateSource;
                 continue;
             }
 
@@ -714,6 +1051,14 @@ public class ModManager : IModManager
         return value > int.MaxValue ? 0 : (int)value;
     }
 
+    private static string NormalizeId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return new string(value.Where(char.IsDigit).ToArray());
+    }
+
     private static ModSourceCredential? TryLoadSourceCredential(string modDir)
     {
         try
@@ -723,7 +1068,10 @@ public class ModManager : IModManager
                 return null;
 
             var json = File.ReadAllText(path);
-            var credential = JsonSerializer.Deserialize<ModSourceCredential>(json);
+            var credential = JsonSerializer.Deserialize<ModSourceCredential>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
             return credential;
         }
         catch (Exception ex)
@@ -738,6 +1086,41 @@ public class ModManager : IModManager
         public string Platform { get; set; } = string.Empty;
         public string ProjectId { get; set; } = string.Empty;
         public string FileId { get; set; } = string.Empty;
+        public string ModName { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public bool IsParentMod { get; set; }
+        public ParentModReference? ParentMod { get; set; }
+        public List<ChildModReference> ChildMods { get; set; } = [];
+    }
+
+    private sealed class ParentModReference
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string RelativePath { get; set; } = string.Empty;
+    }
+
+    private sealed class ChildModReference
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string RelativePath { get; set; } = string.Empty;
+        public string UniqueId { get; set; } = string.Empty;
+    }
+
+    private static string NormalizePlatform(string? platform)
+    {
+        if (string.IsNullOrWhiteSpace(platform))
+            return string.Empty;
+
+        if (string.Equals(platform, "Curseforge", StringComparison.OrdinalIgnoreCase))
+            return "Curseforge";
+
+        if (string.Equals(platform, "NexusMods", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(platform, "Nexus", StringComparison.OrdinalIgnoreCase))
+            return "NexusMods";
+
+        return platform.Trim();
     }
 
     private static bool MovePathToRecycleBin(string path)

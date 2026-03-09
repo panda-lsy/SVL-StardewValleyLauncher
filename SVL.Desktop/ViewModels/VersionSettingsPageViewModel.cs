@@ -96,7 +96,11 @@ public partial class VersionSettingsViewModel : ObservableObject
         System.Diagnostics.Debug.WriteLine($"[VersionSettings] UpdateNavigationItems called, SelectedPage={SelectedPage}");
 
         // 同步 SelectedNavigationItem
-        SelectedNavigationItem = NavigationItems.FirstOrDefault(i => i.PageType == SelectedPage);
+        var targetItem = NavigationItems.FirstOrDefault(i => i.PageType == SelectedPage);
+        if (!ReferenceEquals(SelectedNavigationItem, targetItem))
+        {
+            SelectedNavigationItem = targetItem;
+        }
 
         if (SelectedNavigationItem != null)
         {

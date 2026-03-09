@@ -27,6 +27,7 @@ public class ModDownloadTask : DownloadTask
     private readonly string _downloadUrl;
     private readonly string? _gameBasePath;  // 游戏基础路径（可选）
     private readonly string? _targetModsPath;  // 目标 Mods 文件夹（可选，如果为空则使用另存为对话框）
+    private readonly string? _updateTargetModPath;  // 更新时要就地替换的原始 Mod 文件夹
     private readonly string? _localZipPath;  // 本地 zip 文件路径（已下载好的文件）
     private readonly bool _saveOnly;  // 只保存 ZIP 文件，不安装
     private readonly string? _sourcePlatform; // 来源平台（如 Curseforge/NexusMods）
@@ -85,7 +86,8 @@ public class ModDownloadTask : DownloadTask
         bool isModpack = false,
         string? modpackIconUrl = null,
         string? modpackIconLocalPath = null,
-        CancellationToken parentCancellationToken = default)
+        CancellationToken parentCancellationToken = default,
+        string? updateTargetModPath = null)
     {
         _modId = modId;
         _modName = modName;
@@ -93,6 +95,7 @@ public class ModDownloadTask : DownloadTask
         _downloadUrl = downloadUrl;
         _gameBasePath = gameBasePath;
         _targetModsPath = targetModsPath;
+        _updateTargetModPath = updateTargetModPath;
         _localZipPath = null;
         _saveOnly = saveOnly;
         _sourcePlatform = sourcePlatform;
@@ -158,7 +161,8 @@ public class ModDownloadTask : DownloadTask
         bool isModpack = false,
         string? modpackIconUrl = null,
         string? modpackIconLocalPath = null,
-        CancellationToken parentCancellationToken = default)
+        CancellationToken parentCancellationToken = default,
+        string? updateTargetModPath = null)
     {
         _modId = modId;
         _modName = modName;
@@ -166,6 +170,7 @@ public class ModDownloadTask : DownloadTask
         _localZipPath = localZipPath;
         _gameBasePath = gameBasePath;
         _targetModsPath = targetModsPath;
+        _updateTargetModPath = updateTargetModPath;
         _downloadUrl = null;
         _saveOnly = saveOnly;
         _sourcePlatform = sourcePlatform;
@@ -352,7 +357,14 @@ public class ModDownloadTask : DownloadTask
                 else
                 {
                     // 解压到指定的 Mods 文件夹
-                    await ExtractModToModsFolderAsync(zipFilePath, targetPath);
+                    if (!string.IsNullOrWhiteSpace(_updateTargetModPath))
+                    {
+                        await ExtractModToExistingModFolderAsync(zipFilePath, targetPath, _updateTargetModPath);
+                    }
+                    else
+                    {
+                        await ExtractModToModsFolderAsync(zipFilePath, targetPath);
+                    }
                 }
 
                 Progress = 100;
@@ -949,7 +961,7 @@ public class ModDownloadTask : DownloadTask
             Log.Info($"[ModDownloadTask] 解压完成，共 {extractedFolders.Length} 个 MOD 文件夹");
 
             var normalizedManifestDirs = extractedManifestDirs.Distinct(StringComparer.OrdinalIgnoreCase);
-            await WriteSourceCredentialFilesAsync(normalizedManifestDirs);
+            await WriteSourceCredentialFilesAsync(targetModsPath, normalizedManifestDirs);
 
             // 解压成功，清空跟踪的根目录列表（不需要清理）
             _extractedRootDirs.Clear();
@@ -961,6 +973,143 @@ public class ModDownloadTask : DownloadTask
         {
             Log.Error(ex, "[ModDownloadTask] MOD 解压失败");
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 更新已安装 MOD：保留原文件夹名，备份旧内容后将新包内容回填到原目录。
+    /// </summary>
+    private async Task ExtractModToExistingModFolderAsync(string zipFilePath, string targetModsPath, string targetModPath)
+    {
+        string? preservedConfigTempPath = null;
+
+        try
+        {
+            var normalizedModsPath = Path.GetFullPath(targetModsPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            var normalizedTargetModPath = Path.GetFullPath(targetModPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+            Log.Info($"[ModDownloadTask] 就地更新 MOD: {zipFilePath} -> {normalizedTargetModPath}");
+
+            var extractedManifestDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (Directory.Exists(normalizedTargetModPath))
+            {
+                ModBackupService.BackupDirectory(normalizedModsPath, normalizedTargetModPath);
+                preservedConfigTempPath = BackupConfigEntriesToTemp(normalizedTargetModPath);
+                Directory.Delete(normalizedTargetModPath, recursive: true);
+                Log.Info($"[ModDownloadTask] 已清理旧 MOD 目录: {normalizedTargetModPath}");
+            }
+
+            Directory.CreateDirectory(normalizedTargetModPath);
+            _extractedRootDirs.Add(normalizedTargetModPath);
+
+            using (var zipFile = new ZipFile(zipFilePath))
+            {
+                var rootEntries = zipFile
+                    .Cast<ZipEntry>()
+                    .Select(e => GetRootDirectoryName(e.Name))
+                    .Where(d => d != null)
+                    .Distinct()
+                    .ToList();
+
+                string? singleRootDir = rootEntries.Count == 1 ? rootEntries[0] : null;
+                if (!string.IsNullOrEmpty(singleRootDir) && !singleRootDir.EndsWith("/"))
+                {
+                    singleRootDir += "/";
+                }
+
+                Progress = 70;
+
+                var extractedCount = 0;
+                var totalEntries = (int)zipFile.Count;
+
+                foreach (ZipEntry entry in zipFile)
+                {
+                    if (_linkedToken.IsCancellationRequested)
+                    {
+                        Log.Info("[ModDownloadTask] 更新解压被取消");
+                        return;
+                    }
+
+                    if (entry.IsDirectory)
+                        continue;
+
+                    var relativeEntryPath = GetRelativeEntryPathForUpdate(entry.Name, singleRootDir);
+                    if (string.IsNullOrWhiteSpace(relativeEntryPath))
+                        continue;
+
+                    var destinationPath = GetValidatedDestinationPath(normalizedTargetModPath, relativeEntryPath);
+                    var destinationDir = Path.GetDirectoryName(destinationPath);
+                    if (!string.IsNullOrEmpty(destinationDir) && !Directory.Exists(destinationDir))
+                    {
+                        Directory.CreateDirectory(destinationDir);
+                    }
+
+                    if (File.Exists(destinationPath))
+                    {
+                        File.Delete(destinationPath);
+                    }
+
+                    using (var stream = zipFile.GetInputStream(entry))
+                    using (var fileStream = File.Create(destinationPath))
+                    {
+                        stream.CopyTo(fileStream);
+                    }
+
+                    if (Path.GetFileName(destinationPath).Equals("manifest.json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var manifestDir = Path.GetDirectoryName(destinationPath);
+                        if (!string.IsNullOrWhiteSpace(manifestDir) && Directory.Exists(manifestDir))
+                        {
+                            extractedManifestDirs.Add(manifestDir);
+                        }
+                    }
+
+                    extractedCount++;
+                    if (extractedCount % 10 == 0)
+                    {
+                        Progress = Math.Min(90, 70 + (extractedCount * 20 / Math.Max(1, totalEntries)));
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(preservedConfigTempPath) && Directory.Exists(preservedConfigTempPath))
+            {
+                CopyDirectoryRecursive(preservedConfigTempPath, normalizedTargetModPath);
+                Log.Info($"[ModDownloadTask] 已恢复保留的配置文件: {normalizedTargetModPath}");
+            }
+
+            Progress = 95;
+
+            if (!Directory.Exists(normalizedTargetModPath))
+            {
+                throw new Exception("更新失败：目标目录不存在");
+            }
+
+            await WriteSourceCredentialFilesAsync(normalizedModsPath, extractedManifestDirs.Distinct(StringComparer.OrdinalIgnoreCase));
+
+            _extractedRootDirs.Clear();
+            Progress = 100;
+            Log.Info($"[ModDownloadTask] ✓ MOD 就地更新成功: {normalizedTargetModPath}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[ModDownloadTask] MOD 就地更新失败");
+            throw;
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(preservedConfigTempPath) && Directory.Exists(preservedConfigTempPath))
+            {
+                try
+                {
+                    Directory.Delete(preservedConfigTempPath, recursive: true);
+                }
+                catch (Exception cleanupEx)
+                {
+                    Log.Warn($"[ModDownloadTask] 清理临时配置目录失败: {cleanupEx.Message}");
+                }
+            }
         }
     }
 
@@ -986,7 +1135,108 @@ public class ModDownloadTask : DownloadTask
         }
     }
 
-    private Task WriteSourceCredentialFilesAsync(System.Collections.Generic.IEnumerable<string> targetModDirs)
+    private static string? BackupConfigEntriesToTemp(string sourceModPath)
+    {
+        if (!Directory.Exists(sourceModPath))
+            return null;
+
+        var configDirs = Directory.GetDirectories(sourceModPath, "*", SearchOption.AllDirectories)
+            .Where(dir => IsConfigDirectoryName(Path.GetFileName(dir)))
+            .OrderBy(dir => dir.Length)
+            .ToList();
+
+        var configFiles = Directory.GetFiles(sourceModPath, "*", SearchOption.AllDirectories)
+            .Where(file => IsSettingsFile(Path.GetFileName(file)))
+            .Where(file => !configDirs.Any(dir => IsPathUnderDirectory(file, dir)))
+            .ToList();
+
+        if (configDirs.Count == 0 && configFiles.Count == 0)
+            return null;
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "SVL", "mod-update-config", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        foreach (var configDir in configDirs)
+        {
+            var relativePath = GetRelativePathPortable(sourceModPath, configDir);
+            var targetDir = Path.Combine(tempRoot, relativePath);
+            CopyDirectoryRecursive(configDir, targetDir);
+        }
+
+        foreach (var configFile in configFiles)
+        {
+            var relativePath = GetRelativePathPortable(sourceModPath, configFile);
+            var targetFile = Path.Combine(tempRoot, relativePath);
+            var targetDir = Path.GetDirectoryName(targetFile);
+            if (!string.IsNullOrWhiteSpace(targetDir))
+            {
+                Directory.CreateDirectory(targetDir);
+            }
+
+            File.Copy(configFile, targetFile, overwrite: true);
+        }
+
+        Log.Info($"[ModDownloadTask] 已暂存配置文件: {sourceModPath} -> {tempRoot}");
+        return tempRoot;
+    }
+
+    private static bool IsSettingsFile(string fileName)
+    {
+        return fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("config.yaml", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("config.yml", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("settings.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".config.json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsConfigDirectoryName(string? directoryName)
+    {
+        return string.Equals(directoryName, "config", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(directoryName, "configs", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPathUnderDirectory(string path, string directory)
+    {
+        var normalizedDirectory = Path.GetFullPath(directory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var normalizedPath = Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return normalizedPath.StartsWith(normalizedDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRelativeEntryPathForUpdate(string entryName, string? singleRootDir)
+    {
+        var normalizedEntryName = entryName.Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalizedEntryName))
+            return string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(singleRootDir)
+            && normalizedEntryName.StartsWith(singleRootDir, StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedEntryName = normalizedEntryName.Substring(singleRootDir.Length);
+        }
+
+        return normalizedEntryName.TrimStart('/');
+    }
+
+    private static string GetValidatedDestinationPath(string baseDirectory, string relativePath)
+    {
+        var normalizedBaseDirectory = Path.GetFullPath(baseDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var combinedPath = Path.GetFullPath(Path.Combine(normalizedBaseDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+
+        if (!combinedPath.StartsWith(normalizedBaseDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !PathsEqual(combinedPath, normalizedBaseDirectory))
+        {
+            throw new InvalidOperationException($"压缩包条目路径非法: {relativePath}");
+        }
+
+        return combinedPath;
+    }
+
+    private Task WriteSourceCredentialFilesAsync(string targetModsPath, System.Collections.Generic.IEnumerable<string> targetModDirs)
     {
         try
         {
@@ -1000,7 +1250,12 @@ public class ModDownloadTask : DownloadTask
             var normalizedProjectId = NormalizeId(_sourceProjectId);
             var normalizedFileId = NormalizeId(_sourceFileId);
 
-            var payload = new
+            var normalizedDirs = targetModDirs
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var basePayload = new
             {
                 platform = normalizedPlatform,
                 projectId = string.IsNullOrWhiteSpace(normalizedProjectId) ? (_sourceProjectId ?? string.Empty) : normalizedProjectId,
@@ -1010,28 +1265,83 @@ public class ModDownloadTask : DownloadTask
                 fileName = _fileName,
                 downloadUrl = _downloadUrl ?? string.Empty,
                 installedAtUtc = DateTime.UtcNow.ToString("o"),
-                schemaVersion = 1
+                schemaVersion = 2
             };
 
-            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+            var groupedByRoot = normalizedDirs
+                .GroupBy(modDir => GetTopLevelRootDir(targetModsPath, modDir), StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
-            foreach (var modDir in targetModDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var group in groupedByRoot)
             {
-                try
-                {
-                    if (!Directory.Exists(modDir))
+                var rootDir = group.Key;
+                var manifestDirs = group.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var hasCompositeChildren = manifestDirs.Count > 1;
+                var rootHasManifest = manifestDirs.Any(dir => PathsEqual(dir, rootDir));
+                var parentDir = rootDir;
+                var parentId = GetRelativePathPortable(targetModsPath, parentDir).Replace(Path.DirectorySeparatorChar, '/');
+                var parentName = NormalizeFolderName(Path.GetFileName(parentDir));
+
+                var childEntries = manifestDirs
+                    .Where(dir => !rootHasManifest || !PathsEqual(dir, rootDir))
+                    .Select(dir => new
                     {
-                        Log.Warn($"[ModDownloadTask] 跳过写入来源凭证（目录不存在）: {modDir}");
-                        continue;
+                        id = GetRelativePathPortable(targetModsPath, dir).Replace(Path.DirectorySeparatorChar, '/'),
+                        name = TryReadManifestName(dir) ?? NormalizeFolderName(Path.GetFileName(dir)),
+                        relativePath = GetRelativePathPortable(targetModsPath, dir).Replace(Path.DirectorySeparatorChar, '/'),
+                        uniqueId = TryReadManifestUniqueId(dir) ?? string.Empty
+                    })
+                    .ToList();
+
+                if (hasCompositeChildren)
+                {
+                    var parentPayload = new
+                    {
+                        platform = basePayload.platform,
+                        projectId = basePayload.projectId,
+                        fileId = basePayload.fileId,
+                        modId = basePayload.modId,
+                        modName = basePayload.modName,
+                        fileName = basePayload.fileName,
+                        downloadUrl = basePayload.downloadUrl,
+                        installedAtUtc = basePayload.installedAtUtc,
+                        schemaVersion = basePayload.schemaVersion,
+                        isParentMod = true,
+                        childMods = childEntries
+                    };
+
+                    WriteSourceCredentialFile(parentDir, parentPayload);
+
+                    foreach (var childDir in manifestDirs)
+                    {
+                        var childPayload = new
+                        {
+                            platform = basePayload.platform,
+                            projectId = basePayload.projectId,
+                            fileId = basePayload.fileId,
+                            modId = basePayload.modId,
+                            modName = basePayload.modName,
+                            fileName = basePayload.fileName,
+                            downloadUrl = basePayload.downloadUrl,
+                            installedAtUtc = basePayload.installedAtUtc,
+                            schemaVersion = basePayload.schemaVersion,
+                            parentMod = new
+                            {
+                                id = parentId,
+                                name = parentName,
+                                relativePath = GetRelativePathPortable(targetModsPath, parentDir).Replace(Path.DirectorySeparatorChar, '/')
+                            }
+                        };
+
+                        WriteSourceCredentialFile(childDir, childPayload);
                     }
 
-                    var credentialPath = Path.Combine(modDir, "svl-source.json");
-                    File.WriteAllText(credentialPath, json);
-                    Log.Info($"[ModDownloadTask] 已写入来源凭证: {credentialPath}");
+                    continue;
                 }
-                catch (Exception ex)
+
+                foreach (var modDir in manifestDirs)
                 {
-                    Log.Warn($"[ModDownloadTask] 写入来源凭证失败: {modDir}", ex);
+                    WriteSourceCredentialFile(modDir, basePayload);
                 }
             }
         }
@@ -1065,6 +1375,109 @@ public class ModDownloadTask : DownloadTask
             return "NexusMods";
 
         return string.Empty;
+    }
+
+    private static void WriteSourceCredentialFile(string modDir, object payload)
+    {
+        try
+        {
+            if (!Directory.Exists(modDir))
+            {
+                Log.Warn($"[ModDownloadTask] 跳过写入来源凭证（目录不存在）: {modDir}");
+                return;
+            }
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+            var credentialPath = Path.Combine(modDir, "svl-source.json");
+            File.WriteAllText(credentialPath, json);
+            Log.Info($"[ModDownloadTask] 已写入来源凭证: {credentialPath}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[ModDownloadTask] 写入来源凭证失败: {modDir}", ex);
+        }
+    }
+
+    private static string GetTopLevelRootDir(string targetModsPath, string modDir)
+    {
+        var relative = GetRelativePathPortable(targetModsPath, modDir);
+        var firstSegment = relative
+            .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault();
+
+        return string.IsNullOrWhiteSpace(firstSegment)
+            ? modDir
+            : Path.Combine(targetModsPath, firstSegment);
+    }
+
+    private static string GetRelativePathPortable(string basePath, string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(basePath) || string.IsNullOrWhiteSpace(fullPath))
+            return fullPath;
+
+        var normalizedBase = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedFull = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (!normalizedFull.StartsWith(normalizedBase, StringComparison.OrdinalIgnoreCase))
+            return fullPath;
+
+        var relative = normalizedFull.Substring(normalizedBase.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.IsNullOrWhiteSpace(relative) ? Path.GetFileName(normalizedFull) : relative;
+    }
+
+    private static bool PathsEqual(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        return string.Equals(
+            left.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            right.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeFolderName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return value.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+            ? value.Substring(0, value.Length - ".disabled".Length)
+            : value;
+    }
+
+    private static string? TryReadManifestName(string modDir)
+    {
+        try
+        {
+            var manifestPath = Path.Combine(modDir, "manifest.json");
+            if (!File.Exists(manifestPath))
+                return null;
+
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            return document.RootElement.TryGetProperty("Name", out var nameProp) ? nameProp.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? TryReadManifestUniqueId(string modDir)
+    {
+        try
+        {
+            var manifestPath = Path.Combine(modDir, "manifest.json");
+            if (!File.Exists(manifestPath))
+                return null;
+
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            return document.RootElement.TryGetProperty("UniqueId", out var uniqueIdProp) ? uniqueIdProp.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>

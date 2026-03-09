@@ -204,6 +204,131 @@
                 </Grid>
             </controls:MyCard>
 
+            <controls:MyCard Margin="0,0,0,20"
+                             Visibility="{Binding HasRequiredMods, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Margin="5">
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="前置 Mod"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   VerticalAlignment="Center"/>
+
+                        <Border Grid.Column="1"
+                                Background="{DynamicResource ColorBrush5}"
+                                CornerRadius="999"
+                                Padding="10,4"
+                                Margin="10,0,10,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding RequiredModsCount, StringFormat={}{0} 项}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource ColorBrush1}"/>
+                        </Border>
+
+                        <Button Grid.Column="2"
+                                Command="{Binding ToggleRequiredModsExpandedCommand}"
+                                Content="⌃"
+                                Width="32"
+                                Height="32"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource ColorBrush1}"
+                                Cursor="Hand"
+                                ToolTip="展开或收起前置模组列表">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="FontSize" Value="16"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="6">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRequiredModsExpanded}" Value="True">
+                                            <Setter Property="Content" Value="⌄"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding RequiredMods}"
+                                  Visibility="{Binding IsRequiredModsExpanded, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.OpenRequiredModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Margin="0,0,8,8"
+                                        Padding="10,6"
+                                        Cursor="Hand"
+                                        IsEnabled="True"
+                                        BorderThickness="0"
+                                        ToolTip="{Binding Note}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="🔗"
+                                                                           Margin="0,0,6,0"
+                                                                           VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding DisplayText}"
+                                                                           VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                    <Setter Property="Cursor" Value="Arrow"/>
+                                                    <Setter Property="Opacity" Value="0.75"/>
+                                                </DataTrigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush4}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </controls:MyCard>
+
             <!-- ===== 支持的游戏版本 Tag 列表 ===== -->
             <controls:MyCard Margin="0,0,0,20">
                 <StackPanel Margin="5">

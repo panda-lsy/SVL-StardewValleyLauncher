@@ -139,6 +139,8 @@
                         <ComboBox Grid.Column="2"
                                   ItemsSource="{Binding ModTypes}"
                                   SelectedItem="{Binding SelectedModType}"
+                                  IsEnabled="{Binding IsModTypeFilterEnabled}"
+                                  ToolTip="{Binding ModTypeFilterHint}"
                                   Style="{StaticResource SettingComboBoxStyle}"
                                   Padding="12,10"
                                   FocusVisualStyle="{x:Null}"

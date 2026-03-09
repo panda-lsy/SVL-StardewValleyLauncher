@@ -744,6 +744,11 @@
                                     <TextBlock Text="设置 Mod 搜索页面的默认下载源（可随时在搜索页面更改）"
                                                Style="{StaticResource SettingDescStyle}"/>
                                 </StackPanel>
+
+                                <CheckBox Content="来源为“全部”时弹出“类型筛选不可用”提示"
+                                          IsChecked="{Binding ShowModTypeFilterDisabledNotice}"
+                                          Foreground="{DynamicResource ColorBrush1}"
+                                          Margin="0,4,0,0"/>
                             </StackPanel>
                         </Border>
 

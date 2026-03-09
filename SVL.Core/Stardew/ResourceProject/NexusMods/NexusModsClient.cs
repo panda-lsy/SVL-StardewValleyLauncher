@@ -126,8 +126,10 @@ public class NexusModsClient
     {
         try
         {
-            // 计算偏移量
-            int offset = (page - 1) * pageSize;
+            var normalizedQuery = string.IsNullOrWhiteSpace(query) ? string.Empty : query.Trim();
+            var skip = Math.Max(0, (page - 1) * pageSize);
+            var requestOffset = skip;
+            var requestCount = pageSize;
 
             // ✅ 正确的 GraphQL 查询结构 - mods 是根查询字段
             var graphQLQuery = @"
@@ -156,141 +158,138 @@ public class NexusModsClient
                     }
                 }";
 
-            // 构建过滤器
-            object filter;
-            if (string.IsNullOrWhiteSpace(query))
+            async Task<List<NexusMod>> ExecuteSearchAsync(object filter, string strategyName, bool logAsError, int? countOverride = null)
             {
-                // 只按游戏过滤
-                filter = new
+                var requestBody = new
                 {
-                    gameDomainName = new[]
+                    query = graphQLQuery,
+                    variables = new
                     {
-                        new
+                        filter,
+                        sort = new[]
                         {
-                            @op = "EQUALS",
-                            value = "stardewvalley"
-                        }
-                    }
-                };
-            }
-            else
-            {
-                var wildcardQuery = query.Trim();
-                if (!wildcardQuery.Contains('*'))
-                {
-                    wildcardQuery = $"*{wildcardQuery}*";
-                }
-
-                // 按游戏和名称过滤 - name 字段使用 WILDCARD 而不是 MATCHES
-                filter = new
-                {
-                    gameDomainName = new[]
-                    {
-                        new
-                        {
-                            @op = "EQUALS",
-                            value = "stardewvalley"
-                        }
-                    },
-                    name = new[]
-                    {
-                        new
-                        {
-                            @op = "WILDCARD",
-                            value = wildcardQuery
-                        }
-                    }
-                };
-            }
-
-            // 构建请求体 - sort 是数组，每个元素是包含排序字段的对象
-            var requestBody = new
-            {
-                query = graphQLQuery,
-                variables = new
-                {
-                    filter = filter,
-                    sort = new[]
-                    {
-                        new
-                        {
-                            downloads = new
+                            new
                             {
-                                direction = "DESC"
+                                downloads = new
+                                {
+                                    direction = "DESC"
+                                }
                             }
-                        }
-                    },
-                    offset = offset,
-                    count = pageSize
-                }
-            };
+                        },
+                        offset = requestOffset,
+                        count = countOverride ?? requestCount
+                    }
+                };
 
-            var jsonRequest = System.Text.Json.JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-            // POST 到 GraphQL 端点
-            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.nexusmods.com/v2/graphql")
-            {
-                Content = content
-            };
-
-            AddApiKeyHeader(request);
-
-            Log.Info($"[NexusMods] GraphQL 搜索: '{query}' (第{page}页, 每页{pageSize}个, 偏移{offset})");
-
-            var response = await _httpClient.SendAsync(request);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                Log.Error($"[NexusMods] GraphQL 错误: {response.StatusCode}, 响应: {error}");
-                return new List<NexusMod>();
-            }
-
-            var jsonResponse = await response.Content.ReadAsStringAsync();
-
-            // 添加调试日志
-            Log.Debug($"[NexusMods] GraphQL 响应（前500字符）: {jsonResponse.Substring(0, Math.Min(500, jsonResponse.Length))}...");
-
-            // 解析 GraphQL 响应
-            var result = System.Text.Json.JsonSerializer.Deserialize<GraphQLSearchResponse>(jsonResponse);
-
-            if (result == null)
-            {
-                Log.Error($"[NexusMods] GraphQL 响应反序列化失败");
-                return new List<NexusMod>();
-            }
-
-            if (result.Data == null)
-            {
-                Log.Error($"[NexusMods] GraphQL 响应中没有 data 字段");
-                Log.Error($"[NexusMods] 完整响应: {jsonResponse}");
-                return new List<NexusMod>();
-            }
-
-            var modsContainer = result.Data.Mods;
-
-            if (modsContainer == null)
-            {
-                Log.Error($"[NexusMods] GraphQL 响应中没有 mods 字段");
-                return new List<NexusMod>();
-            }
-
-            var mods = modsContainer.Nodes ?? new List<NexusMod>();
-
-            // GraphQL 字段名为 modId，REST 为 mod_id；模型中两者分开映射。
-            // 这里将 GraphQL 的值归一化写回 ModId，避免后续出现 modId=0。
-            foreach (var mod in mods)
-            {
-                if (mod.ModId == 0 && mod.ModIdGraphQl != 0)
+                using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.nexusmods.com/v2/graphql")
                 {
-                    mod.ModId = mod.ModIdGraphQl;
+                    Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+                };
+
+                AddApiKeyHeader(request);
+
+                Log.Info($"[NexusMods] GraphQL 搜索: '{query}'，策略={strategyName} (第{page}页, 每页{pageSize}个, 请求偏移{requestOffset}, 请求数量{countOverride ?? requestCount})");
+
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    if (logAsError)
+                        Log.Error($"[NexusMods] GraphQL 错误: {response.StatusCode}, 策略={strategyName}, 响应: {error}");
+                    else
+                        Log.Debug($"[NexusMods] GraphQL 搜索策略失败: {strategyName}, Status={response.StatusCode}");
+                    return new List<NexusMod>();
+                }
+
+                var jsonResponse = await response.Content.ReadAsStringAsync();
+                Log.Debug($"[NexusMods] GraphQL 响应（前500字符）: {jsonResponse.Substring(0, Math.Min(500, jsonResponse.Length))}...");
+
+                var result = System.Text.Json.JsonSerializer.Deserialize<GraphQLSearchResponse>(jsonResponse);
+                var mods = result?.Data?.Mods?.Nodes ?? new List<NexusMod>();
+
+                foreach (var mod in mods)
+                {
+                    if (mod.ModId == 0 && mod.ModIdGraphQl != 0)
+                        mod.ModId = mod.ModIdGraphQl;
+                }
+
+                return mods;
+            }
+
+            if (string.IsNullOrWhiteSpace(normalizedQuery))
+            {
+                var filter = new
+                {
+                    gameDomainName = new[]
+                    {
+                        new
+                        {
+                            @op = "EQUALS",
+                            value = "stardewvalley"
+                        }
+                    }
+                };
+
+                var mods = await ExecuteSearchAsync(filter, "popular", true);
+                Log.Info($"[NexusMods] 找到 {mods.Count} 个模组（查询: {query}）");
+                return mods;
+            }
+
+            var trimmedQuery = normalizedQuery;
+            var wildcardQuery = trimmedQuery.Contains('*') ? trimmedQuery : $"*{trimmedQuery}*";
+            var prefixWildcardQuery = trimmedQuery.Contains('*') ? trimmedQuery : $"{trimmedQuery}*";
+            var gameOnlyFilter = new
+            {
+                gameDomainName = new[] { new { @op = "EQUALS", value = "stardewvalley" } }
+            };
+
+            var filterCandidates = new List<(object filter, string strategyName)>
+            {
+                (new
+                {
+                    gameDomainName = new[] { new { @op = "EQUALS", value = "stardewvalley" } },
+                    name = new[] { new { @op = "WILDCARD", value = wildcardQuery } }
+                }, "name-wildcard"),
+                (new
+                {
+                    gameDomainName = new[] { new { @op = "EQUALS", value = "stardewvalley" } },
+                    name = new[] { new { @op = "WILDCARD", value = prefixWildcardQuery } }
+                }, "name-prefix-wildcard"),
+                (new
+                {
+                    gameDomainName = new[] { new { @op = "EQUALS", value = "stardewvalley" } },
+                    name = new[] { new { @op = "EQUALS", value = trimmedQuery } }
+                }, "name-equals")
+            };
+
+            for (var i = 0; i < filterCandidates.Count; i++)
+            {
+                var (filter, strategyName) = filterCandidates[i];
+                var mods = await ExecuteSearchAsync(filter, strategyName, i == filterCandidates.Count - 1);
+                if (mods.Count > 0)
+                {
+                    Log.Info($"[NexusMods] 找到 {mods.Count} 个模组（查询: {query}，策略: {strategyName}）");
+                    return mods;
                 }
             }
 
-            Log.Info($"[NexusMods] 找到 {mods.Count} 个模组（查询: {query}，总数: {modsContainer.TotalCount ?? modsContainer.NodesCount ?? 0}）");
+            var fallbackCount = Math.Min(Math.Max(skip + pageSize + 120, pageSize * 8), 240);
+            var fallbackMods = await ExecuteSearchAsync(gameOnlyFilter, "popular-fallback", false, fallbackCount);
+            if (fallbackMods.Count > 0)
+            {
+                var localFiltered = fallbackMods
+                    .Where(mod => !string.IsNullOrWhiteSpace(mod.Name) && mod.Name.IndexOf(trimmedQuery, StringComparison.OrdinalIgnoreCase) >= 0)
+                    .Take(pageSize)
+                    .ToList();
 
-            return mods;
+                if (localFiltered.Count > 0)
+                {
+                    Log.Info($"[NexusMods] 本地回退筛选命中 {localFiltered.Count} 个模组（查询: {query}）");
+                    return localFiltered;
+                }
+            }
+
+            return new List<NexusMod>();
         }
         catch (NexusModsTokenExpiredException)
         {
@@ -1022,11 +1021,7 @@ public class NexusModsClient
             var endpoint = $"/games/{GameDomain}/mods/{modId}/files";
             var json = await GetAsync(endpoint, cancellationToken);
 
-            Log.Debug($"[NexusMods] Raw response for mod {modId}: {json.Substring(0, Math.Min(500, json.Length))}...");
-
             var response = System.Text.Json.JsonSerializer.Deserialize<NexusFilesResponse>(json);
-
-            Log.Info($"Retrieved {response?.Files?.Count ?? 0} files for mod {modId}");
             return response?.Files ?? new List<NexusModFile>();
         }
         catch (NexusModsTokenExpiredException)
@@ -1127,6 +1122,10 @@ public class NexusModsClient
                 name
                 version
                 url
+                optional
+                isOptional
+                required
+                isRequired
             }
         """.Trim();
 

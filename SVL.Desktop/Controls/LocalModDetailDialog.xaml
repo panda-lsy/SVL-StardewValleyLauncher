@@ -100,7 +100,8 @@
             <!-- 内容区域 -->
             <ScrollViewer Grid.Row="1"
                           VerticalScrollBarVisibility="Auto"
-                          Padding="24,20,24,20">
+                          Padding="24,20,24,20"
+                          Style="{DynamicResource ModernScrollViewerStyle}">
                 <StackPanel>
 
                     <!-- 描述 -->
@@ -262,24 +263,54 @@
                                   Visibility="{Binding HasDependencies, Converter={StaticResource BoolToVisibilityConverter}}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="{DynamicResource ColorBrush5}"
-                                        BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
-                                        BorderThickness="1"
-                                        CornerRadius="4"
-                                        Padding="8,6"
-                                        Margin="0,0,0,4">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding UniqueId}"
-                                                   FontSize="12"
-                                                   FontWeight="Medium"
-                                                   Foreground="{DynamicResource ColorBrush1}"/>
-                                        <TextBlock Text="{Binding Version, StringFormat=版本要求: {0}}"
-                                                   FontSize="11"
-                                                   Foreground="{DynamicResource ColorBrushGray3}"
-                                                   Margin="0,2,0,0"
-                                                   Visibility="{Binding Version, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"/>
-                                    </StackPanel>
-                                </Border>
+                                <Button Command="{Binding DataContext.OpenDependencyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="0"
+                                        Cursor="Hand"
+                                        HorizontalContentAlignment="Stretch">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="DependencyBorder"
+                                                                Background="{DynamicResource ColorBrush5}"
+                                                                BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="4"
+                                                                Padding="8,6"
+                                                                Margin="0,0,0,4">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding DisplayText}"
+                                                                           FontSize="12"
+                                                                           FontWeight="Medium"
+                                                                           Foreground="{DynamicResource ColorBrush1}"/>
+                                                                <TextBlock Text="{Binding UniqueId, StringFormat=唯一ID: {0}}"
+                                                                           FontSize="11"
+                                                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                                                           Margin="0,2,0,0"
+                                                                           Visibility="{Binding UniqueId, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"/>
+                                                                <TextBlock Text="{Binding Note}"
+                                                                           FontSize="11"
+                                                                           Foreground="{DynamicResource ColorBrushGray3}"
+                                                                           Margin="0,2,0,0"
+                                                                           Visibility="{Binding Note, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="BorderBrush" TargetName="DependencyBorder" Value="{DynamicResource ColorBrush2}"/>
+                                                                <Setter Property="Background" TargetName="DependencyBorder" Value="{DynamicResource ColorBrushTransparentBackground}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

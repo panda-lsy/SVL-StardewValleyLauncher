@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using SVL.Core.Config;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Mod.SMAPI;
+using SVL.Core.Utils;
 
 namespace SVL.Core.Download;
 
@@ -334,7 +335,7 @@ public static class CurseforgeApiService
             var modInfo = result?.Data;
             if (modInfo != null)
             {
-                Log.Info($"[Curseforge] 获取到 Mod 详情: {modInfo.Name}, Logo: {modInfo.Logo.Url}");
+                Log.Info($"[Curseforge] 获取到 Mod 详情: {modInfo.Name}, Logo: {modInfo.Logo?.Url ?? modInfo.Logo?.ThumbnailUrl ?? "(none)"}");
             }
             return modInfo;
         }
@@ -367,6 +368,38 @@ public static class CurseforgeApiService
             if (files != null)
             {
                 Log.Info($"[Curseforge] 获取到 {files.Count} 个文件");
+
+                var dependencies = files
+                    .Where(file => file.Dependencies != null && file.Dependencies.Count > 0)
+                    .SelectMany(file => file.Dependencies)
+                    .ToList();
+
+                if (dependencies.Count > 0)
+                {
+                    var relationSummary = string.Join(", ",
+                        dependencies
+                            .GroupBy(dependency => dependency.RelationType)
+                            .OrderBy(group => group.Key)
+                            .Select(group => $"{group.Key}:{group.Count()}"));
+
+                    Log.Info($"[Curseforge] Mod {modId} 依赖统计: total={dependencies.Count}, relationTypes={relationSummary}");
+
+                    var unknownRelationTypes = dependencies
+                        .Select(dependency => dependency.RelationType)
+                        .Where(relationType => !Enum.IsDefined(typeof(CurseforgeFileRelationType), relationType))
+                        .Distinct()
+                        .OrderBy(value => value)
+                        .ToList();
+
+                    if (unknownRelationTypes.Count > 0)
+                    {
+                        Log.Warn($"[Curseforge] Mod {modId} 存在未识别 relationType: {string.Join(", ", unknownRelationTypes)}");
+                    }
+                }
+                else
+                {
+                    Log.Info($"[Curseforge] Mod {modId} 文件列表中未发现依赖项");
+                }
             }
             return files;
         }
@@ -450,6 +483,18 @@ public static class CurseforgeApiService
 
         [JsonPropertyName("authors")]
         public List<CurseforgeAuthor>? Authors { get; set; }
+
+        [JsonPropertyName("relations")]
+        public List<CurseforgeModRelation>? Relations { get; set; }
+    }
+
+    public class CurseforgeModRelation
+    {
+        [JsonPropertyName("modId")]
+        public int ModId { get; set; }
+
+        [JsonPropertyName("relationType")]
+        public int RelationType { get; set; }
     }
 
     /// <summary>
@@ -725,14 +770,19 @@ public static class CurseforgeApiService
         string searchQuery,
         int gameId = 669,  // Stardew Valley 在 Curseforge 上的游戏 ID
         int pageSize = 50,
-        int index = 0)
+        int index = 0,
+        string? gameVersion = null)
     {
         try
         {
             EnsureApiKeyLoaded();
 
             searchQuery ??= string.Empty;
-            var cacheKey = $"search|q={searchQuery.Trim()}|gameId={gameId}|ps={pageSize}|idx={index}";
+            gameVersion = string.IsNullOrWhiteSpace(gameVersion) || string.Equals(gameVersion, "全部", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : gameVersion.Trim();
+            pageSize = Math.Max(1, Math.Min(50, pageSize));
+            var cacheKey = $"search|q={searchQuery.Trim()}|gameId={gameId}|ps={pageSize}|idx={index}|gv={gameVersion ?? string.Empty}";
             if (SVL.Core.IO.SearchCacheService.TryGet<List<CurseforgeModSearchItem>>("curseforge", cacheKey, out var cached))
             {
                 return cached ?? new List<CurseforgeModSearchItem>();
@@ -747,6 +797,12 @@ public static class CurseforgeApiService
             {
                 var encodedQuery = Uri.EscapeDataString(searchQuery);
                 url += $"&searchFilter={encodedQuery}";
+            }
+
+            if (!string.IsNullOrWhiteSpace(gameVersion))
+            {
+                var encodedGameVersion = Uri.EscapeDataString(gameVersion);
+                url += $"&gameVersion={encodedGameVersion}";
             }
 
             Log.Info($"[Curseforge] 搜索 URL: {url}");
@@ -779,6 +835,108 @@ public static class CurseforgeApiService
         }
     }
 
+    public static async Task<List<string>> GetGameVersionsAsync(int gameId = 669)
+    {
+        try
+        {
+            EnsureApiKeyLoaded();
+
+            var cacheKey = $"game-versions|gameId={gameId}";
+            if (SVL.Core.IO.SearchCacheService.TryGet<List<string>>("curseforge", cacheKey, out var cached))
+            {
+                return cached ?? new List<string>();
+            }
+
+            var versions = await TryGetGameVersionsV2Async(gameId);
+            if (versions.Count == 0)
+                versions = await TryGetGameVersionsV1Async(gameId);
+
+            versions = versions
+                .Where(version => !string.IsNullOrWhiteSpace(version))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(version => version, SemanticVersionComparer.Instance)
+                .ToList();
+
+            if (versions.Count > 0)
+            {
+                await SVL.Core.IO.SearchCacheService.SetAsync("curseforge", cacheKey, versions);
+            }
+
+            return versions;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("[Curseforge] 获取游戏版本列表失败", ex);
+            return new List<string>();
+        }
+    }
+
+    private static async Task<List<string>> TryGetGameVersionsV2Async(int gameId)
+    {
+        var url = $"https://api.curseforge.com/v2/games/{gameId}/versions";
+        var response = await _httpClient.GetAsync(url);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            Log.Warn($"[Curseforge] 获取游戏版本 V2 失败: {response.StatusCode}, Content: {body}");
+            return new List<string>();
+        }
+
+        var result = JsonSerializer.Deserialize<CurseforgeGameVersionsV2Response>(body);
+        return result?.Data?
+            .SelectMany(item => item.Versions ?? new List<CurseforgeGameVersionItem>())
+            .Select(item => string.IsNullOrWhiteSpace(item.Name) ? item.Slug : item.Name)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToList() ?? new List<string>();
+    }
+
+    private static async Task<List<string>> TryGetGameVersionsV1Async(int gameId)
+    {
+        var url = $"https://api.curseforge.com/v1/games/{gameId}/versions";
+        var response = await _httpClient.GetAsync(url);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            Log.Warn($"[Curseforge] 获取游戏版本 V1 失败: {response.StatusCode}, Content: {body}");
+            return new List<string>();
+        }
+
+        var result = JsonSerializer.Deserialize<CurseforgeGameVersionsV1Response>(body);
+        return result?.Data?
+            .SelectMany(item => item.Versions ?? new List<string>())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToList() ?? new List<string>();
+    }
+
+    public static async Task<string?> GetGameDependenciesRawAsync(int gameId = 669)
+    {
+        try
+        {
+            EnsureApiKeyLoaded();
+            var url = $"https://api.curseforge.com/v1/games/{gameId}/dependencies";
+            Log.Info($"[Curseforge] 获取游戏依赖定义: {url}");
+
+            var response = await _httpClient.GetAsync(url);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Log.Warn($"[Curseforge] 获取游戏依赖定义失败: {response.StatusCode}, Content: {body}");
+                return null;
+            }
+
+            Log.Info($"[Curseforge] 获取游戏依赖定义成功，长度={body.Length}");
+            return body;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[Curseforge] 获取游戏依赖定义失败: {ex.Message}");
+            return null;
+        }
+    }
+
     public static async Task<List<CurseforgeModSearchItem>> SearchModpacksAsync(
         string searchQuery,
         int gameId = 669,
@@ -790,6 +948,7 @@ public static class CurseforgeApiService
             EnsureApiKeyLoaded();
 
             searchQuery ??= string.Empty;
+            pageSize = Math.Max(1, Math.Min(50, pageSize));
             var modpackClassId = await TryGetModpackClassIdAsync(gameId);
 
             var cacheKey = $"search-modpack|q={searchQuery.Trim()}|gameId={gameId}|ps={pageSize}|idx={index}|class={modpackClassId}";
@@ -972,7 +1131,7 @@ public class CurseforgeFile
     public int AlternateFileId { get; set; }
 
     [JsonPropertyName("dependencies")]
-    public List<object> Dependencies { get; set; }
+    public List<CurseforgeFileDependency> Dependencies { get; set; }
 
     [JsonPropertyName("isEarlyAccessContent")]
     public bool IsEarlyAccessContent { get; set; }
@@ -990,6 +1149,31 @@ public class CurseforgeFile
     public long DownloadCount { get; set; }
 }
 
+public class CurseforgeFileDependency
+{
+    [JsonPropertyName("modId")]
+    public int ModId { get; set; }
+
+    [JsonPropertyName("addonId")]
+    public int AddonId { get; set; }
+
+    [JsonPropertyName("relationType")]
+    public int RelationType { get; set; }
+
+    [JsonPropertyName("required")]
+    public bool? Required { get; set; }
+}
+
+public enum CurseforgeFileRelationType
+{
+    EmbeddedLibrary = 1,
+    OptionalDependency = 2,
+    RequiredDependency = 3,
+    Tool = 4,
+    Incompatible = 5,
+    Include = 6
+}
+
 /// <summary>
 /// Curseforge 文件列表响应
 /// </summary>
@@ -997,6 +1181,48 @@ public class CurseforgeFilesResponse
 {
     [JsonPropertyName("data")]
     public List<CurseforgeFile> Data { get; set; }
+}
+
+public class CurseforgeGameVersionsV1Response
+{
+    [JsonPropertyName("data")]
+    public List<CurseforgeGameVersionsByTypeV1>? Data { get; set; }
+}
+
+public class CurseforgeGameVersionsByTypeV1
+{
+    [JsonPropertyName("type")]
+    public int Type { get; set; }
+
+    [JsonPropertyName("versions")]
+    public List<string>? Versions { get; set; }
+}
+
+public class CurseforgeGameVersionsV2Response
+{
+    [JsonPropertyName("data")]
+    public List<CurseforgeGameVersionsByTypeV2>? Data { get; set; }
+}
+
+public class CurseforgeGameVersionsByTypeV2
+{
+    [JsonPropertyName("type")]
+    public int Type { get; set; }
+
+    [JsonPropertyName("versions")]
+    public List<CurseforgeGameVersionItem>? Versions { get; set; }
+}
+
+public class CurseforgeGameVersionItem
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("slug")]
+    public string? Slug { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 }
 
 public class CurseforgeDownloadUrlResponse

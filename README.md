@@ -179,6 +179,7 @@ SVL/
 - [NexusMods](https://www.nexusmods.com/stardewvalley) — Mod 资源平台
 - [Vortex](https://github.com/Nexus-Mods/Vortex) — Mod 管理器设计参考
 - [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer) — Mod 管理器设计参考
+- [Stardrop](https://github.com/floogen/stardrop) — 星露谷 Mod 管理与依赖交互设计参考
 - [CurseForge](https://www.curseforge.com/stardewvalley) — Mod 资源平台
 
 ## 许可证

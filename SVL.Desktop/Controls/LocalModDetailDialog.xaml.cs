@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using SVL.Core.Stardew.Mod;
 using SVL.Desktop.ViewModels;
@@ -8,10 +9,10 @@ public partial class LocalModDetailDialog : Window
 {
     private readonly LocalModDetailDialogViewModel _viewModel;
 
-    public LocalModDetailDialog(SdVMod mod)
+    public LocalModDetailDialog(SdVMod mod, Func<ModDependencyLink, System.Threading.Tasks.Task>? navigateDependencyAsync = null)
     {
         InitializeComponent();
-        _viewModel = new LocalModDetailDialogViewModel(mod);
+        _viewModel = new LocalModDetailDialogViewModel(mod, navigateDependencyAsync);
         DataContext = _viewModel;
 
         // 监听关闭事件
@@ -21,9 +22,9 @@ public partial class LocalModDetailDialog : Window
     /// <summary>
     /// 显示本地MOD详情对话框
     /// </summary>
-    public static void Show(Window owner, SdVMod mod)
+    public static void Show(Window owner, SdVMod mod, Func<ModDependencyLink, System.Threading.Tasks.Task>? navigateDependencyAsync = null)
     {
-        var dialog = new LocalModDetailDialog(mod)
+        var dialog = new LocalModDetailDialog(mod, navigateDependencyAsync)
         {
             Owner = owner
         };

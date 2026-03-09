@@ -1,6 +1,8 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using SVL.Core.Stardew.Mod;
 
@@ -10,6 +12,7 @@ public class SdVMod : INotifyPropertyChanged
 {
     private bool _isSelected;
     private bool _hasUpdate;
+    private bool _isGroupExpanded;
 
     public string Id { get; set; }
     public string Name { get; set; }
@@ -30,7 +33,31 @@ public class SdVMod : INotifyPropertyChanged
     public DateTime? BackupTime { get; set; }
     public string BackupLabel { get; set; } = string.Empty;
     public string OriginalRelativePath { get; set; } = string.Empty;
+    public bool IsChildMod { get; set; }
+    public bool IsCompositeParent { get; set; }
+    public string ParentModId { get; set; } = string.Empty;
+    public string ParentModName { get; set; } = string.Empty;
+    public ObservableCollection<SdVMod> ChildMods { get; } = [];
     public string TagsDisplay => Tags == null || Tags.Count == 0 ? string.Empty : string.Join(" / ", Tags);
+    public bool HasChildren => ChildMods.Count > 0;
+    public bool CanShowOnlineDetails => !IsChildMod;
+    public string GroupToggleText => IsGroupExpanded ? "⌄" : "⌃";
+    public string FolderName
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ModPath))
+                return string.Empty;
+
+            var folderName = Path.GetFileName(ModPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (folderName.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase))
+            {
+                folderName = folderName.Substring(0, folderName.Length - ".disabled".Length);
+            }
+
+            return folderName;
+        }
+    }
 
     /// <summary>
     /// 源文件名（原始压缩包名称）
@@ -78,6 +105,11 @@ public class SdVMod : INotifyPropertyChanged
     public List<ModDependency> DependencyDetails { get; set; } = [];
 
     /// <summary>
+    /// 用于 UI 展示和导航的前置模组信息
+    /// </summary>
+    public List<ModDependencyLink> DisplayDependencies { get; set; } = [];
+
+    /// <summary>
     /// 是否被选中（用于UI多选）
     /// </summary>
     public bool IsSelected
@@ -109,10 +141,59 @@ public class SdVMod : INotifyPropertyChanged
         }
     }
 
+    public bool IsGroupExpanded
+    {
+        get => _isGroupExpanded;
+        set
+        {
+            if (_isGroupExpanded != value)
+            {
+                _isGroupExpanded = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(GroupToggleText));
+            }
+        }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+}
+
+public class ModDependencyLink
+{
+    public string UniqueId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string MinimumVersion { get; set; } = string.Empty;
+    public bool IsRequired { get; set; } = true;
+    public bool IsInstalled { get; set; }
+    public bool IsInstalledAndEnabled { get; set; }
+    public bool IsInstalledButDisabled { get; set; }
+    public bool IsPlaceholder { get; set; }
+    public string InstalledModId { get; set; } = string.Empty;
+    public string InstalledModName { get; set; } = string.Empty;
+    public string Source { get; set; } = string.Empty;
+    public string ProjectId { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public string Note { get; set; } = string.Empty;
+
+    public string DisplayText
+    {
+        get
+        {
+            if (IsPlaceholder)
+                return DisplayName;
+
+            var prefix = IsRequired ? string.Empty : "[可选] ";
+            if (!string.IsNullOrWhiteSpace(MinimumVersion))
+            {
+                return $"{prefix}{DisplayName} >= {MinimumVersion}";
+            }
+
+            return $"{prefix}{DisplayName}";
+        }
     }
 }

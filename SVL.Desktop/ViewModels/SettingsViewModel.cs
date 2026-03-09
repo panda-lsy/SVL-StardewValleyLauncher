@@ -480,6 +480,9 @@ public partial class SettingsViewModel : ObservableObject
     private bool _showNotifications = true;
 
     [ObservableProperty]
+    private bool _showModTypeFilterDisabledNotice = true;
+
+    [ObservableProperty]
     private int _selectedLogLevelIndex = 1; // 默认：Info
 
     [ObservableProperty]
@@ -579,6 +582,7 @@ public partial class SettingsViewModel : ObservableObject
                 MinimizeToTrayOnStartup = MinimizeToTrayOnStartup,
                 MinimizeToTrayOnClose = MinimizeToTrayOnClose,
                 ShowNotifications = ShowNotifications,
+                ShowModTypeFilterDisabledNotice = ShowModTypeFilterDisabledNotice,
                 LogLevel = (LogLevel)SelectedLogLevelIndex,
                 DebugMode = DebugMode,
 
@@ -1545,6 +1549,7 @@ public partial class SettingsViewModel : ObservableObject
             MinimizeToTrayOnStartup = settings.MinimizeToTrayOnStartup;
             MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose;
             ShowNotifications = settings.ShowNotifications;
+            ShowModTypeFilterDisabledNotice = settings.ShowModTypeFilterDisabledNotice;
             SelectedLogLevelIndex = (int)settings.LogLevel;
             DebugMode = settings.DebugMode;
 
@@ -1807,6 +1812,11 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     partial void OnShowNotificationsChanged(bool value)
+    {
+        AutoSave();
+    }
+
+    partial void OnShowModTypeFilterDisabledNoticeChanged(bool value)
     {
         AutoSave();
     }

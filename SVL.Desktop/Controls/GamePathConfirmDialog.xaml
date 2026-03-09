@@ -32,6 +32,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- 标题 -->
@@ -49,17 +50,24 @@
                                Foreground="{DynamicResource ColorBrushGray3}"
                                Margin="0,0,0,8"/>
 
-                    <!-- 路径显示 -->
-                    <Border Background="{DynamicResource ColorBrush5}"
-                            Padding="12"
-                            CornerRadius="4"
-                            Margin="0,0,0,12">
-                        <TextBlock x:Name="PathTextBlock"
-                                   Text=""
-                                   FontSize="12"
-                                   Foreground="{DynamicResource ColorBrush1}"
-                                   TextWrapping="Wrap"/>
-                    </Border>
+                        <StackPanel x:Name="BasePathSelectorPanel"
+                            Margin="0,0,0,12"
+                            Visibility="Visible">
+                        <TextBlock Text="游戏本体路径：可直接使用当前路径，或展开切换其他已配置 BASE。"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   Margin="0,0,0,6"/>
+                        <ComboBox x:Name="BasePathComboBox"
+                                  Style="{StaticResource SettingComboBoxStyle}"
+                              IsEditable="True"
+                              IsReadOnly="True"
+                                  Background="{DynamicResource ColorBrushTransparentBackground}"
+                                  BorderBrush="{DynamicResource ColorBrush3}"
+                                  BorderThickness="1"
+                                  Foreground="{DynamicResource ColorBrush1}"
+                                  Padding="10,6"
+                                  SelectionChanged="BasePathComboBox_SelectionChanged"/>
+                    </StackPanel>
 
                     <TextBlock Text="将使用此路径作为游戏本体 (BASE)，所有实例将共享此路径的游戏文件。"
                                FontSize="12"
@@ -73,8 +81,16 @@
                                Opacity="0.7"/>
                 </StackPanel>
 
+                <TextBlock Grid.Row="2"
+                           x:Name="ValidationTextBlock"
+                           FontSize="11"
+                           Foreground="#FF7A7A"
+                           Visibility="Collapsed"
+                           Margin="0,12,0,0"
+                           TextWrapping="Wrap"/>
+
                 <!-- 按钮 -->
-                <StackPanel Grid.Row="2"
+                <StackPanel Grid.Row="3"
                            Orientation="Horizontal"
                            HorizontalAlignment="Right"
                            Margin="0,16,0,0">
@@ -114,7 +130,8 @@
                         </Button.Resources>
                     </Button>
 
-                    <Button Content="使用此路径"
+                        <Button x:Name="ConfirmButton"
+                            Content="使用此路径"
                             Width="90"
                             Height="32"
                             FontSize="12"

@@ -830,6 +830,18 @@ public partial class TaskStatusViewModel : ObservableObject
         }
     }
 
+    public bool ShowBatchUpdateBrowserButton
+    {
+        get
+        {
+            var task = DownloadManager.Instance.GetAllTasks()
+                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+
+            return task?.Status == DownloadTaskStatus.WaitingConfirmation
+                   && string.Equals(task.CurrentMod?.Platform, "NexusMods", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>
     /// 批量更新提示文本
     /// </summary>
@@ -843,7 +855,13 @@ public partial class TaskStatusViewModel : ObservableObject
             if (task?.CurrentMod == null)
                 return "正在准备批量更新，请稍候...";
 
-            return $"请在浏览器中点击下载，SVL 将自动接收 ({task.CurrentMod.Name})";
+            if (string.Equals(task.CurrentMod.Platform, "NexusMods", StringComparison.OrdinalIgnoreCase)
+                && task.Status == DownloadTaskStatus.WaitingConfirmation)
+            {
+                return $"请在浏览器中点击下载，SVL 将自动接收 ({task.CurrentMod.Name})";
+            }
+
+            return task.StatusMessage ?? $"正在处理 {task.CurrentMod.Name}...";
         }
     }
 
@@ -1320,6 +1338,7 @@ public partial class TaskStatusViewModel : ObservableObject
             OnPropertyChanged(nameof(IsShowModListTask));
             OnPropertyChanged(nameof(CurrentBatchUpdateModName));
             OnPropertyChanged(nameof(IsBatchUpdateWaitingConfirmation));
+            OnPropertyChanged(nameof(ShowBatchUpdateBrowserButton));
             OnPropertyChanged(nameof(BatchUpdateModListItems));
             OnPropertyChanged(nameof(BatchUpdateProgressText));
             OnPropertyChanged(nameof(BatchUpdateHintText));
@@ -1804,6 +1823,7 @@ public partial class TaskStatusViewModel : ObservableObject
             OnPropertyChanged(nameof(IsShowModListTask));
             OnPropertyChanged(nameof(CurrentBatchUpdateModName));
             OnPropertyChanged(nameof(IsBatchUpdateWaitingConfirmation));
+            OnPropertyChanged(nameof(ShowBatchUpdateBrowserButton));
             OnPropertyChanged(nameof(BatchUpdateModListItems));
             OnPropertyChanged(nameof(BatchUpdateProgressText));
             OnPropertyChanged(nameof(BatchUpdateHintText));
@@ -2139,6 +2159,12 @@ public partial class TaskStatusViewModel : ObservableObject
         if (currentMod == null)
             return;
 
+        if (!string.Equals(currentMod.Platform, "NexusMods", StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Info($"[TaskStatusViewModel] 当前批量更新项 {currentMod.Name} 为 {currentMod.Platform}，无需打开浏览器");
+            return;
+        }
+
         try
         {
             // 从 DownloadUrl 获取下载页面 URL
@@ -2189,6 +2215,7 @@ public partial class TaskStatusViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentBatchUpdateModName));
         OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
         OnPropertyChanged(nameof(IsBatchUpdateWaitingConfirmation));
+        OnPropertyChanged(nameof(ShowBatchUpdateBrowserButton));
         OnPropertyChanged(nameof(WizardModListItems));
         OnPropertyChanged(nameof(BatchUpdateModListItems));
         OnPropertyChanged(nameof(WizardStatusDisplayText));

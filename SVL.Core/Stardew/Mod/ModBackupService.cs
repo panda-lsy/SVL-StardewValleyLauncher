@@ -17,6 +17,7 @@ public sealed class ModBackupMetadata
     public string OriginalRelativePath { get; set; } = string.Empty;
     public string BackupLabel { get; set; } = string.Empty;
     public DateTime BackupTimeUtc { get; set; } = DateTime.UtcNow;
+    public bool IsCompositeParent { get; set; }
 }
 
 public static class ModBackupService
@@ -82,6 +83,7 @@ public static class ModBackupService
             var modName = mod?.Name;
             var version = mod?.Version;
             var uniqueId = mod?.UniqueId;
+            var folderName = Path.GetFileName(sourceDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
             if (string.IsNullOrWhiteSpace(modName) || string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(uniqueId))
             {
@@ -91,13 +93,13 @@ public static class ModBackupService
                 uniqueId ??= manifest?.UniqueId;
             }
 
-            modName ??= Path.GetFileName(sourceDir);
+            modName ??= folderName;
             version ??= "unknown";
             uniqueId ??= string.Empty;
 
-            var safeName = SanitizeName(modName);
-            var safeVersion = SanitizeName(version);
-            var baseName = $"{safeName}_v{safeVersion}";
+            var safeFolderName = SanitizeName(folderName);
+            var dateText = DateTime.Now.ToString("yyyy-MM-dd");
+            var baseName = $"{safeFolderName}-{dateText}";
 
             var candidateName = baseName;
             var index = 1;
@@ -127,7 +129,8 @@ public static class ModBackupService
                 UniqueId = uniqueId,
                 OriginalRelativePath = relative,
                 BackupLabel = candidateName,
-                BackupTimeUtc = DateTime.UtcNow
+                BackupTimeUtc = DateTime.UtcNow,
+                IsCompositeParent = mod?.IsCompositeParent == true
             };
 
             WriteMetadata(targetDir, meta);
@@ -174,7 +177,8 @@ public static class ModBackupService
                     IsBackupItem = true,
                     BackupTime = meta?.BackupTimeUtc.ToLocalTime() ?? Directory.GetCreationTime(backupDir),
                     BackupLabel = meta?.BackupLabel ?? fallbackName,
-                    OriginalRelativePath = meta?.OriginalRelativePath ?? string.Empty
+                    OriginalRelativePath = meta?.OriginalRelativePath ?? string.Empty,
+                    IsCompositeParent = meta?.IsCompositeParent == true
                 };
 
                 result.Add(mod);
@@ -237,7 +241,8 @@ public static class ModBackupService
             UniqueId = activeManifest?.UniqueId ?? string.Empty,
             OriginalRelativePath = activeRelative,
             BackupLabel = Path.GetFileName(backupMod.ModPath),
-            BackupTimeUtc = DateTime.UtcNow
+            BackupTimeUtc = DateTime.UtcNow,
+            IsCompositeParent = backupMod.IsCompositeParent
         };
         WriteMetadata(backupMod.ModPath, metadata);
 
@@ -269,6 +274,15 @@ public static class ModBackupService
         if (!Directory.Exists(modsPath))
             return null;
 
+        if (!string.IsNullOrWhiteSpace(referenceMod.OriginalRelativePath))
+        {
+            var directPath = Path.Combine(modsPath, referenceMod.OriginalRelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (Directory.Exists(directPath) && !directPath.Equals(excludedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return directPath;
+            }
+        }
+
         var manifests = Directory.GetFiles(modsPath, "manifest.json", SearchOption.AllDirectories);
         foreach (var manifestPath in manifests)
         {
@@ -295,6 +309,18 @@ public static class ModBackupService
             if (string.Equals(manifest.Name, referenceMod.Name, StringComparison.OrdinalIgnoreCase))
             {
                 return dir;
+            }
+        }
+
+        if (referenceMod.IsCompositeParent && !string.IsNullOrWhiteSpace(referenceMod.Name))
+        {
+            foreach (var dir in Directory.GetDirectories(modsPath))
+            {
+                if (dir.Equals(excludedPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (string.Equals(Path.GetFileName(dir), referenceMod.Name, StringComparison.OrdinalIgnoreCase))
+                    return dir;
             }
         }
 

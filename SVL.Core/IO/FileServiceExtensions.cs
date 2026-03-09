@@ -20,7 +20,8 @@ public static class FileServiceExtensions
                     {
                         foreach (ZipEntry entry in zipFile)
                         {
-                            var entryPath = Path.Combine(destinationPath, entry.Name);
+                            var normalizedEntryName = entry.Name.Replace('/', Path.DirectorySeparatorChar);
+                            var entryPath = Path.Combine(destinationPath, normalizedEntryName);
 
                             if (entry.IsDirectory)
                             {
@@ -28,6 +29,12 @@ public static class FileServiceExtensions
                             }
                             else if (!File.Exists(entryPath))
                             {
+                                var entryDirectory = Path.GetDirectoryName(entryPath);
+                                if (!string.IsNullOrEmpty(entryDirectory) && !Directory.Exists(entryDirectory))
+                                {
+                                    Directory.CreateDirectory(entryDirectory);
+                                }
+
                                 using (var stream = zipFile.GetInputStream(entry))
                                 using (var fileStream = File.Create(entryPath))
                                 {

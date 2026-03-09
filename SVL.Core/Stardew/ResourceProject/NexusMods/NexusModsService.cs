@@ -404,8 +404,11 @@ public class NexusModsService
             DownloadCount = ExtractDownloadCount(root)
         };
 
-        var requirements = new List<NexusModFileRequirement>();
-        ExtractRequirementsRecursive(root, requirements, currentModId, depth: 0);
+        var requirements = ExtractRequirementsFromKnownFields(root, currentModId);
+        if (requirements.Count == 0)
+        {
+            ExtractRequirementsRecursive(root, requirements, currentModId, depth: 0);
+        }
 
         metadata.Requirements = requirements
             .GroupBy(r => $"{r.ModId}|{r.Name}|{r.Version}", StringComparer.OrdinalIgnoreCase)
@@ -413,6 +416,21 @@ public class NexusModsService
             .ToList();
 
         return metadata;
+    }
+
+    private static List<NexusModFileRequirement> ExtractRequirementsFromKnownFields(JsonElement root, long currentModId)
+    {
+        var result = new List<NexusModFileRequirement>();
+
+        foreach (var container in EnumerateContainers(root))
+        {
+            if (!TryGetPropertyIgnoreCase(container, "requirements", out var requirementsElement))
+                continue;
+
+            CollectRequirementsFromContainer(requirementsElement, result, currentModId, depth: 0);
+        }
+
+        return result;
     }
 
     private static long ExtractDownloadCount(JsonElement root)
@@ -516,6 +534,23 @@ public class NexusModsService
         var name = TryGetString(element, "mod_name", "name", "title");
         var version = TryGetString(element, "version", "min_version", "minimum_version", "required_version", "version_range", "constraint");
         var url = TryGetString(element, "url", "external_url", "mod_url", "link");
+        var isRequired = true;
+
+        if (TryGetPropertyIgnoreCase(element, "isRequired", out var isRequiredElement) &&
+            (isRequiredElement.ValueKind == JsonValueKind.True || isRequiredElement.ValueKind == JsonValueKind.False))
+        {
+            isRequired = isRequiredElement.GetBoolean();
+        }
+        else if (TryGetPropertyIgnoreCase(element, "required", out var requiredElement) &&
+                 (requiredElement.ValueKind == JsonValueKind.True || requiredElement.ValueKind == JsonValueKind.False))
+        {
+            isRequired = requiredElement.GetBoolean();
+        }
+        else if (TryGetPropertyIgnoreCase(element, "optional", out var optionalElement) &&
+                 (optionalElement.ValueKind == JsonValueKind.True || optionalElement.ValueKind == JsonValueKind.False))
+        {
+            isRequired = !optionalElement.GetBoolean();
+        }
 
         if (modId <= 0 && string.IsNullOrWhiteSpace(name))
             return null;
@@ -531,6 +566,7 @@ public class NexusModsService
             ModId = modId,
             Name = string.IsNullOrWhiteSpace(name) ? $"MOD {modId}" : name,
             Version = version ?? string.Empty,
+            IsRequired = isRequired,
             Url = url ?? string.Empty
         };
     }

@@ -628,6 +628,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     public enum ModFilterCategory
     {
         All,        // 全部
+        Enabled,    // 已启用
+        Disabled,   // 已禁用
         Updatable,  // 可更新
         Backup      // 备份
     }
@@ -690,6 +692,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     [ObservableProperty]
     private int _updatableModsCount = 0;
+
+    [ObservableProperty]
+    private int _enabledModsCount = 0;
+
+    [ObservableProperty]
+    private int _disabledModsCount = 0;
 
     [ObservableProperty]
     private int _backupModsCount = 0;
@@ -805,6 +813,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
             _modManager ??= new ModManager();
             var loadedMods = await _modManager.LoadModsAsync(modsPath);
+            BuildDisplayDependencies(loadedMods);
 
             System.Diagnostics.Debug.WriteLine($"[VersionSettings] 成功加载 {loadedMods.Count} 个 MOD");
 
@@ -852,6 +861,116 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     private async Task RefreshModsAsync()
     {
         await LoadModsAsync();
+    }
+
+    public async Task RefreshAfterExternalInstallAsync()
+    {
+        await LoadModsAsync();
+    }
+
+    private void BuildDisplayDependencies(List<SdVMod> loadedMods)
+    {
+        var installedByUniqueId = loadedMods
+            .Where(m => !string.IsNullOrWhiteSpace(m.UniqueId))
+            .GroupBy(m => m.UniqueId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mod in loadedMods)
+        {
+            var displayDependencies = new List<ModDependencyLink>();
+
+            if (!string.IsNullOrWhiteSpace(mod.Manifest?.ContentPackFor?.UniqueId))
+            {
+                displayDependencies.Add(CreateDependencyLink(
+                    mod.Manifest.ContentPackFor.UniqueId,
+                    mod.Manifest.ContentPackFor.MinimumVersion,
+                    installedByUniqueId,
+                    note: "内容包前置"));
+            }
+
+            if (mod.Manifest?.Dependencies != null)
+            {
+                foreach (var dependency in mod.Manifest.Dependencies)
+                {
+                    if (string.IsNullOrWhiteSpace(dependency?.UniqueId))
+                        continue;
+
+                    displayDependencies.Add(CreateDependencyLink(
+                        dependency.UniqueId,
+                        dependency.MinimumVersion,
+                        installedByUniqueId,
+                        dependency.IsRequired ? string.Empty : "可选前置",
+                        dependency.IsRequired));
+                }
+            }
+
+            mod.DisplayDependencies = displayDependencies;
+        }
+    }
+
+    private static ModDependencyLink CreateDependencyLink(
+        string uniqueId,
+        string? minimumVersion,
+        IReadOnlyDictionary<string, SdVMod> installedByUniqueId,
+        string note,
+        bool isRequired = true)
+    {
+        installedByUniqueId.TryGetValue(uniqueId, out var installedMod);
+
+        return new ModDependencyLink
+        {
+            UniqueId = uniqueId,
+            DisplayName = installedMod?.Name ?? SimplifyUniqueId(uniqueId),
+            MinimumVersion = minimumVersion ?? string.Empty,
+            IsRequired = isRequired,
+            IsInstalled = installedMod != null,
+            IsInstalledAndEnabled = installedMod?.IsEnabled == true,
+            IsInstalledButDisabled = installedMod != null && !installedMod.IsEnabled,
+            InstalledModId = installedMod?.Id ?? string.Empty,
+            InstalledModName = installedMod?.Name ?? string.Empty,
+            Note = note
+        };
+    }
+
+    private static string SimplifyUniqueId(string uniqueId)
+    {
+        if (string.IsNullOrWhiteSpace(uniqueId))
+            return string.Empty;
+
+        var parts = uniqueId.Split('.');
+        return parts.Length == 0 ? uniqueId : parts[parts.Length - 1];
+    }
+
+    private static IEnumerable<SdVMod> GetVisibleModRoots(IEnumerable<SdVMod> mods)
+    {
+        return mods.Where(mod => !mod.IsChildMod);
+    }
+
+    private static bool MatchesKeyword(SdVMod mod, string keyword)
+    {
+         return (!string.IsNullOrWhiteSpace(mod.Name) && mod.Name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+             || (!string.IsNullOrWhiteSpace(mod.Author) && mod.Author.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+             || (!string.IsNullOrWhiteSpace(mod.UniqueId) && mod.UniqueId.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+             || (!string.IsNullOrWhiteSpace(mod.FolderName) && mod.FolderName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    private static bool MatchesSearch(SdVMod mod, string keyword)
+    {
+        if (MatchesKeyword(mod, keyword))
+            return true;
+
+        return mod.ChildMods.Any(child => MatchesKeyword(child, keyword));
+    }
+
+    private bool MatchesCurrentFilter(SdVMod mod)
+    {
+        return CurrentFilterCategory switch
+        {
+            ModFilterCategory.Enabled => mod.IsEnabled || mod.ChildMods.Any(child => child.IsEnabled),
+            ModFilterCategory.Disabled => !mod.IsEnabled || mod.ChildMods.Any(child => !child.IsEnabled),
+            ModFilterCategory.Updatable => mod.HasUpdate || mod.ChildMods.Any(child => child.HasUpdate),
+            _ => true
+        };
     }
 
     /// <summary>
@@ -906,24 +1025,21 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     {
         var source = CurrentFilterCategory == ModFilterCategory.Backup
             ? BackupMods.AsEnumerable()
-            : Mods.AsEnumerable();
+            : GetVisibleModRoots(Mods).AsEnumerable();
 
         var filtered = source;
 
         // 搜索过滤
         if (!string.IsNullOrWhiteSpace(SearchKeyword))
         {
-            var keyword = SearchKeyword.ToLower();
-            filtered = filtered.Where(m =>
-                m.Name.ToLower().Contains(keyword) ||
-                (m.Author != null && m.Author.ToLower().Contains(keyword)) ||
-                (m.UniqueId != null && m.UniqueId.ToLower().Contains(keyword)));
+            var keyword = SearchKeyword.Trim();
+            filtered = filtered.Where(mod => MatchesSearch(mod, keyword));
         }
 
         // 分类过滤
-        if (CurrentFilterCategory == ModFilterCategory.Updatable)
+        if (CurrentFilterCategory != ModFilterCategory.Backup)
         {
-            filtered = filtered.Where(m => m.HasUpdate);
+            filtered = filtered.Where(MatchesCurrentFilter);
         }
 
         _filteredSource.Clear();
@@ -1014,6 +1130,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     private void UpdateModsCount()
     {
         TotalModsCount = Mods.Count;
+        EnabledModsCount = Mods.Count(m => m.IsEnabled);
+        DisabledModsCount = Mods.Count(m => !m.IsEnabled);
         UpdatableModsCount = Mods.Count(m => m.HasUpdate);
         BackupModsCount = BackupMods.Count;
     }
@@ -1026,8 +1144,22 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     {
         if (mod == null) return;
 
-        mod.IsSelected = !mod.IsSelected;
+        var nextSelectedState = !mod.IsSelected;
+        SetSelectionState(mod, nextSelectedState, cascadeToChildren: !mod.IsChildMod);
         UpdateSelectionState();
+    }
+
+    private static void SetSelectionState(SdVMod mod, bool isSelected, bool cascadeToChildren)
+    {
+        mod.IsSelected = isSelected;
+
+        if (!cascadeToChildren)
+            return;
+
+        foreach (var child in mod.ChildMods)
+        {
+            SetSelectionState(child, isSelected, cascadeToChildren: true);
+        }
     }
 
     /// <summary>
@@ -1077,10 +1209,38 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
         foreach (var mod in FilteredMods)
         {
-            mod.IsSelected = !allSelected;
+            SetSelectionState(mod, !allSelected, cascadeToChildren: !mod.IsChildMod);
         }
 
         UpdateSelectionState();
+    }
+
+    private List<SdVMod> GetEffectiveSelectedMods(Func<SdVMod, bool>? predicate = null)
+    {
+        IEnumerable<SdVMod> selected = CurrentFilterCategory == ModFilterCategory.Backup
+            ? BackupMods.Where(mod => mod.IsSelected)
+            : Mods.Where(mod => mod.IsSelected);
+
+        if (predicate != null)
+        {
+            selected = selected.Where(predicate);
+        }
+
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            return selected.ToList();
+        }
+
+        var selectedParentIds = selected
+            .Where(mod => !mod.IsChildMod && !string.IsNullOrWhiteSpace(mod.Id))
+            .Select(mod => mod.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return selected
+            .Where(mod => !mod.IsChildMod
+                          || string.IsNullOrWhiteSpace(mod.ParentModId)
+                          || !selectedParentIds.Contains(mod.ParentModId))
+            .ToList();
     }
 
     [RelayCommand]
@@ -1170,7 +1330,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(modsPath))
             return;
 
-        var selectedMods = Mods.Where(m => m.IsSelected).ToList();
+        var selectedMods = GetEffectiveSelectedMods();
         if (selectedMods.Count == 0)
             return;
 
@@ -1298,41 +1458,247 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             try
             {
-                string modsPath;
-                if (SelectedInstance.EnableIsolation)
-                {
-                    var instanceFolderName = InstanceIsolationService.GenerateVersionFolderName(
-                        SelectedInstance.Name, SelectedInstance.IsSMAPIInstance);
-                    modsPath = InstanceIsolationService.GetIsolatedModsPath(SelectedInstance.GamePath, instanceFolderName);
-                }
-                else
-                {
-                    modsPath = Path.Combine(SelectedInstance.GamePath, "Mods");
-                }
-
-                if (!Directory.Exists(modsPath))
-                {
-                    Directory.CreateDirectory(modsPath);
-                }
-
-                _modManager ??= new ModManager();
-                var success = await _modManager.InstallModAsync(openFileDialog.FileName, modsPath);
-
-                if (success)
-                {
-                    SvlMessageBox.Success("MOD 安装成功！");
-
-                    await LoadModsAsync();
-                }
-                else
-                {
-                    SvlMessageBox.Error("MOD 安装失败，请查看日志。");
-                }
+                await InstallModFromPathAsync(openFileDialog.FileName, showResultDialog: true, reloadAfterInstall: true);
             }
             catch (Exception ex)
             {
                 SvlMessageBox.Error($"安装 MOD 失败：{ex.Message}");
             }
+        }
+    }
+
+    public async Task<bool> InstallModFromPathAsync(string modPath, bool showResultDialog = true, bool reloadAfterInstall = true)
+    {
+        if (SelectedInstance == null)
+            return false;
+
+        if (ModArchiveDetector.LooksLikeSmapiInstallerSource(modPath))
+        {
+            await _mainViewModel.CreateSmapiInstanceFromLocalZipAsync(modPath, SelectedInstance);
+            return false;
+        }
+
+        if (!ModArchiveDetector.LooksLikeModInstallSource(modPath))
+        {
+            if (showResultDialog)
+            {
+                SvlMessageBox.Warning("这不是可安装的 Mod 文件。请导入包含 manifest.json 的 Mod 压缩包。", "无法安装");
+            }
+            return false;
+        }
+
+        var modsPath = GetCurrentModsPath();
+        if (string.IsNullOrWhiteSpace(modsPath))
+            return false;
+
+        if (!Directory.Exists(modsPath))
+        {
+            Directory.CreateDirectory(modsPath);
+        }
+
+        _modManager ??= new ModManager();
+        var success = await _modManager.InstallModAsync(modPath, modsPath);
+
+        if (success)
+        {
+            if (reloadAfterInstall)
+            {
+                await LoadModsAsync();
+            }
+
+            if (showResultDialog)
+            {
+                SvlMessageBox.Success("MOD 安装成功！");
+            }
+        }
+        else if (showResultDialog)
+        {
+            SvlMessageBox.Error("MOD 安装失败，请查看日志。");
+        }
+
+        return success;
+    }
+
+    [RelayCommand]
+    private async Task NavigateDependencyAsync(ModDependencyLink dependency)
+    {
+        if (dependency == null)
+            return;
+
+        if (dependency.IsInstalled)
+        {
+            CurrentFilterCategory = ModFilterCategory.All;
+            SearchKeyword = !string.IsNullOrWhiteSpace(dependency.UniqueId)
+                ? dependency.UniqueId
+                : dependency.InstalledModName;
+
+            FloatingNotificationControl.Show(
+                title: "已定位前置 Mod",
+                message: $"已筛选出 {dependency.DisplayName}",
+                autoCloseDelay: 2500,
+                notificationType: NotificationType.Info);
+            return;
+        }
+
+        var searchItem = await ResolveDependencySearchItemAsync(dependency);
+        if (searchItem == null)
+        {
+            SvlMessageBox.Warning($"未找到 {dependency.DisplayName} 的在线详情页。", "前置 Mod 未找到");
+            return;
+        }
+
+        await _mainViewModel.OpenModDetailsAsync(searchItem, PageType.VersionSettings);
+    }
+
+    private async Task<SVL.Desktop.Models.ModSearchItem?> ResolveDependencySearchItemAsync(ModDependencyLink dependency)
+    {
+        var directItem = await CreateSearchItemFromDependencyAsync(dependency);
+        if (directItem != null)
+            return directItem;
+
+        var searchTerms = new List<string>();
+        if (!string.IsNullOrWhiteSpace(dependency.DisplayName))
+            searchTerms.Add(dependency.DisplayName);
+        if (!string.IsNullOrWhiteSpace(dependency.UniqueId) && !searchTerms.Contains(dependency.UniqueId, StringComparer.OrdinalIgnoreCase))
+            searchTerms.Add(dependency.UniqueId);
+
+        foreach (var searchTerm in searchTerms)
+        {
+            var nexusResult = await TryResolveFromNexusAsync(searchTerm, dependency);
+            if (nexusResult != null)
+                return nexusResult;
+
+            var curseResult = await TryResolveFromCurseforgeAsync(searchTerm, dependency);
+            if (curseResult != null)
+                return curseResult;
+        }
+
+        return null;
+    }
+
+    private static async Task<SVL.Desktop.Models.ModSearchItem?> CreateSearchItemFromDependencyAsync(ModDependencyLink dependency)
+    {
+        if (string.Equals(dependency.Source, "NexusMods", StringComparison.OrdinalIgnoreCase) && long.TryParse(dependency.ProjectId, out var nexusId) && nexusId > 0)
+        {
+            var detail = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.GetModDetailsAsync(nexusId);
+            if (detail != null)
+            {
+                var resolvedModId = detail.ModId > 0 ? detail.ModId : detail.ModIdGraphQl;
+                return new SVL.Desktop.Models.ModSearchItem
+                {
+                    Id = $"nexus-{(resolvedModId > 0 ? resolvedModId : nexusId)}",
+                    Name = string.IsNullOrWhiteSpace(detail.Name) ? dependency.DisplayName : detail.Name,
+                    Author = string.IsNullOrWhiteSpace(detail.Author) ? "NexusMods" : detail.Author,
+                    Description = string.IsNullOrWhiteSpace(detail.Description) ? detail.Summary ?? dependency.Note : detail.Description,
+                    Summary = string.IsNullOrWhiteSpace(detail.Summary) ? dependency.Note : detail.Summary,
+                    Source = "NexusMods",
+                    IconUrl = !string.IsNullOrWhiteSpace(detail.PictureUrl) ? detail.PictureUrl : detail.PictureUrlLegacy,
+                    DownloadCount = detail.Downloads,
+                    LastUpdateTime = detail.UpdatedAt != default ? detail.UpdatedAt.ToString("yyyy-MM-dd") : string.Empty,
+                    Url = string.IsNullOrWhiteSpace(dependency.Url) ? $"https://www.nexusmods.com/stardewvalley/mods/{nexusId}" : dependency.Url
+                };
+            }
+
+            return new SVL.Desktop.Models.ModSearchItem
+            {
+                Id = $"nexus-{nexusId}",
+                Name = dependency.DisplayName,
+                Author = "NexusMods",
+                Description = string.IsNullOrWhiteSpace(dependency.Note) ? "前置 Mod" : dependency.Note,
+                Summary = dependency.Note,
+                Source = "NexusMods",
+                Url = string.IsNullOrWhiteSpace(dependency.Url) ? $"https://www.nexusmods.com/stardewvalley/mods/{nexusId}" : dependency.Url
+            };
+        }
+
+        if (string.Equals(dependency.Source, "Curseforge", StringComparison.OrdinalIgnoreCase) && int.TryParse(dependency.ProjectId, out var curseId) && curseId > 0)
+        {
+            var modInfo = await CurseforgeApiService.GetModInfoAsync(curseId);
+            return new SVL.Desktop.Models.ModSearchItem
+            {
+                Id = $"curse-{curseId}",
+                Name = modInfo?.Name ?? dependency.DisplayName,
+                Author = modInfo?.Authors?.FirstOrDefault()?.Name ?? "Curseforge",
+                Description = modInfo?.Description ?? modInfo?.Summary ?? dependency.Note,
+                Summary = modInfo?.Summary ?? dependency.Note,
+                Source = "Curseforge",
+                IconUrl = modInfo?.Logo?.ThumbnailUrl ?? string.Empty,
+                DownloadCount = modInfo?.DownloadCount ?? 0,
+                LastUpdateTime = modInfo?.DateModified ?? string.Empty,
+                Url = modInfo?.Links?.WebsiteUrl ?? (string.IsNullOrWhiteSpace(dependency.Url) ? $"https://www.curseforge.com/stardewvalley/mods/{curseId}" : dependency.Url)
+            };
+        }
+
+        return null;
+    }
+
+    private static async Task<SVL.Desktop.Models.ModSearchItem?> TryResolveFromNexusAsync(string searchTerm, ModDependencyLink dependency)
+    {
+        try
+        {
+            var mods = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(searchTerm, 1, 20, useCache: false);
+            var candidate = mods.FirstOrDefault(m => string.Equals(m.Name, dependency.DisplayName, StringComparison.OrdinalIgnoreCase))
+                ?? mods.FirstOrDefault(m => string.Equals(m.Name, searchTerm, StringComparison.OrdinalIgnoreCase))
+                ?? mods.FirstOrDefault();
+
+            if (candidate == null)
+                return null;
+
+            var modId = candidate.ModId > 0 ? candidate.ModId : candidate.ModIdGraphQl;
+            if (modId <= 0)
+                return null;
+
+            return new SVL.Desktop.Models.ModSearchItem
+            {
+                Id = $"nexus-{modId}",
+                Name = candidate.Name,
+                Author = string.IsNullOrWhiteSpace(candidate.Author) ? "NexusMods" : candidate.Author,
+                Description = string.IsNullOrWhiteSpace(candidate.Description) ? candidate.Summary ?? string.Empty : candidate.Description,
+                Summary = candidate.Summary ?? string.Empty,
+                Source = "NexusMods",
+                IconUrl = !string.IsNullOrWhiteSpace(candidate.PictureUrl) ? candidate.PictureUrl : candidate.PictureUrlLegacy,
+                DownloadCount = candidate.Downloads,
+                LastUpdateTime = candidate.UpdatedAt != default ? candidate.UpdatedAt.ToString("yyyy-MM-dd") : string.Empty,
+                Url = $"https://www.nexusmods.com/stardewvalley/mods/{modId}"
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"[VersionSettings] 解析 Nexus 前置失败: {searchTerm}, {ex.Message}");
+            return null;
+        }
+    }
+
+    private static async Task<SVL.Desktop.Models.ModSearchItem?> TryResolveFromCurseforgeAsync(string searchTerm, ModDependencyLink dependency)
+    {
+        try
+        {
+            var mods = await CurseforgeApiService.SearchModsAsync(searchTerm, pageSize: 20);
+            var candidate = mods.FirstOrDefault(m => string.Equals(m.Name, dependency.DisplayName, StringComparison.OrdinalIgnoreCase))
+                ?? mods.FirstOrDefault(m => string.Equals(m.Name, searchTerm, StringComparison.OrdinalIgnoreCase))
+                ?? mods.FirstOrDefault();
+
+            if (candidate == null)
+                return null;
+
+            return new SVL.Desktop.Models.ModSearchItem
+            {
+                Id = $"curse-{candidate.Id}",
+                Name = candidate.Name,
+                Author = "Curseforge",
+                Description = candidate.Summary ?? string.Empty,
+                Summary = candidate.Summary ?? string.Empty,
+                Source = "Curseforge",
+                IconUrl = candidate.Logo?.ThumbnailUrl ?? string.Empty,
+                DownloadCount = candidate.DownloadCount,
+                LastUpdateTime = candidate.DateModified ?? string.Empty,
+                Url = candidate.Links?.WebsiteUrl ?? $"https://www.curseforge.com/stardewvalley/mods/{candidate.Slug}"
+            };
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"[VersionSettings] 解析 Curseforge 前置失败: {searchTerm}, {ex.Message}");
+            return null;
         }
     }
 
@@ -1363,7 +1729,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
         if (SelectedInstance == null) return;
 
-        var selectedMods = Mods.Where(m => m.IsSelected && !m.IsEnabled).ToList();
+        var selectedMods = GetEffectiveSelectedMods(m => !m.IsEnabled);
         if (selectedMods.Count == 0) return;
 
         try
@@ -1381,6 +1747,11 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             }
 
             _modManager ??= new ModManager();
+            var dependencyEnableSelection = await PromptEnableDependenciesAsync(selectedMods);
+            if (dependencyEnableSelection == null)
+                return;
+
+            var dependencySuccessCount = await EnableDependencySelectionAsync(dependencyEnableSelection, modsPath);
             int successCount = 0;
 
             foreach (var mod in selectedMods)
@@ -1391,7 +1762,10 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 }
             }
 
-            SvlMessageBox.Success($"已启用 {successCount}/{selectedMods.Count} 个 MOD", "完成");
+            var message = dependencySuccessCount > 0
+                ? $"已启用 {successCount}/{selectedMods.Count} 个 MOD，并额外启用 {dependencySuccessCount} 个前置 MOD"
+                : $"已启用 {successCount}/{selectedMods.Count} 个 MOD";
+            SvlMessageBox.Success(message, "完成");
 
             await LoadModsAsync();
             ClearSelection();
@@ -1413,7 +1787,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
         if (SelectedInstance == null) return;
 
-        var selectedMods = Mods.Where(m => m.IsSelected && m.IsEnabled).ToList();
+        var selectedMods = GetEffectiveSelectedMods(m => m.IsEnabled);
         if (selectedMods.Count == 0) return;
 
         try
@@ -1494,7 +1868,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             return;
         }
 
-        var selectedMods = Mods.Where(m => m.IsSelected).ToList();
+        var selectedMods = GetEffectiveSelectedMods();
         if (selectedMods.Count == 0) return;
 
         if (!SvlMessageBox.Confirm(
@@ -1547,7 +1921,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             return;
         }
 
-        var selectedMods = Mods.Where(m => m.IsSelected && m.HasUpdate).ToList();
+        var selectedMods = GetEffectiveSelectedMods(m => m.HasUpdate);
         if (selectedMods.Count == 0)
         {
             Log.Warn("[VersionSettings] 批量更新: 没有选中任何需要更新的模组");
@@ -1814,7 +2188,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     {
         foreach (var mod in Mods)
         {
-            mod.IsSelected = false;
+            SetSelectionState(mod, false, cascadeToChildren: !mod.IsChildMod);
         }
         foreach (var mod in BackupMods)
         {
@@ -1830,6 +2204,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     private async void ShowModDetails(SdVMod mod)
     {
         if (mod == null) return;
+
+        if (mod.IsChildMod)
+        {
+            ShowLocalModDetails(mod);
+            return;
+        }
 
         try
         {
@@ -1861,6 +2241,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                     Name = string.IsNullOrWhiteSpace(localMod.Name) ? $"Curseforge Mod {curseId}" : localMod.Name,
                     Author = string.IsNullOrWhiteSpace(localMod.Author) ? "Curseforge" : localMod.Author,
                     Description = string.IsNullOrWhiteSpace(localMod.Description) ? "无描述" : localMod.Description,
+                    Summary = string.IsNullOrWhiteSpace(localMod.Description) ? "无描述" : localMod.Description,
                     Source = "Curseforge",
                     IconUrl = string.Empty,
                     DownloadCount = 0,
@@ -1938,6 +2319,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                         Name = mod.Name,
                         Author = string.IsNullOrWhiteSpace(mod.Author) ? "NexusMods" : mod.Author,
                         Description = string.IsNullOrWhiteSpace(mod.Description) ? "无描述" : mod.Description,
+                        Summary = string.IsNullOrWhiteSpace(mod.Description) ? "无描述" : mod.Description,
                         Source = "NexusMods",
                         Url = $"https://www.nexusmods.com/stardewvalley/mods/{preferredNexusId}"
                     });
@@ -1962,10 +2344,32 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             }
             else
             {
-                Log.Warn($"[VersionSettings] 打开MOD在线详情失败: {ex.Message}，将显示本地详情");
+                Log.Warn($"[VersionSettings] 打开MOD在线详情失败: {ex.Message}");
             }
-            ShowLocalModDetails(mod);
+
+            SvlMessageBox.Warning($"打开在线详情失败：{ex.Message}", "无法打开在线详情");
         }
+    }
+
+    /// <summary>
+    /// 显示本地 MOD 详情
+    /// </summary>
+    [RelayCommand]
+    private void ShowLocalModDetail(SdVMod mod)
+    {
+        if (mod == null)
+            return;
+
+        ShowLocalModDetails(mod);
+    }
+
+    [RelayCommand]
+    private void ToggleModGroup(SdVMod mod)
+    {
+        if (mod == null || !mod.HasChildren)
+            return;
+
+        mod.IsGroupExpanded = !mod.IsGroupExpanded;
     }
 
     /// <summary>
@@ -1976,7 +2380,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         var mainWindow = System.Windows.Application.Current.MainWindow;
         if (mainWindow != null)
         {
-            Controls.LocalModDetailDialog.Show(mainWindow, mod);
+            Controls.LocalModDetailDialog.Show(mainWindow, mod, NavigateDependencyAsync);
         }
     }
 
@@ -2041,6 +2445,11 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             }
             else
             {
+                var dependencyEnableSelection = await PromptEnableDependenciesAsync([mod]);
+                if (dependencyEnableSelection == null)
+                    return;
+
+                await EnableDependencySelectionAsync(dependencyEnableSelection, modsPath);
                 await _modManager.EnableModAsync(mod.Id, modsPath);
             }
 
@@ -2050,6 +2459,79 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             SvlMessageBox.Error($"操作失败：{ex.Message}");
         }
+    }
+
+    private async Task<IReadOnlyList<DependencyEnableOption>?> PromptEnableDependenciesAsync(IReadOnlyCollection<SdVMod> targetMods)
+    {
+        var dependencyGroups = CollectDisabledDependencyGroups(targetMods);
+        if (dependencyGroups.Count == 0)
+            return [];
+
+        IReadOnlyList<DependencyEnableOption>? selection = null;
+        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var owner = System.Windows.Application.Current.MainWindow;
+            selection = Controls.DependencyEnableDialog.Show(
+                owner,
+                dependencyGroups,
+                $"以下前置 Mod 当前已安装但未启用，现已按目标 Mod 分组显示。启用目标 Mod 前，请勾选需要一并启用的前置；取消则中止本次启用操作。");
+        });
+
+        return selection;
+    }
+
+    private List<DependencyEnableGroup> CollectDisabledDependencyGroups(IReadOnlyCollection<SdVMod> targetMods)
+    {
+        var installedByUniqueId = Mods
+            .Where(mod => !string.IsNullOrWhiteSpace(mod.UniqueId))
+            .GroupBy(mod => mod.UniqueId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        return targetMods
+            .OrderBy(mod => mod.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(targetMod =>
+            {
+                var dependencies = (targetMod.DisplayDependencies ?? [])
+                    .Where(dep => dep != null && dep.IsRequired && !string.IsNullOrWhiteSpace(dep.UniqueId))
+                    .Select(dep => installedByUniqueId.TryGetValue(dep.UniqueId, out var installedMod) ? new { dep, installedMod } : null)
+                    .Where(item => item != null && item.installedMod != null && !item.installedMod.IsEnabled)
+                    .GroupBy(item => item!.installedMod.UniqueId, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => new DependencyEnableOption
+                    {
+                        ModId = group.First()!.installedMod.Id,
+                        DisplayName = group.First()!.installedMod.Name,
+                        UniqueId = group.Key,
+                        IsSelected = true
+                    })
+                    .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                return new DependencyEnableGroup
+                {
+                    TargetModName = targetMod.Name,
+                    Dependencies = dependencies
+                };
+            })
+            .Where(group => group.Dependencies.Count > 0)
+            .ToList();
+    }
+
+    private async Task<int> EnableDependencySelectionAsync(IReadOnlyList<DependencyEnableOption> selection, string modsPath)
+    {
+        if (selection == null || selection.Count == 0)
+            return 0;
+
+        _modManager ??= new ModManager();
+        var successCount = 0;
+        foreach (var dependency in selection.Where(item => item.IsSelected))
+        {
+            if (await _modManager.EnableModAsync(dependency.ModId, modsPath))
+            {
+                successCount++;
+            }
+        }
+
+        return successCount;
     }
 
     /// <summary>

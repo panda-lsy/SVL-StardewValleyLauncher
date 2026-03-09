@@ -238,7 +238,7 @@ public static class ModpackTypeDetector
 
             // 检查是否包含 manifest.json（Curseforge）
             var manifestJsonPath = FindFileInDirectory(tempDir, "manifest.json");
-            if (!string.IsNullOrEmpty(manifestJsonPath))
+            if (!string.IsNullOrEmpty(manifestJsonPath) && LooksLikeCurseforgeManifest(manifestJsonPath))
             {
                 result.Type = ModpackType.Curseforge;
                 result.ModpackIconPath ??= FindModpackIconInDirectory(tempDir);
@@ -358,6 +358,25 @@ public static class ModpackTypeDetector
         catch
         {
             return null;
+        }
+    }
+
+    private static bool LooksLikeCurseforgeManifest(string manifestJsonPath)
+    {
+        try
+        {
+            using var stream = File.OpenRead(manifestJsonPath);
+            using var document = JsonDocument.Parse(stream);
+            var root = document.RootElement;
+
+            return root.TryGetProperty("manifestVersion", out var manifestVersion)
+                   && manifestVersion.ValueKind == JsonValueKind.Number
+                   && root.TryGetProperty("files", out var files)
+                   && files.ValueKind == JsonValueKind.Array;
+        }
+        catch
+        {
+            return false;
         }
     }
 

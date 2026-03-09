@@ -53,12 +53,14 @@ public partial class GamePathSelectionDialog : Window
         if (string.IsNullOrWhiteSpace(path))
         {
             HideError();
+            ConfirmButton.IsEnabled = false;
             return false;
         }
 
         if (!Directory.Exists(path))
         {
             ShowError("目录不存在");
+            ConfirmButton.IsEnabled = false;
             return false;
         }
 
@@ -66,10 +68,12 @@ public partial class GamePathSelectionDialog : Window
         if (!File.Exists(exePath))
         {
             ShowError("所选目录不包含游戏文件（Stardew Valley.exe）");
+            ConfirmButton.IsEnabled = false;
             return false;
         }
 
         HideError();
+        ConfirmButton.IsEnabled = true;
         return true;
     }
 

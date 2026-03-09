@@ -10,6 +10,7 @@ using SVL.Core.Download.NexusMods;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
 using SVL.Core.Stardew.Mod;
+using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Desktop.Controls;
 
 namespace SVL.Desktop.ViewModels;
@@ -41,6 +42,8 @@ public enum PageType
 public partial class MainWindowViewModel : ObservableObject
 {
     private ModManager _modManager = new ModManager();
+    private readonly Stack<SVL.Desktop.Models.ModSearchItem> _modDetailsHistory = new();
+    private ModSearchViewModel? _cachedModSearchViewModel;
 
     [ObservableProperty]
     private IStardewInstance? _selectedInstance;
@@ -74,6 +77,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private DownloadSubPageType _currentDownloadSubPage = DownloadSubPageType.SMAPI;
+
+    [ObservableProperty]
+    private double _downloadModsScrollOffset;
 
     [ObservableProperty]
     private PageType _modDetailsBackPage = PageType.Download;
@@ -146,6 +152,11 @@ public partial class MainWindowViewModel : ObservableObject
 
     partial void OnCurrentPageChanged(PageType value)
     {
+        if (value != PageType.ModDetails)
+        {
+            _modDetailsHistory.Clear();
+        }
+
         UpdatePageContent(value);
         ResetTransientInputStateAfterNavigation();
     }
@@ -230,7 +241,7 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             case PageType.ModDetails:
                 // MOD 详情页面占据整个区域
-                LeftPanelContent = new ModDetailsViewModel();
+                LeftPanelContent = new ModDetailsViewModel(this);
                 RightPanelContent = null;
                 break;
         }
@@ -326,7 +337,15 @@ public partial class MainWindowViewModel : ObservableObject
         switch (CurrentPage)
         {
             case PageType.ModDetails:
-                CurrentPage = ModDetailsBackPage;
+                if (_modDetailsHistory.Count > 0)
+                {
+                    var previous = _modDetailsHistory.Pop();
+                    _ = OpenModDetailsAsync(previous, ModDetailsBackPage, pushCurrentMod: false, preserveHistory: true);
+                }
+                else
+                {
+                    CurrentPage = ModDetailsBackPage;
+                }
                 break;
             case PageType.Instances:
             case PageType.VersionSettings:
@@ -570,7 +589,7 @@ public partial class MainWindowViewModel : ObservableObject
                 RightPanelContent = new DownloadRightViewModel(this);
                 break;
             case DownloadSubPageType.Mods:
-                RightPanelContent = new ModSearchViewModel();
+                RightPanelContent = _cachedModSearchViewModel ??= new ModSearchViewModel();
                 break;
             case DownloadSubPageType.Modpacks:
                 {
@@ -580,9 +599,279 @@ public partial class MainWindowViewModel : ObservableObject
                     break;
                 }
             case DownloadSubPageType.ModDetails:
-                RightPanelContent = new ModDetailsViewModel();
+                RightPanelContent = new ModDetailsViewModel(this);
                 break;
         }
+    }
+
+    public GamePathInfo? GetActiveVersionSettingsInstance(bool requireModManage = false)
+    {
+        if (CurrentPage == PageType.VersionSettings && LeftPanelContent is VersionSettingsViewModel versionSettingsVm)
+        {
+            if (!requireModManage || versionSettingsVm.SelectedPage == VersionSettingsPageType.ModManage)
+            {
+                return versionSettingsVm.CurrentInstance;
+            }
+        }
+
+        if (!requireModManage)
+        {
+            return SelectedVersionSettingsInstance;
+        }
+
+        return null;
+    }
+
+    public VersionSettingsRightViewModel? GetActiveModManagementViewModel()
+    {
+        if (CurrentPage == PageType.VersionSettings &&
+            LeftPanelContent is VersionSettingsViewModel versionSettingsVm &&
+            versionSettingsVm.SelectedPage == VersionSettingsPageType.ModManage &&
+            versionSettingsVm.RightContent is VersionSettingsRightViewModel rightVm &&
+            rightVm.CurrentPage == VersionSettingsPage.ModManagement)
+        {
+            return rightVm;
+        }
+
+        return null;
+    }
+
+    public async Task OpenModDetailsAsync(
+        SVL.Desktop.Models.ModSearchItem item,
+        PageType backPage,
+        bool pushCurrentMod = false,
+        bool preserveHistory = false)
+    {
+        if (item == null)
+            return;
+
+        if (!preserveHistory)
+        {
+            if (pushCurrentMod && CurrentPage == PageType.ModDetails && SelectedModSearch != null)
+            {
+                _modDetailsHistory.Push(CloneModSearchItem(SelectedModSearch));
+            }
+            else if (CurrentPage != PageType.ModDetails)
+            {
+                _modDetailsHistory.Clear();
+            }
+        }
+
+        SelectedModSearch = item;
+
+        if (CurrentPage != PageType.ModDetails || !pushCurrentMod)
+        {
+            ModDetailsBackPage = backPage;
+        }
+
+        if (backPage == PageType.VersionSettings)
+        {
+            OpenVersionSettingsAtModManage = true;
+        }
+
+        CurrentPage = PageType.ModDetails;
+
+        for (var i = 0; i < 8; i++)
+        {
+            if (LeftPanelContent is ModDetailsViewModel detailsViewModel)
+            {
+                await detailsViewModel.LoadModAsync(item.Id);
+                return;
+            }
+
+            await Task.Delay(40);
+        }
+    }
+
+    public async Task HandleModInstallDropAsync(IReadOnlyList<string> filePaths)
+    {
+        if (filePaths == null || filePaths.Count == 0)
+            return;
+
+        try
+        {
+            var targetInstance = GetActiveVersionSettingsInstance(requireModManage: true);
+            if (targetInstance == null)
+            {
+                var allInstances = SettingsService.LoadInstances();
+                if (allInstances.Count == 0)
+                {
+                    SvlMessageBox.Warning("当前没有可用实例，无法安装 Mod。", "无可用实例");
+                    return;
+                }
+
+                var dialog = new InstanceSelectionDialog(allInstances, "选择要安装 Mod 的实例", "拖放安装");
+                if (Application.Current.MainWindow != null)
+                {
+                    dialog.Owner = Application.Current.MainWindow;
+                }
+                var result = dialog.ShowDialog();
+                if (result != true || dialog.SelectedInstance == null)
+                    return;
+
+                targetInstance = dialog.SelectedInstance;
+            }
+
+            var installer = new VersionSettingsRightViewModel(this, targetInstance)
+            {
+                CurrentPage = VersionSettingsPage.ModManagement
+            };
+
+            var successCount = 0;
+            foreach (var filePath in filePaths)
+            {
+                if (await installer.InstallModFromPathAsync(filePath, showResultDialog: false, reloadAfterInstall: false))
+                {
+                    successCount++;
+                }
+            }
+
+            if (successCount > 0)
+            {
+                var activeModVm = GetActiveModManagementViewModel();
+                if (activeModVm != null && activeModVm.SelectedInstance?.Id == targetInstance.Id)
+                {
+                    await activeModVm.RefreshAfterExternalInstallAsync();
+                }
+
+                FloatingNotificationControl.Show(
+                    title: "Mod 安装完成",
+                    message: $"已安装 {successCount}/{filePaths.Count} 个 Mod 到 {targetInstance.Name}",
+                    autoCloseDelay: 4000,
+                    notificationType: NotificationType.Success);
+            }
+            else
+            {
+                FloatingNotificationControl.Show(
+                    title: "Mod 安装失败",
+                    message: "没有成功安装任何 Mod，请检查压缩包格式或日志。",
+                    autoCloseDelay: 5000,
+                    notificationType: NotificationType.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[MainWindowViewModel] 处理 Mod 拖放安装失败");
+            SvlMessageBox.Error($"安装 Mod 失败：{ex.Message}", "安装失败");
+        }
+    }
+
+    public void GuideSmapiPackageImport(string filePath)
+    {
+        var currentInstance = GetActiveVersionSettingsInstance(requireModManage: true) ?? SelectedVersionSettingsInstance;
+        if (currentInstance != null)
+        {
+            SelectedVersionSettingsInstance = currentInstance;
+        }
+
+        CurrentPage = PageType.Instances;
+
+        var instanceHint = currentInstance != null
+            ? $"当前实例 {currentInstance.Name} 对应的游戏目录可以作为创建 SMAPI 实例的基础。"
+            : "请选择一个原版游戏目录，然后创建新的 SMAPI 实例。";
+
+        SvlMessageBox.Info(
+            $"检测到这是 SMAPI 安装包：\n{System.IO.Path.GetFileName(filePath)}\n\nSMAPI 不能作为普通 Mod 安装到 Mods 文件夹。\n请在实例页面中新建一个 SMAPI 实例。\n\n{instanceHint}",
+            "检测到 SMAPI 安装包");
+    }
+
+    public async Task CreateSmapiInstanceFromLocalZipAsync(string filePath, GamePathInfo? preferredBaseInstance = null)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !System.IO.File.Exists(filePath))
+        {
+            SvlMessageBox.Warning("SMAPI 压缩包不存在。", "无法创建实例");
+            return;
+        }
+
+        try
+        {
+            var baseInstance = preferredBaseInstance ?? GetActiveVersionSettingsInstance(requireModManage: false) ?? SelectedVersionSettingsInstance;
+            var gameBasePath = baseInstance?.GamePath ?? string.Empty;
+
+            string? confirmedGameBasePath = null;
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var confirmDialog = new GamePathConfirmDialog();
+                if (!string.IsNullOrWhiteSpace(gameBasePath))
+                {
+                    confirmDialog.SetGamePath(gameBasePath);
+                }
+
+                if (Application.Current.MainWindow != null)
+                {
+                    confirmDialog.Owner = Application.Current.MainWindow;
+                }
+
+                var result = confirmDialog.ShowDialog();
+                if (result == true)
+                {
+                    confirmedGameBasePath = confirmDialog.GetSelectedPath() ?? gameBasePath;
+                }
+            });
+
+            if (string.IsNullOrWhiteSpace(confirmedGameBasePath))
+                return;
+
+            var defaultInstanceName = System.IO.Path.GetFileNameWithoutExtension(filePath);
+            string? instanceName = null;
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                instanceName = InstanceNameDialog.Show(
+                    owner: Application.Current.MainWindow,
+                    defaultName: defaultInstanceName,
+                    checkNameExists: name =>
+                    {
+                        var (isValid, _) = InstanceIsolationService.ValidateInstanceName(name, confirmedGameBasePath);
+                        return !isValid;
+                    },
+                    autoSanitize: true);
+            });
+
+            if (string.IsNullOrWhiteSpace(instanceName))
+                return;
+
+            var task = new SmapiDownloadTask(
+                gameBasePath: confirmedGameBasePath,
+                instanceName: instanceName,
+                localZipPath: filePath,
+                source: SmapiSource.GitHub,
+                debugMode: false,
+                version: null);
+
+            await DownloadManager.Instance.AddTaskAsync(task);
+
+            FloatingNotificationControl.Show(
+                title: "SMAPI 实例创建已开始",
+                message: $"正在创建实例 {instanceName}",
+                autoCloseDelay: 3500,
+                notificationType: NotificationType.Info);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[MainWindowViewModel] 从本地 SMAPI 压缩包创建实例失败");
+            SvlMessageBox.Error($"创建 SMAPI 实例失败：{ex.Message}", "创建失败");
+        }
+    }
+
+    private static SVL.Desktop.Models.ModSearchItem CloneModSearchItem(SVL.Desktop.Models.ModSearchItem item)
+    {
+        return new SVL.Desktop.Models.ModSearchItem
+        {
+            Id = item.Id,
+            Name = item.Name,
+            Summary = item.Summary,
+            Description = item.Description,
+            IconUrl = item.IconUrl,
+            LocalIconPath = item.LocalIconPath,
+            Author = item.Author,
+            DownloadCount = item.DownloadCount,
+            LastUpdateTime = item.LastUpdateTime,
+            Source = item.Source,
+            Category = item.Category,
+            SupportedGameVersions = item.SupportedGameVersions?.ToList() ?? new List<string>(),
+            Rating = item.Rating,
+            Url = item.Url
+        };
     }
 
     /// <summary>

@@ -407,9 +407,9 @@
                                     <Button Content="🌐 打开浏览器"
                                             Padding="12,8"
                                             Command="{Binding OpenBrowserForBatchUpdateModCommand}"
-                                            IsEnabled="{Binding IsBatchUpdateWaitingConfirmation}"
+                                            IsEnabled="{Binding ShowBatchUpdateBrowserButton}"
                                             Cursor="Hand"
-                                            Visibility="{Binding IsBatchUpdateTask, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            Visibility="{Binding ShowBatchUpdateBrowserButton, Converter={StaticResource BoolToVisibilityConverter}}">
                                         <Button.Style>
                                             <Style TargetType="Button">
                                                 <Setter Property="Background" Value="{DynamicResource ColorBrush1}" />

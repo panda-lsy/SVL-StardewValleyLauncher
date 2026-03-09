@@ -249,6 +249,8 @@ public class NexusModFileRequirement
 
     public string Version { get; set; } = string.Empty;
 
+    public bool IsRequired { get; set; } = true;
+
     public string Url { get; set; } = string.Empty;
 }
 

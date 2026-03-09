@@ -132,6 +132,7 @@ public static class AppConfig
                 MinimizeToTrayOnStartup = settings.MinimizeToTrayOnStartup,
                 MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose,
                 ShowNotifications = settings.ShowNotifications,
+                ShowModTypeFilterDisabledNotice = settings.ShowModTypeFilterDisabledNotice,
                 LogLevel = settings.LogLevel,
                 DebugMode = settings.DebugMode,
 
@@ -351,6 +352,11 @@ public class AppSettings
     /// 显示通知
     /// </summary>
     public bool ShowNotifications { get; set; } = true;
+
+    /// <summary>
+    /// 来源为“全部”时显示类型筛选已关闭提示
+    /// </summary>
+    public bool ShowModTypeFilterDisabledNotice { get; set; } = true;
 
     /// <summary>
     /// SMAPI 默认下载源

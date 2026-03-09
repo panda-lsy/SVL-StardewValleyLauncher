@@ -568,7 +568,11 @@
                                                           Opacity="0.2"
                                                           Direction="270"/>
                                     </Border.Effect>
-                                    <ScrollViewer SnapsToDevicePixels="True">
+                                    <ScrollViewer Style="{DynamicResource ModernScrollViewerStyle}"
+                                                  SnapsToDevicePixels="True"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  CanContentScroll="False"
+                                                  PanningMode="VerticalOnly">
                                         <StackPanel IsItemsHost="True"
                                                     KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>

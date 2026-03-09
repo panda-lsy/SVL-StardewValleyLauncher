@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -11,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using SVL.Core.Config;
 using SVL.Core.Modpack;
+using SVL.Core.Stardew.Mod;
 using SVL.Desktop.ViewModels;
 using SVL.Desktop.Views;
 
@@ -75,6 +77,7 @@ public partial class MainWindow : Window
         // 订阅启动器配置更新事件
         LauncherConfigService.LauncherAppNameChanged += OnLauncherAppNameChanged;
         LauncherConfigService.LauncherTitleChanged += OnLauncherTitleChanged;
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
 
         SVL.Core.Logging.Log.Info("[MainWindow] Constructor completed");
     }
@@ -191,8 +194,29 @@ public partial class MainWindow : Window
 
             SVL.Core.Logging.Log.Info($"[MainWindow] 拖放的文件: {string.Join(", ", files)}");
 
-            // 筛选支持的文件
-            var supportedFiles = files.Where(f => ModpackTypeDetector.IsSupportedFile(f)).ToList();
+            var smapiFiles = files.Where(ModArchiveDetector.LooksLikeSmapiInstallerSource).ToList();
+            var modFiles = files.Where(ModArchiveDetector.LooksLikeModInstallSource).ToList();
+            var supportedFiles = files
+                .Where(f =>
+                    !smapiFiles.Contains(f, StringComparer.OrdinalIgnoreCase)
+                    && !modFiles.Contains(f, StringComparer.OrdinalIgnoreCase)
+                    && ModpackTypeDetector.IsSupportedFile(f)
+                    && ModpackTypeDetector.Detect(f).Type != ModpackType.Unknown)
+                .ToList();
+
+            if (smapiFiles.Count > 0)
+            {
+                SVL.Core.Logging.Log.Info($"[MainWindow] 识别到 {smapiFiles.Count} 个 SMAPI 安装包");
+                Dispatcher.InvokeAsync(async () => await _viewModel.CreateSmapiInstanceFromLocalZipAsync(smapiFiles.First()));
+                return;
+            }
+
+            if (modFiles.Count > 0)
+            {
+                SVL.Core.Logging.Log.Info($"[MainWindow] 识别到 {modFiles.Count} 个 Mod 安装源");
+                Dispatcher.InvokeAsync(async () => await _viewModel.HandleModInstallDropAsync(modFiles));
+                return;
+            }
 
             if (supportedFiles.Count == 0)
             {
@@ -200,7 +224,7 @@ public partial class MainWindow : Window
                 {
                     Controls.FloatingNotificationControl.Show(
                         title: "不支持的文件格式",
-                        message: "请拖放 .zip、.7z 或 .cfmodpack 格式的整合包文件",
+                        message: "请拖放包含 manifest.json 的 Mod 压缩包，或 .zip、.7z、.cfmodpack 格式的整合包文件",
                         autoCloseDelay: 5000,
                         notificationType: Controls.NotificationType.Warning);
                 });
@@ -308,6 +332,45 @@ public partial class MainWindow : Window
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         SVL.Core.Logging.Log.Info("[MainWindow] Closing event fired");
+        _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.CurrentPage) ||
+            e.PropertyName == nameof(MainWindowViewModel.CurrentDownloadSubPage) ||
+            e.PropertyName == nameof(MainWindowViewModel.RightPanelContent))
+        {
+            RestoreModsSearchScrollOffset();
+        }
+    }
+
+    private void RightContentScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (_viewModel.CurrentPage == PageType.Download &&
+            _viewModel.CurrentDownloadSubPage == DownloadSubPageType.Mods)
+        {
+            _viewModel.DownloadModsScrollOffset = e.VerticalOffset;
+        }
+    }
+
+    private void RestoreModsSearchScrollOffset()
+    {
+        if (_viewModel.CurrentPage != PageType.Download ||
+            _viewModel.CurrentDownloadSubPage != DownloadSubPageType.Mods ||
+            RightContentScrollViewer == null)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_viewModel.CurrentPage == PageType.Download &&
+                _viewModel.CurrentDownloadSubPage == DownloadSubPageType.Mods)
+            {
+                RightContentScrollViewer.ScrollToVerticalOffset(_viewModel.DownloadModsScrollOffset);
+            }
+        }), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     private void MainWindow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

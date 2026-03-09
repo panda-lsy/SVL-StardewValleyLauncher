@@ -54,12 +54,13 @@ public partial class InstanceNameDialog : Window
         {
             _isUpdatingText = true;
             var cursorPosition = InstanceNameTextBox.SelectionStart;
+            var prefix = cursorPosition > 0 && cursorPosition <= currentText.Length
+                ? currentText.Substring(0, cursorPosition)
+                : currentText;
+            var sanitizedPrefix = FileNameValidator.SanitizeFolderName(prefix);
             InstanceNameTextBox.Text = sanitized;
-            // 保持光标位置
-            if (cursorPosition <= sanitized.Length)
-            {
-                InstanceNameTextBox.SelectionStart = cursorPosition;
-            }
+            InstanceNameTextBox.SelectionStart = Math.Min(sanitizedPrefix.Length, sanitized.Length);
+            InstanceNameTextBox.SelectionLength = 0;
             _isUpdatingText = false;
         }
 

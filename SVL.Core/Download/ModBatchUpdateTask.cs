@@ -324,9 +324,7 @@ public class ModBatchUpdateTask : DownloadTask
                 var fileId = ExtractCurseforgeFileId(mod.UpdateUrl);
                 if (string.IsNullOrEmpty(fileId))
                 {
-                    Log.Error($"[ModBatchUpdate] [{item.Name}] 无法从 UpdateUrl 提取 FileId");
-                    item.ErrorMessage = "无法提取文件ID";
-                    return false;
+                    Log.Warn($"[ModBatchUpdate] [{item.Name}] 无法从 UpdateUrl 提取 FileId，将直接使用现有下载链接继续下载");
                 }
 
                 var fileName = $"{item.Name}-{item.NewVersion}.zip";
@@ -345,9 +343,10 @@ public class ModBatchUpdateTask : DownloadTask
                     saveOnly: false,
                     sourcePlatform: "Curseforge",
                     sourceProjectId: mod.CurseforgeProjectId,
-                    sourceFileId: fileId,
+                    sourceFileId: string.IsNullOrWhiteSpace(fileId) ? null : fileId,
                     isModpack: false,
-                    parentCancellationToken: _cts.Token
+                    parentCancellationToken: _cts.Token,
+                    updateTargetModPath: mod.ModPath
                 );
 
                 await DownloadManager.Instance.ExecuteInternalTaskAsync(downloadTask);
@@ -428,7 +427,8 @@ public class ModBatchUpdateTask : DownloadTask
                         sourceProjectId: mod.NexusModsProjectId,
                         sourceFileId: null,
                         isModpack: false,
-                        parentCancellationToken: _cts.Token
+                        parentCancellationToken: _cts.Token,
+                        updateTargetModPath: mod.ModPath
                     );
 
                     await DownloadManager.Instance.ExecuteInternalTaskAsync(installTask);
@@ -639,7 +639,8 @@ public class ModBatchUpdateTask : DownloadTask
                 sourceProjectId: mod.NexusModsProjectId,
                 sourceFileId: nxmUrl.FileId.ToString(),
                 isModpack: false,
-                parentCancellationToken: _cts.Token
+                parentCancellationToken: _cts.Token,
+                updateTargetModPath: mod.ModPath
             );
 
             await DownloadManager.Instance.ExecuteInternalTaskAsync(installTask);
@@ -731,7 +732,8 @@ public class ModBatchUpdateTask : DownloadTask
                 sourceProjectId: mod.NexusModsProjectId,
                 sourceFileId: null,
                 isModpack: false,
-                parentCancellationToken: _cts.Token
+                parentCancellationToken: _cts.Token,
+                updateTargetModPath: mod.ModPath
             );
 
             await DownloadManager.Instance.AddTaskAsync(installTask);
@@ -867,8 +869,15 @@ public class ModBatchUpdateTask : DownloadTask
     {
         try
         {
-            // Curseforge API URL 格式: https://api.cloudflare.com/#... 或直接包含 fileId
-            // 尝试从 URL 中提取文件ID
+            // Curseforge CDN 直链格式: https://edge.forgecdn.net/files/7448/563/file.zip
+            // 其中 fileId = high4 + low3 => 7448563
+            var cdnMatch = Regex.Match(url, @"/files/(\d{4})/(\d{1,4})(?:/|$)", RegexOptions.IgnoreCase);
+            if (cdnMatch.Success)
+            {
+                return cdnMatch.Groups[1].Value + cdnMatch.Groups[2].Value;
+            }
+
+            // Curseforge API URL 或其他格式中直接包含 fileId
             var match = Regex.Match(url, @"file[\\/](\d+)", RegexOptions.IgnoreCase);
             if (match.Success)
             {

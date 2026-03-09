@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using SVL.Core.Config;
 using SVL.Core.Download;
 using SVL.Core.Logging;
+using SVL.Core.Utils;
 using SVL.Desktop.Controls;
 using SVL.Desktop.Models;
 using SVL.Desktop.Utilities;
@@ -19,6 +20,14 @@ namespace SVL.Desktop.ViewModels;
 /// </summary>
 public partial class ModSearchViewModel : ObservableObject
 {
+    private const int CurseforgeRawPagesPerFilteredPage = 3;
+    private const int NexusRawPagesPerFilteredPage = 3;
+
+    private bool _suppressSourceChangeNotification = true;
+    private bool _suppressModTypeReload;
+    private string _activeSearchName = string.Empty;
+    private readonly Dictionary<long, List<string>> _nexusSupportedGameVersionsCache = new();
+
     public ModSearchViewModel()
     {
         try
@@ -39,6 +48,9 @@ public partial class ModSearchViewModel : ObservableObject
             SelectedSource = "全部";
         }
 
+        _suppressSourceChangeNotification = false;
+        ShowInitialTypeFilterDisabledNoticeIfNeeded();
+        _ = RefreshModTypesForCurrentSourceAsync();
         _ = LoadGameVersionsAsync();
     }
 
@@ -46,7 +58,25 @@ public partial class ModSearchViewModel : ObservableObject
     {
         try
         {
-            var list = await SVL.Core.Stardew.Mod.SMAPI.SmapApiService.GetKnownGameVersionsAsync(maxPages: 5);
+            var versionSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var curseforgeVersions = await CurseforgeApiService.GetGameVersionsAsync();
+            foreach (var version in curseforgeVersions)
+            {
+                if (!string.IsNullOrWhiteSpace(version))
+                    versionSet.Add(version);
+            }
+
+            var smapiVersions = await SVL.Core.Stardew.Mod.SMAPI.SmapApiService.GetKnownGameVersionsAsync(maxPages: 5);
+            foreach (var version in smapiVersions)
+            {
+                if (!string.IsNullOrWhiteSpace(version))
+                    versionSet.Add(version);
+            }
+
+            var list = versionSet
+                .OrderByDescending(version => version, SemanticVersionComparer.Instance)
+                .ToList();
 
             // UI：保留“全部”为首项
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -68,26 +98,10 @@ public partial class ModSearchViewModel : ObservableObject
     [ObservableProperty]
     private string _searchName = "";
 
-    /// <summary>
-    /// 搜索词变化时延迟触发搜索（避免频繁搜索）
-    /// </summary>
     partial void OnSearchNameChanged(string value)
     {
-        // 防抖：延迟500ms后触发搜索
-        _debounceTimer?.Stop();
-        _debounceTimer = new System.Windows.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(500)
-        };
-        _debounceTimer.Tick += async (s, e) =>
-        {
-            _debounceTimer?.Stop();
-            await PerformSearchWithConfigCheckAsync();
-        };
-        _debounceTimer.Start();
+        // 输入框只更新待提交条件，真正搜索在点击“搜索”按钮后触发。
     }
-
-    private System.Windows.Threading.DispatcherTimer? _debounceTimer;
 
     /// <summary>
     /// 是否已经显示过 API 配置警告（防止重复提示）
@@ -99,6 +113,8 @@ public partial class ModSearchViewModel : ObservableObject
     /// </summary>
     private async Task PerformSearchWithConfigCheckAsync()
     {
+        _activeSearchName = NormalizeSearchText(SearchName);
+
         // 检查 API 配置
         var configWarnings = CheckApiConfig();
         var message = string.Join("\n\n", configWarnings);
@@ -141,7 +157,7 @@ public partial class ModSearchViewModel : ObservableObject
         }
 
         // 执行搜索
-        await SearchModsAsync();
+        await SearchModsCoreAsync(resetPage: true);
     }
 
     /// <summary>
@@ -285,9 +301,495 @@ public partial class ModSearchViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _modTypes = new(new[] { "全部" });
 
+    public bool IsModTypeFilterEnabled => !string.Equals(SelectedSource, "全部", StringComparison.OrdinalIgnoreCase);
+
+    public string ModTypeFilterHint => IsModTypeFilterEnabled
+        ? "按当前来源的类型筛选"
+        : "请先选择具体来源，再按类型筛选";
+
+    partial void OnSelectedSourceChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsModTypeFilterEnabled));
+        OnPropertyChanged(nameof(ModTypeFilterHint));
+
+        if (SelectedModType != "全部")
+            SelectedModType = "全部";
+
+        if (string.Equals(value, "全部", StringComparison.OrdinalIgnoreCase))
+        {
+            ModTypes.Clear();
+            ModTypes.Add("全部");
+
+            if (!_suppressSourceChangeNotification && AppConfig.GetSettings().ShowModTypeFilterDisabledNotice)
+            {
+                FloatingNotificationControl.Show(
+                    title: "类型筛选已关闭",
+                    message: "来源为“全部”时无法按类型筛选，请先切换到 Curseforge 或 NexusMods。",
+                    autoCloseDelay: 3500,
+                    notificationType: NotificationType.Info);
+            }
+
+            return;
+        }
+
+        _ = RefreshModTypesForCurrentSourceAsync();
+    }
+
+    private void ShowInitialTypeFilterDisabledNoticeIfNeeded()
+    {
+        if (string.Equals(SelectedSource, "全部", StringComparison.OrdinalIgnoreCase) &&
+            AppConfig.GetSettings().ShowModTypeFilterDisabledNotice)
+        {
+            FloatingNotificationControl.Show(
+                title: "类型筛选已关闭",
+                message: "当前来源为“全部”，请先切换到 Curseforge 或 NexusMods 后再按类型筛选。",
+                autoCloseDelay: 3500,
+                notificationType: NotificationType.Info);
+        }
+    }
+
     partial void OnSelectedModTypeChanged(string value)
     {
         Log.Info($"[ModSearchViewModel] 类型选择变更: {value}");
+
+        if (_suppressModTypeReload)
+            return;
+
+        _ = ReloadCurrentResultsAsync(resetPage: true);
+    }
+
+    private void UpdateModTypes(IEnumerable<string> categories)
+    {
+        if (!IsModTypeFilterEnabled)
+        {
+            if (ModTypes.Count != 1 || ModTypes[0] != "全部")
+            {
+                ModTypes.Clear();
+                ModTypes.Add("全部");
+            }
+            return;
+        }
+
+        var categoryList = categories?
+            .Where(category => !string.IsNullOrWhiteSpace(category))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(category => category)
+            .ToList() ?? new List<string>();
+
+        var previousSelection = SelectedModType;
+        _suppressModTypeReload = true;
+        ModTypes.Clear();
+        ModTypes.Add("全部");
+
+        foreach (var category in categoryList)
+        {
+            ModTypes.Add(category);
+        }
+
+        if (ModTypes.Contains(previousSelection))
+            SelectedModType = previousSelection;
+        else
+            SelectedModType = "全部";
+        _suppressModTypeReload = false;
+    }
+
+    private async Task ReloadCurrentResultsAsync(bool resetPage)
+    {
+        if (IsLoading)
+            return;
+
+        if (resetPage)
+            CurrentPage = 1;
+
+        if (string.IsNullOrWhiteSpace(_activeSearchName))
+            await LoadPopularModsAsync();
+        else
+            await SearchModsCoreAsync(resetPage: false);
+    }
+
+    private static string NormalizeSearchText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+    }
+
+    private string? GetSelectedGameVersionFilter()
+    {
+        var value = NormalizeSearchText(SelectedGameVersion);
+        return string.IsNullOrWhiteSpace(value) || string.Equals(value, "全部", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : value;
+    }
+
+    private static string NormalizeGameVersionToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var text = value.Trim();
+        var match = System.Text.RegularExpressions.Regex.Match(
+            text,
+            @"(?i)(\d+(?:\.\d+){0,3})(\+|\s*(?:or|and)\s*(?:later|newer))?");
+
+        if (!match.Success)
+            return text;
+
+        var version = match.Groups[1].Value;
+        var hasPlus = !string.IsNullOrWhiteSpace(match.Groups[2].Value);
+        return hasPlus ? version + "+" : version;
+    }
+
+    private static bool IsVersionPrefixMatch(string value, string prefix)
+    {
+        return value.Equals(prefix, StringComparison.OrdinalIgnoreCase)
+               || value.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesSelectedGameVersion(IEnumerable<string>? versions, string? selectedGameVersion)
+    {
+        if (string.IsNullOrWhiteSpace(selectedGameVersion))
+            return true;
+
+        var requested = NormalizeGameVersionToken(selectedGameVersion);
+        if (string.IsNullOrWhiteSpace(requested))
+            return true;
+
+        foreach (var rawVersion in versions ?? Enumerable.Empty<string>())
+        {
+            var candidate = NormalizeGameVersionToken(rawVersion);
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            var candidateBase = candidate.TrimEnd('+');
+            var requestedBase = requested.TrimEnd('+');
+
+            if (candidateBase.Equals(requestedBase, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (candidate.EndsWith("+", StringComparison.Ordinal) && IsVersionPrefixMatch(requestedBase, candidateBase))
+                return true;
+
+            if (requested.EndsWith("+", StringComparison.Ordinal) && IsVersionPrefixMatch(candidateBase, requestedBase))
+                return true;
+
+            if (IsVersionPrefixMatch(candidateBase, requestedBase) || IsVersionPrefixMatch(requestedBase, candidateBase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string ExtractStardewGameVersionKeyFromNexusFileDescription(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return "未知";
+
+        var match = System.Text.RegularExpressions.Regex.Match(
+            description,
+            @"(?i)\bfor\s+stardew(?:\s+valley)?\s+(\d+(?:\.\d+){1,3})\b(?:\s*(?:or|and)\s*(?:later|newer)\b)?");
+
+        if (!match.Success)
+        {
+            match = System.Text.RegularExpressions.Regex.Match(
+                description,
+                @"(?i)\bstardew(?:\s+valley)?\s+(\d+(?:\.\d+){1,3})\b(?:\s*(?:or|and)\s*(?:later|newer)\b)?");
+        }
+
+        if (!match.Success)
+            return "未知";
+
+        var version = match.Groups[1].Value;
+        if (string.IsNullOrWhiteSpace(version))
+            return "未知";
+
+        var hasPlus = System.Text.RegularExpressions.Regex.IsMatch(match.Value, @"(?i)\b(?:or|and)\s*(?:later|newer)\b")
+                      || match.Value.Contains('+');
+
+        return hasPlus ? (version.EndsWith("+", StringComparison.Ordinal) ? version : version + "+") : version;
+    }
+
+    private async Task<List<string>> GetNexusSupportedGameVersionsAsync(long modId)
+    {
+        if (modId <= 0)
+            return new List<string>();
+
+        if (_nexusSupportedGameVersionsCache.TryGetValue(modId, out var cached))
+            return cached;
+
+        try
+        {
+            var files = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.GetModFilesAsync(modId);
+            var versions = (files ?? new List<SVL.Core.Stardew.ResourceProject.NexusMods.NexusModFile>())
+                .Select(file => ExtractStardewGameVersionKeyFromNexusFileDescription(file.Description))
+                .Where(version => !string.IsNullOrWhiteSpace(version)
+                                  && !string.Equals(version, "未知", StringComparison.OrdinalIgnoreCase)
+                                  && !string.Equals(version, "全部", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(version => version, SemanticVersionComparer.Instance)
+                .ToList();
+
+            _nexusSupportedGameVersionsCache[modId] = versions;
+            return versions;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[ModSearchViewModel] 获取 NexusMods 游戏版本失败: modId={modId}", ex);
+            var empty = new List<string>();
+            _nexusSupportedGameVersionsCache[modId] = empty;
+            return empty;
+        }
+    }
+
+    private static bool IsNameExactOrPartialMatch(string searchText, string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(searchText) || string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        var normalizedSearch = NormalizeSearchText(searchText);
+        var normalizedCandidate = NormalizeSearchText(candidate);
+
+        return normalizedCandidate.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+               || normalizedCandidate.IndexOf(normalizedSearch, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsDescriptionMatch(string searchText, string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(searchText) || string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        return candidate.IndexOf(NormalizeSearchText(searchText), StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static List<CurseforgeApiService.CurseforgeModSearchItem> RankCurseforgeSearchResults(IEnumerable<CurseforgeApiService.CurseforgeModSearchItem> mods, string searchText)
+    {
+        var candidates = (mods ?? Enumerable.Empty<CurseforgeApiService.CurseforgeModSearchItem>())
+            .Where(mod => mod != null)
+            .GroupBy(mod => mod.Id)
+            .Select(group => group.First())
+            .ToList();
+
+        if (string.IsNullOrWhiteSpace(searchText))
+            return candidates.OrderByDescending(mod => mod.DownloadCount).ToList();
+
+        var exactMatches = candidates
+            .Where(mod => string.Equals(NormalizeSearchText(mod.Name), NormalizeSearchText(searchText), StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(mod => mod.DownloadCount);
+
+        var partialMatches = candidates
+            .Where(mod => !string.Equals(NormalizeSearchText(mod.Name), NormalizeSearchText(searchText), StringComparison.OrdinalIgnoreCase))
+            .Where(mod => IsNameExactOrPartialMatch(searchText, mod.Name))
+            .OrderByDescending(mod => mod.DownloadCount);
+
+        var descriptionMatches = candidates
+            .Where(mod => !IsNameExactOrPartialMatch(searchText, mod.Name))
+            .Where(mod => IsDescriptionMatch(searchText, mod.Summary))
+            .OrderByDescending(mod => mod.DownloadCount);
+
+        return exactMatches
+            .Concat(partialMatches)
+            .Concat(descriptionMatches)
+            .GroupBy(mod => mod.Id)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private async Task<(List<CurseforgeApiService.CurseforgeModSearchItem> Items, HashSet<string> Categories, bool HasMore)> FetchCurseforgeModsForCurrentTypeAsync(string searchTerm, int filteredPage, int filteredPageSize)
+    {
+        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var selectedType = string.IsNullOrWhiteSpace(SelectedModType) ? "全部" : SelectedModType;
+        var selectedGameVersion = GetSelectedGameVersionFilter();
+        var safeFilteredPageSize = Math.Max(1, Math.Min(50, filteredPageSize));
+        var normalizedSearchTerm = NormalizeSearchText(searchTerm);
+        var needsExpandedFetch = selectedType != "全部" || !string.IsNullOrWhiteSpace(normalizedSearchTerm) || !string.IsNullOrWhiteSpace(selectedGameVersion);
+
+        if (!needsExpandedFetch)
+        {
+            var skip = (filteredPage - 1) * safeFilteredPageSize;
+            var batch = await CurseforgeApiService.SearchModsAsync(searchTerm, pageSize: safeFilteredPageSize, index: skip, gameVersion: selectedGameVersion) ?? new List<CurseforgeApiService.CurseforgeModSearchItem>();
+            foreach (var mod in batch)
+            {
+                foreach (var category in mod.Categories ?? new List<CurseforgeApiService.CurseforgeCategory>())
+                {
+                    if (!string.IsNullOrWhiteSpace(category.Name))
+                        categories.Add(category.Name);
+                }
+            }
+
+            return (batch, categories, batch.Count >= safeFilteredPageSize);
+        }
+
+        var collected = new List<CurseforgeApiService.CurseforgeModSearchItem>();
+        const int rawPageSize = 50;
+        var startRawPage = Math.Max(1, ((filteredPage - 1) * CurseforgeRawPagesPerFilteredPage) + 1);
+        var endRawPage = startRawPage + CurseforgeRawPagesPerFilteredPage - 1;
+        var sawFullBatch = false;
+
+        for (var rawPage = startRawPage; rawPage <= endRawPage; rawPage++)
+        {
+            var rawIndex = (rawPage - 1) * rawPageSize;
+            var batch = await CurseforgeApiService.SearchModsAsync(searchTerm, pageSize: rawPageSize, index: rawIndex, gameVersion: selectedGameVersion);
+            if (batch == null || batch.Count == 0)
+                break;
+
+            sawFullBatch = batch.Count >= rawPageSize;
+
+            foreach (var mod in batch)
+            {
+                foreach (var category in mod.Categories ?? new List<CurseforgeApiService.CurseforgeCategory>())
+                {
+                    if (!string.IsNullOrWhiteSpace(category.Name))
+                        categories.Add(category.Name);
+                }
+
+                var typeMatched = selectedType == "全部" || (mod.Categories != null && mod.Categories.Any(category => string.Equals(category.Name, selectedType, StringComparison.OrdinalIgnoreCase)));
+                var versionMatched = MatchesSelectedGameVersion(mod.LatestFile?.GameVersion, selectedGameVersion);
+
+                if (typeMatched && versionMatched)
+                {
+                    collected.Add(mod);
+                }
+            }
+
+            if (batch.Count < rawPageSize)
+                break;
+        }
+
+        var ranked = RankCurseforgeSearchResults(collected, normalizedSearchTerm);
+        var pageItems = ranked.Take(safeFilteredPageSize).ToList();
+        var hasMore = ranked.Count > safeFilteredPageSize || sawFullBatch;
+        Log.Info($"[ModSearchViewModel] Curseforge 类型直取: type={selectedType}, filteredPage={filteredPage}, rawWindow={startRawPage}-{endRawPage}, rawCollected={collected.Count}, pageItems={pageItems.Count}, hasMore={hasMore}");
+        return (pageItems, categories, hasMore);
+    }
+
+    private async Task<(List<SVL.Core.Stardew.ResourceProject.NexusMods.NexusMod> Items, HashSet<string> Categories, bool HasMore)> FetchNexusModsForCurrentTypeAsync(string searchTerm, int filteredPage, int filteredPageSize, bool useCache)
+    {
+        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var selectedType = string.IsNullOrWhiteSpace(SelectedModType) ? "全部" : SelectedModType;
+        var selectedGameVersion = GetSelectedGameVersionFilter();
+        var safeFilteredPageSize = Math.Max(1, Math.Min(50, filteredPageSize));
+        var needsExpandedFetch = selectedType != "全部" || !string.IsNullOrWhiteSpace(selectedGameVersion);
+
+        if (!needsExpandedFetch)
+        {
+            var batch = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(
+                query: searchTerm,
+                page: filteredPage,
+                pageSize: safeFilteredPageSize,
+                useCache: useCache) ?? new List<SVL.Core.Stardew.ResourceProject.NexusMods.NexusMod>();
+
+            foreach (var mod in batch)
+            {
+                if (!string.IsNullOrWhiteSpace(mod.Category))
+                    categories.Add(mod.Category);
+            }
+
+            return (batch, categories, batch.Count >= safeFilteredPageSize);
+        }
+
+        var collected = new List<SVL.Core.Stardew.ResourceProject.NexusMods.NexusMod>();
+        const int rawPageSize = 50;
+        var startRawPage = Math.Max(1, ((filteredPage - 1) * NexusRawPagesPerFilteredPage) + 1);
+        var endRawPage = startRawPage + NexusRawPagesPerFilteredPage - 1;
+        var sawFullBatch = false;
+
+        for (var rawPage = startRawPage; rawPage <= endRawPage; rawPage++)
+        {
+            var batch = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(
+                query: searchTerm,
+                page: rawPage,
+                pageSize: rawPageSize,
+                useCache: false);
+
+            if (batch == null || batch.Count == 0)
+                break;
+
+            sawFullBatch = batch.Count >= rawPageSize;
+
+            foreach (var mod in batch)
+            {
+                var category = string.IsNullOrWhiteSpace(mod.Category) ? "未分类" : mod.Category;
+                categories.Add(category);
+
+                if (selectedType != "全部" && !string.Equals(category, selectedType, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(selectedGameVersion))
+                {
+                    var supportedVersions = await GetNexusSupportedGameVersionsAsync(mod.ModId);
+                    if (!MatchesSelectedGameVersion(supportedVersions, selectedGameVersion))
+                        continue;
+                }
+
+                collected.Add(mod);
+            }
+
+            if (batch.Count < rawPageSize)
+                break;
+        }
+
+        var deduped = collected
+            .GroupBy(mod => mod.ModId)
+            .Select(group => group.First())
+            .ToList();
+
+        var pageItems = deduped.Take(safeFilteredPageSize).ToList();
+        var hasMore = deduped.Count > safeFilteredPageSize || sawFullBatch;
+        Log.Info($"[ModSearchViewModel] NexusMods 类型直取: type={selectedType}, filteredPage={filteredPage}, rawWindow={startRawPage}-{endRawPage}, rawCollected={collected.Count}, pageItems={pageItems.Count}, hasMore={hasMore}");
+        return (pageItems, categories, hasMore);
+    }
+
+    private async Task RefreshModTypesForCurrentSourceAsync()
+    {
+        try
+        {
+            if (!IsModTypeFilterEnabled)
+            {
+                UpdateModTypes(Array.Empty<string>());
+                return;
+            }
+
+            var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (string.Equals(SelectedSource, "Curseforge", StringComparison.OrdinalIgnoreCase))
+            {
+                var mods = await CurseforgeApiService.SearchModsAsync(string.Empty, pageSize: 50, index: 0);
+                foreach (var mod in mods ?? new List<CurseforgeApiService.CurseforgeModSearchItem>())
+                {
+                    foreach (var category in mod.Categories ?? new List<CurseforgeApiService.CurseforgeCategory>())
+                    {
+                        if (!string.IsNullOrWhiteSpace(category.Name))
+                            categories.Add(category.Name);
+                    }
+                }
+
+                Log.Info($"[ModSearchViewModel] 来源切换为 Curseforge，预加载类型 {categories.Count} 个");
+            }
+            else if (string.Equals(SelectedSource, "NexusMods", StringComparison.OrdinalIgnoreCase))
+            {
+                var mods = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(
+                    query: string.Empty,
+                    page: 1,
+                    pageSize: 50,
+                    useCache: false);
+
+                foreach (var mod in mods)
+                {
+                    if (!string.IsNullOrWhiteSpace(mod.Category))
+                        categories.Add(mod.Category);
+                }
+
+                Log.Info($"[ModSearchViewModel] 来源切换为 NexusMods，预加载类型 {categories.Count} 个");
+            }
+
+            UpdateModTypes(categories);
+        }
+        catch (SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsTokenExpiredException)
+        {
+            HandleNexusModsTokenExpired("RefreshModTypesForCurrentSourceAsync");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("[ModSearchViewModel] 预加载类型列表失败", ex);
+        }
     }
 
     /// <summary>
@@ -331,7 +833,7 @@ public partial class ModSearchViewModel : ObservableObject
             var allMods = new List<ModSearchItem>();
 
             // 计算需要获取的数据量（双倍数据量，用于跨来源统一排序）
-            int fetchCount = PageSize * 2;
+            int fetchCount = SelectedSource == "全部" ? PageSize * 2 : PageSize;
 
             // 并行加载 Curseforge 和 NexusMods 的热门模组
             var curseforgeTask = (SelectedSource == "全部" || SelectedSource == "Curseforge")
@@ -364,7 +866,7 @@ public partial class ModSearchViewModel : ObservableObject
                         Log.Info($"[ModSearchViewModel] 收集了 {curseforgeResult.ModItems.Count} 个 Curseforge 模组");
 
                         // Curseforge 返回了满页（fetchCount），可能还有更多结果
-                        curseforgeHasMore = curseforgeResult.ModItems.Count >= fetchCount;
+                        curseforgeHasMore = curseforgeResult.HasMore || curseforgeResult.ModItems.Count >= fetchCount;
                     }
                 }
             }
@@ -389,7 +891,7 @@ public partial class ModSearchViewModel : ObservableObject
                         Log.Info($"[ModSearchViewModel] 收集了 {nexusModsResult.ModItems.Count} 个 NexusMods 模组");
 
                         // NexusMods 返回了满页（fetchCount），可能还有更多结果
-                        nexusModsHasMore = nexusModsResult.ModItems.Count >= fetchCount;
+                        nexusModsHasMore = nexusModsResult.HasMore || nexusModsResult.ModItems.Count >= fetchCount;
                     }
                 }
             }
@@ -429,24 +931,7 @@ public partial class ModSearchViewModel : ObservableObject
             }
 
             // 更新类型列表
-            if (ModTypes.Count <= 1 && allCategories.Count > 0)
-            {
-                var previousSelection = SelectedModType;
-                ModTypes.Clear();
-                ModTypes.Add("全部");
-                foreach (var category in allCategories.OrderBy(c => c))
-                {
-                    ModTypes.Add(category);
-                }
-                if (ModTypes.Contains(previousSelection))
-                {
-                    SelectedModType = previousSelection;
-                }
-                else
-                {
-                    SelectedModType = "全部";
-                }
-            }
+            UpdateModTypes(allCategories);
 
             // 更新分页状态（任一来源有更多结果就显示下一页）
             if (addedCount == 0)
@@ -493,6 +978,7 @@ public partial class ModSearchViewModel : ObservableObject
     {
         public List<ModSearchItem> ModItems { get; set; } = new();
         public HashSet<string> Categories { get; set; } = new();
+        public bool HasMore { get; set; }
     }
 
     /// <summary>
@@ -505,21 +991,16 @@ public partial class ModSearchViewModel : ObservableObject
         try
         {
             Log.Info($"[ModSearchViewModel] 从 Curseforge 搜索热门模组（跳过{skip}个）");
-            var curseforgeMods = await CurseforgeApiService.SearchModsAsync("", pageSize: pageSize, index: skip);
+            var filteredPage = Math.Max(1, (skip / Math.Max(pageSize, 1)) + 1);
+            var fetchResult = await FetchCurseforgeModsForCurrentTypeAsync(string.Empty, filteredPage, pageSize);
+            var curseforgeMods = fetchResult.Items;
+            result.HasMore = fetchResult.HasMore;
+            result.Categories = fetchResult.Categories;
 
             if (curseforgeMods != null && curseforgeMods.Count > 0)
             {
                 foreach (var mod in curseforgeMods)
                 {
-                    // 收集类型
-                    if (mod.Categories != null)
-                    {
-                        foreach (var category in mod.Categories)
-                        {
-                            result.Categories.Add(category.Name);
-                        }
-                    }
-
                     // 解析更新时间
                     string lastUpdateTime = "未知";
                     if (!string.IsNullOrEmpty(mod.DateModified))
@@ -581,12 +1062,10 @@ public partial class ModSearchViewModel : ObservableObject
             // 使用空字符串获取热门模组（按下载量降序），或使用指定关键词搜索
             var query = searchTerm ?? "";
             Log.Info($"[ModSearchViewModel] 从 NexusMods 搜索: '{query}' (第{page}页, 每页{pageSize}个)");
-            var nexusMods = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(
-                query: query,
-                page: page,
-                pageSize: pageSize,
-                useCache: AppConfig.GetSettings().EnableNexusModsSearchCache
-            );
+            var fetchResult = await FetchNexusModsForCurrentTypeAsync(query, page, pageSize, AppConfig.GetSettings().EnableNexusModsSearchCache);
+            var nexusMods = fetchResult.Items;
+            result.HasMore = fetchResult.HasMore;
+            result.Categories = fetchResult.Categories;
 
             if (nexusMods != null && nexusMods.Count > 0)
             {
@@ -598,8 +1077,8 @@ public partial class ModSearchViewModel : ObservableObject
                         continue;
                     }
 
-                    // NexusMods 使用自定义分类
-                    result.Categories.Add("NexusMods");
+                    var category = string.IsNullOrWhiteSpace(mod.Category) ? "未分类" : mod.Category;
+                    var supportedGameVersions = await GetNexusSupportedGameVersionsAsync(mod.ModId);
 
                     // 解析更新时间（从 updatedAt ISO 8601 日期时间）
                     string lastUpdateTime = "未知";
@@ -627,8 +1106,8 @@ public partial class ModSearchViewModel : ObservableObject
                         DownloadCount = mod.Downloads,  // 使用 GraphQL 返回的下载量
                         LastUpdateTime = lastUpdateTime,
                         Source = "NexusMods",
-                        Category = mod.Category ?? "未分类",
-                        SupportedGameVersions = new List<string>(),
+                        Category = category,
+                        SupportedGameVersions = supportedGameVersions,
                         Rating = mod.Endorsements,  // 使用推荐数作为评分
                         Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
                     };
@@ -662,15 +1141,22 @@ public partial class ModSearchViewModel : ObservableObject
     [RelayCommand]
     private async Task SearchModsAsync()
     {
+        await PerformSearchWithConfigCheckAsync();
+    }
+
+    private async Task SearchModsCoreAsync(bool resetPage)
+    {
         // 如果搜索词为空，加载热门模组
-        if (string.IsNullOrWhiteSpace(SearchName))
+        if (string.IsNullOrWhiteSpace(_activeSearchName))
         {
+            if (resetPage)
+                CurrentPage = 1;
             await LoadPopularModsAsync();
             return;
         }
 
-        // 重置到第一页
-        CurrentPage = 1;
+        if (resetPage)
+            CurrentPage = 1;
 
         IsLoading = true;
         StatusMessage = "正在搜索 MOD...";
@@ -680,29 +1166,29 @@ public partial class ModSearchViewModel : ObservableObject
             ModList.Clear();
 
             // 检测是否为ModID搜索（纯数字）
-            bool isModIdSearch = SearchName.Trim().All(char.IsDigit);
+            bool isModIdSearch = _activeSearchName.All(char.IsDigit);
 
             if (isModIdSearch)
             {
-                Log.Info($"[ModSearchViewModel] 检测到ModID搜索: {SearchName}");
-                StatusMessage = $"正在搜索 ModID: {SearchName}...";
+                Log.Info($"[ModSearchViewModel] 检测到ModID搜索: {_activeSearchName}");
+                StatusMessage = $"正在搜索 ModID: {_activeSearchName}...";
 
                 // ModID搜索：直接获取指定Mod
                 if (SelectedSource == "全部" || SelectedSource == "Curseforge")
                 {
-                    await SearchModByIdAsync(int.Parse(SearchName.Trim()));
+                    await SearchModByIdAsync(int.Parse(_activeSearchName));
                 }
 
                 if (SelectedSource == "全部" || SelectedSource == "NexusMods")
                 {
-                    await SearchNexusModByIdAsync(SearchName.Trim());
+                    await SearchNexusModByIdAsync(_activeSearchName);
                 }
             }
             else
             {
                 // 普通关键词搜索 - 收集所有结果后统一排序
                 var allSearchResults = new List<ModSearchItem>();
-                int fetchCount = PageSize * 2;  // 获取双倍数据量
+                int fetchCount = SelectedSource == "全部" ? PageSize * 2 : PageSize;  // 全部来源时保留交错排序的冗余抓取
 
                 if (SelectedSource == "全部" || SelectedSource == "Curseforge")
                 {
@@ -715,6 +1201,8 @@ public partial class ModSearchViewModel : ObservableObject
                     var nexusResults = await SearchFromNexusModsAsyncInternal(fetchCount);
                     allSearchResults.AddRange(nexusResults);
                 }
+
+                UpdateModTypes(allSearchResults.Select(item => item.Category));
 
                 // ✅ 分组排序策略：两个来源各自排序，然后交错合并
                 var sortedCurseforge = allSearchResults.Where(m => m.Source == "Curseforge").OrderByDescending(m => m.DownloadCount).ToList();
@@ -792,6 +1280,7 @@ public partial class ModSearchViewModel : ObservableObject
         {
             // 如果是热门模组，使用空字符串搜索
             var searchTerm = isPopular ? "" : SearchName;
+            searchTerm = isPopular ? "" : _activeSearchName;
             Log.Info($"[ModSearchViewModel] 调用 Curseforge API 搜索: '{searchTerm}'（第{CurrentPage}页）");
 
             // 计算分页参数
@@ -950,10 +1439,8 @@ public partial class ModSearchViewModel : ObservableObject
             var searchTerm = isPopular ? "" : SearchName;
             Log.Info($"[ModSearchViewModel] [内部] 调用 Curseforge API 搜索: '{searchTerm}'（第{CurrentPage}页，获取{fetchCount}个）");
 
-            // 计算分页参数
-            int skip = (CurrentPage - 1) * PageSize;
-
-            var curseforgeMods = await CurseforgeApiService.SearchModsAsync(searchTerm, pageSize: fetchCount, index: skip);
+            var fetchResult = await FetchCurseforgeModsForCurrentTypeAsync(searchTerm, CurrentPage, fetchCount);
+            var curseforgeMods = fetchResult.Items;
             Log.Info($"[ModSearchViewModel] [内部] Curseforge API 返回 {curseforgeMods?.Count ?? 0} 个结果");
 
             if (curseforgeMods == null || curseforgeMods.Count == 0)
@@ -964,13 +1451,6 @@ public partial class ModSearchViewModel : ObservableObject
 
             foreach (var mod in curseforgeMods)
             {
-                // 类型筛选
-                if (SelectedModType != "全部" &&
-                    (mod.Categories == null || !mod.Categories.Any(c => c.Name == SelectedModType)))
-                {
-                    continue;
-                }
-
                 // 解析更新时间
                 string lastUpdateTime = "未知";
                 if (!string.IsNullOrEmpty(mod.DateModified))
@@ -1019,7 +1499,7 @@ public partial class ModSearchViewModel : ObservableObject
     {
         try
         {
-            var searchTerm = SearchName;
+            var searchTerm = _activeSearchName;
             Log.Info($"[ModSearchViewModel] 从 NexusMods 搜索: '{searchTerm}' (第{CurrentPage}页)");
 
             var nexusMods = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(
@@ -1032,9 +1512,16 @@ public partial class ModSearchViewModel : ObservableObject
             if (nexusMods != null && nexusMods.Count > 0)
             {
                 var addedCount = 0;
+                var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var mod in nexusMods)
                 {
+                    var category = string.IsNullOrWhiteSpace(mod.Category) ? "未分类" : mod.Category;
+                    categories.Add(category);
+
+                    if (SelectedModType != "全部" && !string.Equals(category, SelectedModType, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
                     // 解析更新时间（从 updatedAt ISO 8601 日期时间）
                     string lastUpdateTime = "未知";
                     if (mod.UpdatedAt != default)
@@ -1061,7 +1548,7 @@ public partial class ModSearchViewModel : ObservableObject
                         DownloadCount = mod.Downloads,  // 使用 GraphQL 返回的下载量
                         LastUpdateTime = lastUpdateTime,
                         Source = "NexusMods",
-                        Category = mod.Category ?? "未分类",
+                        Category = category,
                         SupportedGameVersions = new List<string>(),
                         Rating = mod.Endorsements,  // 使用推荐数作为评分
                         Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
@@ -1074,6 +1561,8 @@ public partial class ModSearchViewModel : ObservableObject
 
                     addedCount++;
                 }
+
+                UpdateModTypes(categories);
 
                 Log.Info($"[ModSearchViewModel] 从 NexusMods 搜索添加了 {addedCount} 个模组");
 
@@ -1122,20 +1611,21 @@ public partial class ModSearchViewModel : ObservableObject
 
         try
         {
-            var searchTerm = SearchName;
+            var searchTerm = _activeSearchName;
             Log.Info($"[ModSearchViewModel] [内部] 从 NexusMods 搜索: '{searchTerm}' (第{CurrentPage}页，获取{fetchCount}个)");
 
-            var nexusMods = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(
-                query: searchTerm,
-                page: CurrentPage,
-                pageSize: fetchCount,
-                useCache: false
-            );
+            var fetchResult = await FetchNexusModsForCurrentTypeAsync(searchTerm, CurrentPage, fetchCount, false);
+            var nexusMods = fetchResult.Items;
 
             if (nexusMods != null && nexusMods.Count > 0)
             {
+                var categories = fetchResult.Categories;
+
                 foreach (var mod in nexusMods)
                 {
+                    var category = string.IsNullOrWhiteSpace(mod.Category) ? "未分类" : mod.Category;
+                    var supportedGameVersions = await GetNexusSupportedGameVersionsAsync(mod.ModId);
+
                     // 解析更新时间（从 updatedAt ISO 8601 日期时间）
                     string lastUpdateTime = "未知";
                     if (mod.UpdatedAt != default)
@@ -1162,14 +1652,16 @@ public partial class ModSearchViewModel : ObservableObject
                         DownloadCount = mod.Downloads,
                         LastUpdateTime = lastUpdateTime,
                         Source = "NexusMods",
-                        Category = mod.Category ?? "未分类",
-                        SupportedGameVersions = new List<string>(),
+                        Category = category,
+                        SupportedGameVersions = supportedGameVersions,
                         Rating = mod.Endorsements,
                         Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
                     };
 
                     results.Add(searchItem);
                 }
+
+                UpdateModTypes(categories);
 
                 Log.Info($"[ModSearchViewModel] [内部] 从 NexusMods 获取 {results.Count} 个模组");
             }
@@ -1332,6 +1824,7 @@ public partial class ModSearchViewModel : ObservableObject
     private async Task ResetSearchAsync()
     {
         SearchName = "";
+        _activeSearchName = string.Empty;
         SelectedGameVersion = "全部";
         SearchGameVersion = "全部";
         SelectedSource = "全部";
@@ -1432,38 +1925,30 @@ public partial class ModSearchViewModel : ObservableObject
                 return;
             }
 
-            // 使用搜索 API 查找指定 ModID
-            var searchResults = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.SearchModsAsync(
-                query: modIdStr,
-                useCache: false
-            );
+            var mod = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.GetModDetailsWithSearchFallbackAsync(modId);
 
-            if (searchResults != null && searchResults.Count > 0)
+            if (mod != null)
             {
-                // 查找完全匹配的 ModID
-                var mod = searchResults.FirstOrDefault(m => m.ModId == modId);
-                if (mod == null)
-                {
-                    Log.Warn($"[ModSearchViewModel] 未找到 ModID 为 {modId} 的模组");
-                    StatusMessage = $"未找到 ModID 为 {modId} 的模组";
-                    return;
-                }
+                var lastUpdateTime = mod.UpdatedAt != default
+                    ? mod.UpdatedAt.ToString("yyyy-MM-dd")
+                    : "未知";
 
-                // 转换为 ModSearchItem
+                UpdateModTypes(new[] { string.IsNullOrWhiteSpace(mod.Category) ? "未分类" : mod.Category });
+
                 var searchItem = new ModSearchItem
                 {
                     Id = $"nexus-{mod.ModId}",
                     Name = mod.Name,
                     Summary = mod.Summary ?? "暂无描述",
-                    Description = mod.Summary ?? "暂无描述",
-                    IconUrl = mod.PictureUrl ?? "",
-                    Author = mod.Author,
-                    DownloadCount = 0,
-                    LastUpdateTime = "未知",
+                    Description = mod.Description ?? mod.Summary ?? "暂无描述",
+                    IconUrl = mod.PictureUrl ?? mod.PictureUrlLegacy ?? string.Empty,
+                    Author = string.IsNullOrWhiteSpace(mod.Author) ? "未知" : mod.Author,
+                    DownloadCount = mod.Downloads,
+                    LastUpdateTime = lastUpdateTime,
                     Source = "NexusMods",
-                    Category = "NexusMods",
-                    SupportedGameVersions = new List<string>(),
-                    Rating = 0,
+                    Category = string.IsNullOrWhiteSpace(mod.Category) ? "未分类" : mod.Category,
+                    SupportedGameVersions = await GetNexusSupportedGameVersionsAsync(mod.ModId),
+                    Rating = mod.Endorsements,
                     Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
                 };
 
@@ -1477,7 +1962,7 @@ public partial class ModSearchViewModel : ObservableObject
             }
             else
             {
-                Log.Warn($"[ModSearchViewModel] NexusMods 搜索未返回结果");
+                Log.Warn($"[ModSearchViewModel] NexusMods 未找到 ModID 为 {modId} 的模组");
                 StatusMessage = $"未找到 ModID 为 {modId} 的模组";
             }
         }
@@ -1532,6 +2017,11 @@ public partial class ModSearchViewModel : ObservableObject
                 }
             }
 
+            if (mainWindow.RightContentScrollViewer != null)
+            {
+                mainViewModel.DownloadModsScrollOffset = mainWindow.RightContentScrollViewer.VerticalOffset;
+            }
+
             // 设置选中的 MOD
             mainViewModel.SelectedModSearch = mod;
             mainViewModel.ModDetailsBackPage = PageType.Download;
@@ -1559,7 +2049,7 @@ public partial class ModSearchViewModel : ObservableObject
         if (HasNextPage && !IsLoading)
         {
             CurrentPage++;
-            await LoadPopularModsAsync();
+            await ReloadCurrentResultsAsync(resetPage: false);
         }
     }
 
@@ -1572,7 +2062,7 @@ public partial class ModSearchViewModel : ObservableObject
         if (HasPreviousPage && !IsLoading)
         {
             CurrentPage--;
-            await LoadPopularModsAsync();
+            await ReloadCurrentResultsAsync(resetPage: false);
         }
     }
 
@@ -1585,7 +2075,7 @@ public partial class ModSearchViewModel : ObservableObject
         if (pageNumber >= 1 && pageNumber <= TotalPages && pageNumber != CurrentPage && !IsLoading)
         {
             CurrentPage = pageNumber;
-            await LoadPopularModsAsync();
+            await ReloadCurrentResultsAsync(resetPage: false);
         }
     }
 
