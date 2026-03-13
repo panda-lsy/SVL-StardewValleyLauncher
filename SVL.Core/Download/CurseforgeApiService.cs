@@ -908,7 +908,7 @@ public static class CurseforgeApiService
                 return cachedId;
             }
 
-            var url = $"https://api.curseforge.com/v1/categories?gameId={gameId}";
+            var url = $"https://api.curse.tools/v1/cf/categories?gameId={gameId}";
             var response = await _httpClient.GetAsync(url);
 
             if (!response.IsSuccessStatusCode)
