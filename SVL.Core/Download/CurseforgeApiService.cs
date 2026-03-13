@@ -5,7 +5,6 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
-using SVL.Core.Config;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Core.Utils;
@@ -17,38 +16,7 @@ namespace SVL.Core.Download;
 /// </summary>
 public static class CurseforgeApiService
 {
-    private static string _apiKey = string.Empty;
     private static readonly HttpClient _httpClient = new();
-
-    public static bool HasApiKey
-    {
-        get
-        {
-            EnsureApiKeyLoaded();
-            return !string.IsNullOrWhiteSpace(_apiKey);
-        }
-    }
-
-    private static void EnsureApiKeyLoaded()
-    {
-        if (!string.IsNullOrWhiteSpace(_apiKey))
-            return;
-
-        try
-        {
-            var settings = AppConfig.GetSettings();
-            var keyFromConfig = settings?.CurseforgeApiKey;
-            if (!string.IsNullOrWhiteSpace(keyFromConfig))
-            {
-                SetApiKey(keyFromConfig);
-                Log.Info("[Curseforge] 已从配置自动加载 API Key");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("[Curseforge] 自动加载 API Key 失败", ex);
-        }
-    }
 
     static CurseforgeApiService()
     {
@@ -56,76 +24,9 @@ public static class CurseforgeApiService
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
-    /// <summary>
-    /// 设置 API Key
-    /// </summary>
-    public static void SetApiKey(string apiKey)
+    // 兼容旧调用链：已不再使用 API Key，保留空实现避免大范围改签名。
+    private static void EnsureApiKeyLoaded()
     {
-        // 去除前后空格（Curseforge API 对空格敏感）
-        _apiKey = apiKey?.Trim();
-
-        // 移除旧的 x-api-key 头（如果存在）
-        if (_httpClient.DefaultRequestHeaders.Contains("x-api-key"))
-        {
-            _httpClient.DefaultRequestHeaders.Remove("x-api-key");
-        }
-
-        // 添加新的 x-api-key 头（使用 Trim 后的值）
-        if (!string.IsNullOrWhiteSpace(_apiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Add("x-api-key", _apiKey);
-        }
-
-        Log.Info("[Curseforge] API Key 已更新");
-    }
-
-    /// <summary>
-    /// 获取当前配置的 API Key
-    /// </summary>
-    public static string GetApiKey()
-    {
-        EnsureApiKeyLoaded();
-        return _apiKey;
-    }
-
-    /// <summary>
-    /// 测试 API Key 是否有效
-    /// </summary>
-    public static async Task<bool> TestApiKeyAsync(string apiKey)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                return false;
-            }
-
-            // 临时设置 API Key
-            SetApiKey(apiKey);
-
-            // 使用获取游戏列表端点来验证 API Key
-            const int gameId = 669; // Stardew Valley 在 Curseforge 上的游戏 ID
-            var url = $"https://api.curseforge.com/v1/games?gameId={gameId}";
-
-            var response = await _httpClient.GetAsync(url);
-
-            if (response.IsSuccessStatusCode)
-            {
-                Log.Info("[Curseforge] API Key 验证成功");
-                return true;
-            }
-            else
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                Log.Warn($"[Curseforge] API Key 验证失败: {response.StatusCode}, Content: {content}");
-                return false;
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "[Curseforge] API Key 验证失败");
-            return false;
-        }
     }
 
     /// <summary>
@@ -142,7 +43,7 @@ public static class CurseforgeApiService
             // SMAPI 的 Curseforge 项目 ID（星露谷 Modding API）
             const int projectId = 898372;
 
-            var url = $"https://api.curseforge.com/v1/mods/{projectId}/files?index={index}&pageSize={pageSize}";
+            var url = $"https://api.curse.tools/v1/cf/mods/{projectId}/files?index={index}&pageSize={pageSize}";
             Log.Info($"[Curseforge] 获取 SMAPI 文件列表: {url}");
 
             var response = await _httpClient.GetAsync(url);
@@ -184,14 +85,10 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
+            var url = $"https://api.curse.tools/v1/cf/mods/{modId}/files/{fileId}/download-url";
+            Log.Info($"[Curseforge] 获取文件下载地址: modId={modId}, fileId={fileId}");
 
-            var hasApiKey = !string.IsNullOrWhiteSpace(_apiKey);
-            var url = $"https://api.curseforge.com/v1/mods/{modId}/files/{fileId}/download-url";
-            Log.Info($"[Curseforge] 获取文件下载地址: modId={modId}, fileId={fileId}, HasApiKey={hasApiKey}");
-
-            // 打印请求头（脱敏 API Key）
-            Log.Debug($"[Curseforge] 请求头: User-Agent={_httpClient.DefaultRequestHeaders.UserAgent}, Accept={_httpClient.DefaultRequestHeaders.Accept}, HasXApiKeyKey={_httpClient.DefaultRequestHeaders.Contains("x-api-key")}");
+            Log.Debug($"[Curseforge] 请求头: User-Agent={_httpClient.DefaultRequestHeaders.UserAgent}, Accept={_httpClient.DefaultRequestHeaders.Accept}");
 
             var response = await _httpClient.GetAsync(url);
 
@@ -201,7 +98,7 @@ public static class CurseforgeApiService
             {
                 // 尝试读取响应内容以获取更多错误信息
                 var errorContent = await response.Content.ReadAsStringAsync();
-                Log.Warn($"[Curseforge] API 返回 403 (Forbidden), HasApiKey={hasApiKey}, ResponseContent: {errorContent.Substring(0, Math.Min(500, errorContent.Length))}");
+                Log.Warn($"[Curseforge] API 返回 403 (Forbidden), ResponseContent: {errorContent.Substring(0, Math.Min(500, errorContent.Length))}");
                 return null;
             }
 
@@ -323,7 +220,7 @@ public static class CurseforgeApiService
         {
             EnsureApiKeyLoaded();
 
-            var url = $"https://api.curseforge.com/v1/mods/{modId}";
+            var url = $"https://api.curse.tools/v1/cf/mods/{modId}";
             Log.Info($"[Curseforge] 获取 Mod 详情: {url}");
 
             var response = await _httpClient.GetAsync(url);
@@ -355,7 +252,7 @@ public static class CurseforgeApiService
         {
             EnsureApiKeyLoaded();
 
-            var url = $"https://api.curseforge.com/v1/mods/{modId}/files?index={index}&pageSize={pageSize}";
+            var url = $"https://api.curse.tools/v1/cf/mods/{modId}/files?index={index}&pageSize={pageSize}";
             Log.Info($"[Curseforge] 获取 Mod 文件列表: {url}");
 
             var response = await _httpClient.GetAsync(url);
@@ -713,7 +610,7 @@ public static class CurseforgeApiService
                 return cached;
             }
 
-            var url = "https://api.curseforge.com/v1/mods/featured";
+            var url = "https://api.curse.tools/v1/cf/mods/featured";
             Log.Info($"[Curseforge] 获取特色模组 URL: {url}");
 
             // 构建请求体 - 参考官方 API 文档
@@ -790,7 +687,7 @@ public static class CurseforgeApiService
 
             // 构建搜索 URL
             // 注意：Curseforge API 的空搜索需要特殊处理
-            var url = $"https://api.curseforge.com/v1/mods/search?gameId={gameId}&pageSize={pageSize}&index={index}&sortField=2&sortOrder=desc";
+            var url = $"https://api.curse.tools/v1/cf/mods/search?gameId={gameId}&pageSize={pageSize}&index={index}&sortField=2&sortOrder=desc";
 
             // 只有在 searchQuery 不为空时才添加 searchFilter 参数
             if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -957,7 +854,7 @@ public static class CurseforgeApiService
                 return cached ?? new List<CurseforgeModSearchItem>();
             }
 
-            var url = $"https://api.curseforge.com/v1/mods/search?gameId={gameId}&pageSize={pageSize}&index={index}&sortField=2&sortOrder=desc";
+            var url = $"https://api.curse.tools/v1/cf/mods/search?gameId={gameId}&pageSize={pageSize}&index={index}&sortField=2&sortOrder=desc";
 
             if (!string.IsNullOrWhiteSpace(searchQuery))
             {

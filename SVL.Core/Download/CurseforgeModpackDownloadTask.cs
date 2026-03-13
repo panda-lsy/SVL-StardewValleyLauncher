@@ -158,18 +158,13 @@ public class CurseforgeModpackDownloadTask : DownloadTask
 
             Log.Info($"[CurseforgeModpackDownload] 开始下载整合包: {_modpackName} (ProjectId: {_projectId}, FileId: {_fileId})");
 
-            // 1. 检查 API Key
-            var apiKey = CurseforgeApiService.GetApiKey();
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                throw new Exception("Curseforge API Key 未配置，请在设置中配置 API Key");
-            }
+            var apiKey = string.Empty;
 
-            // 2. 通过 API 获取真实下载链接
+            // 1. 通过 API 获取真实下载链接
             StatusMessage = "正在获取下载链接...";
             Progress = 5;
 
-            var downloadUrl = await GetDownloadUrlFromApiAsync(apiKey);
+            var downloadUrl = await GetDownloadUrlFromApiAsync(string.Empty);
             if (string.IsNullOrWhiteSpace(downloadUrl))
             {
                 throw new Exception("无法从 Curseforge API 获取下载链接");
@@ -182,7 +177,7 @@ public class CurseforgeModpackDownloadTask : DownloadTask
             _versionRootPath = Path.GetDirectoryName(_targetModsPath) ?? _targetModsPath;
             Log.Info($"[CurseforgeModpackDownload] 版本根路径: {_versionRootPath}");
 
-            // 3. 检查版本名是否重复（不创建目录，让 SMAPI 负责）
+            // 2. 检查版本名是否重复（不创建目录，让 SMAPI 负责）
             if (Directory.Exists(_versionRootPath))
             {
                 Log.Error($"[CurseforgeModpackDownload] 版本目录已存在: {_versionRootPath}");
@@ -194,7 +189,7 @@ public class CurseforgeModpackDownloadTask : DownloadTask
             _versionDirectoryCreated = true;
             Log.Info($"[CurseforgeModpackDownload] 版本名检查通过，目录将由 SMAPI 安装任务创建");
 
-            // 4. 使用缓存服务下载整合包 ZIP 文件
+            // 3. 使用缓存服务下载整合包 ZIP 文件
             StatusMessage = $"正在下载整合包...";
 
             var cacheKey = DownloadCacheService.GenerateCacheKey("modpack", $"{_projectId}_{_fileId}", _fileName);
@@ -849,21 +844,6 @@ public class CurseforgeModpackDownloadTask : DownloadTask
     {
         using var httpClient = new HttpClient();
         httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
-
-        // 如果是 Curseforge URL，添加 API Key（与 ModDownloadTask 保持一致）
-        if (downloadUrl.Contains("curseforge.com"))
-        {
-            var apiKey = CurseforgeApiService.GetApiKey();
-            if (!string.IsNullOrEmpty(apiKey))
-            {
-                httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
-                Log.Info("[CurseforgeModpackDownload] 已添加 Curseforge API Key 到下载请求");
-            }
-            else
-            {
-                Log.Warn("[CurseforgeModpackDownload] Curseforge API Key 未配置，下载可能失败");
-            }
-        }
 
         httpClient.Timeout = TimeSpan.FromMinutes(30);
 

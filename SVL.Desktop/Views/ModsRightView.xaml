@@ -5,10 +5,14 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:viewModel="clr-namespace:SVL.Desktop.ViewModels"
              xmlns:controls="clr-namespace:SVL.Desktop.Controls"
+             xmlns:converters="clr-namespace:SVL.Desktop.Converters"
              mc:Ignorable="d"
              d:DesignHeight="450"
              d:DesignWidth="800"
              d:DataContext="{d:DesignInstance Type=viewModel:ModsRightViewModel}">
+    <UserControl.Resources>
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel>
             <TextBlock Text="{Binding Status}"
@@ -22,6 +26,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="名称"
                                    FontSize="13"
@@ -34,6 +39,26 @@
                                    Foreground="{DynamicResource ColorBrush1}"
                                    Grid.Column="1"
                                    TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="2"
+                                    Orientation="Horizontal"
+                                    Margin="12,0,0,0"
+                                    Visibility="{Binding HasLocalization, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Button Content="中"
+                                    Command="{Binding ShowLocalizedTextCommand}"
+                                    Padding="8,2"
+                                    Margin="0,0,4,0"
+                                    FontSize="11"
+                                    BorderThickness="0"
+                                    Background="{DynamicResource ColorBrush2}"
+                                    Foreground="White"/>
+                            <Button Content="EN"
+                                    Command="{Binding ShowSourceTextCommand}"
+                                    Padding="8,2"
+                                    FontSize="11"
+                                    BorderThickness="0"
+                                    Background="{DynamicResource ColorBrush5}"
+                                    Foreground="{DynamicResource ColorBrush1}"/>
+                        </StackPanel>
                     </Grid>
 
                     <Grid Margin="0,0,0,8">

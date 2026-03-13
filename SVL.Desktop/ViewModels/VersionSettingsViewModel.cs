@@ -7,10 +7,12 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Localization;
 using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Core.Download;
@@ -709,6 +711,13 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [ObservableProperty]
     private string _updateStatus = "点击检查更新";
 
+    // 汉化检查状态
+    [ObservableProperty]
+    private bool _isCheckingLocalization = false;
+
+    [ObservableProperty]
+    private string _localizationStatus = "点击检测汉化";
+
     // MOD 管理器
     private IModManager _modManager;
 
@@ -996,6 +1005,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             IsCheckingUpdates = true;
             UpdateStatus = "正在检查更新...";
 
+            await EnsureUpdateSourcesFromUniqueIdAsync(Mods.ToList());
+
             await _modManager.CheckModUpdatesAsync(Mods.ToList());
 
             UpdateModsCount();
@@ -1016,6 +1027,337 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             IsCheckingUpdates = false;
         }
+    }
+
+    /// <summary>
+    /// 检测 Mod 汉化（仅检查，不下载）
+    /// </summary>
+    [RelayCommand]
+    private async Task CheckModLocalizationAsync()
+    {
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            LocalizationStatus = "备份栏不执行汉化检测";
+            return;
+        }
+
+        if (SelectedInstance == null || Mods.Count == 0)
+        {
+            LocalizationStatus = "请先选择实例并加载 MOD";
+            return;
+        }
+
+        try
+        {
+            IsCheckingLocalization = true;
+            LocalizationStatus = "正在检测汉化...";
+            SVL.Core.Logging.Log.Info($"[VersionSettings] 开始检测汉化，共 {Mods.Count} 个 Mod");
+
+            int foundCount = 0;
+            int checkedCount = 0;
+            int appliedCount = 0;
+            int outdatedCount = 0;
+
+            // 获取所有可能带有来源信息的 Mod（包括 svl.source.json、UpdateKeys、ProjectId、UniqueId）
+            var modsWithSource = Mods.Where(HasAnySourceForLocalization).ToList();
+            SVL.Core.Logging.Log.Info($"[VersionSettings] 找到 {modsWithSource.Count} 个可能带有来源信息的 Mod");
+
+            var autoApplyList = new List<(SdVMod Mod, CommunityLocalizationEntry Entry)>();
+
+            foreach (var mod in modsWithSource)
+            {
+                var sourceInfo = TryGetLocalizationSourceInfo(mod);
+                CommunityLocalizationEntry? localization = null;
+
+                if (sourceInfo != null)
+                {
+                    checkedCount++;
+                    SVL.Core.Logging.Log.Debug($"[VersionSettings] 正在检测 Mod '{mod.Name}' 的汉化 ({sourceInfo.Value.Platform}/{sourceInfo.Value.ProjectId})...");
+                    localization = await CommunityLocalizationService.GetAsync("mod", sourceInfo.Value.Platform, sourceInfo.Value.ProjectId, forceRefresh: false);
+                }
+                else if (!string.IsNullOrWhiteSpace(mod.UniqueId))
+                {
+                    checkedCount++;
+                    SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 使用 UniqueID 回退检测汉化 ({mod.UniqueId})...");
+                    localization = await CommunityLocalizationService.GetByUniqueIdAsync(mod.UniqueId, forceRefresh: false);
+                }
+                else
+                {
+                    SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 无法获取来源信息，跳过");
+                    continue;
+                }
+
+                if (localization != null)
+                {
+                    foundCount++;
+                    SVL.Core.Logging.Log.Info($"[VersionSettings] Mod '{mod.Name}' 找到汉化: {localization.Name?.ZhCn ?? "N/A"}");
+
+                    if (ShouldApplyLocalization(mod, localization))
+                    {
+                        outdatedCount++;
+                        autoApplyList.Add((mod, localization));
+                        mod.IsSelected = true;
+                    }
+                }
+                else
+                {
+                    SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 未找到汉化");
+                }
+            }
+
+            foreach (var item in autoApplyList)
+            {
+                if (await ApplyLocalizationEntryToModAsync(item.Mod, item.Entry, forceRefresh: true))
+                {
+                    appliedCount++;
+                }
+            }
+
+            if (autoApplyList.Count > 0)
+            {
+                UpdateSelectionState();
+            }
+
+            LocalizationStatus = $"检测完成 - {foundCount}/{checkedCount} 个有汉化，{outdatedCount} 个可更新，已应用 {appliedCount} 个";
+            SVL.Core.Logging.Log.Info($"[VersionSettings] 汉化检测完成 - {foundCount}/{checkedCount} 个有汉化，{outdatedCount} 个可更新，已应用 {appliedCount} 个");
+
+            var summary =
+                $"汉化检测完成\n\n" +
+                $"已检查：{checkedCount} 个\n" +
+                $"检测到汉化：{foundCount} 个\n" +
+                $"可更新：{outdatedCount} 个\n" +
+                $"已应用：{appliedCount} 个";
+
+            if (appliedCount > 0)
+                SvlMessageBox.Success(summary, "检测汉化");
+            else
+                SvlMessageBox.Info(summary, "检测汉化");
+        }
+        catch (Exception ex)
+        {
+            LocalizationStatus = "检测汉化失败";
+            SVL.Core.Logging.Log.Error(ex, "[VersionSettings] 检测 MOD 汉化失败");
+        }
+        finally
+        {
+            IsCheckingLocalization = false;
+        }
+    }
+
+    /// <summary>
+    /// 检查 Mod 是否有任何可用于本地化的来源信息
+    /// </summary>
+    private static bool HasAnySourceForLocalization(SdVMod mod)
+    {
+        // 检查 svl.source.json
+        if (HasSourceCredentialForLocalization(mod))
+            return true;
+
+        // 检查 UpdateKeys
+        if (mod.Manifest?.UpdateKeys?.Count > 0)
+        {
+            foreach (var updateKey in mod.Manifest.UpdateKeys)
+            {
+                var parts = updateKey.Split(new[] { ':' }, 2);
+                if (parts.Length == 2)
+                {
+                    var source = parts[0].ToLowerInvariant();
+                    if (source == "curseforge" || source == "nexus")
+                        return true;
+                }
+            }
+        }
+
+        // 检查 ProjectId
+        if (!string.IsNullOrWhiteSpace(mod.CurseforgeProjectId) || !string.IsNullOrWhiteSpace(mod.NexusModsProjectId))
+            return true;
+
+        // 检查 UniqueId 回退
+        if (!string.IsNullOrWhiteSpace(mod.UniqueId))
+            return true;
+
+        return false;
+    }
+
+    private static bool ShouldApplyLocalization(SdVMod mod, CommunityLocalizationEntry localization)
+    {
+        if (localization == null)
+            return false;
+
+        var remoteUpdatedAt = ParseUpdatedAt(localization.Meta?.UpdatedAt);
+        var localUpdatedAt = ParseUpdatedAt(mod.LocalizationUpdatedAt);
+
+        // 本地无汉化，直接应用
+        if (string.IsNullOrWhiteSpace(mod.LocalizedNameZhCn) && string.IsNullOrWhiteSpace(mod.LocalizedDescriptionZhCn))
+            return true;
+
+        // 远端无时间戳时，仅在本地缺少文本时应用
+        if (!remoteUpdatedAt.HasValue)
+        {
+            return string.IsNullOrWhiteSpace(mod.LocalizedNameZhCn) || string.IsNullOrWhiteSpace(mod.LocalizedDescriptionZhCn);
+        }
+
+        // 本地无时间戳，远端有时间戳，视为可更新
+        if (!localUpdatedAt.HasValue)
+            return true;
+
+        return remoteUpdatedAt.Value > localUpdatedAt.Value;
+    }
+
+    private static DateTimeOffset? ParseUpdatedAt(string? updatedAt)
+    {
+        if (string.IsNullOrWhiteSpace(updatedAt))
+            return null;
+
+        if (DateTimeOffset.TryParse(updatedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+            return parsed;
+
+        return null;
+    }
+
+    private async Task<bool> ApplyLocalizationEntryToModAsync(SdVMod mod, CommunityLocalizationEntry localization, bool forceRefresh)
+    {
+        try
+        {
+            var platform = CommunityLocalizationService.NormalizePlatform(localization.Platform);
+            var id = CommunityLocalizationService.NormalizeId(localization.Id);
+            if (string.IsNullOrWhiteSpace(platform) || string.IsNullOrWhiteSpace(id))
+                return false;
+
+            // 强制刷新确保更新判断后拿到最新内容
+            var latest = forceRefresh
+                ? await CommunityLocalizationService.GetAsync("mod", platform, id, forceRefresh: true)
+                  ?? (string.IsNullOrWhiteSpace(mod.UniqueId)
+                        ? null
+                        : await CommunityLocalizationService.GetByUniqueIdAsync(mod.UniqueId, forceRefresh: true))
+                : localization;
+
+            if (latest == null)
+                return false;
+
+            var credential = TryReadSourceCredential(mod) ?? new SvlSourceMetadata();
+            credential.Platform = latest.Platform ?? platform;
+            credential.ProjectId = latest.Id ?? id;
+            credential.ModName = string.IsNullOrWhiteSpace(credential.ModName) ? (mod.Name ?? string.Empty) : credential.ModName;
+            credential.Localization = new SvlSourceLocalization
+            {
+                EntityType = latest.EntityType ?? "mod",
+                Platform = latest.Platform ?? platform,
+                Id = latest.Id ?? id,
+                NameZhCn = latest.Name?.ZhCn ?? string.Empty,
+                NameSource = latest.Name?.Source ?? string.Empty,
+                DescriptionZhCn = latest.Description?.ZhCn ?? string.Empty,
+                DescriptionSource = latest.Description?.Source ?? string.Empty,
+                SourceUrl = latest.Meta?.SourceUrl ?? string.Empty,
+                UpdatedAt = latest.Meta?.UpdatedAt ?? string.Empty,
+                Contributor = latest.Meta?.Contributor ?? string.Empty
+            };
+
+            if (!SvlSourceMetadataStore.WriteToDirectory(mod.ModPath, credential))
+                return false;
+
+            mod.ApplyLocalization(credential.Localization);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            SVL.Core.Logging.Log.Warn($"[VersionSettings] 应用汉化失败: {mod.Name}", ex);
+            return false;
+        }
+    }
+
+    private async Task EnsureUpdateSourcesFromUniqueIdAsync(List<SdVMod> mods)
+    {
+        foreach (var mod in mods)
+        {
+            if (mod == null || string.IsNullOrWhiteSpace(mod.UniqueId))
+                continue;
+
+            var hasCurseId = ExtractLongId(mod.CurseforgeProjectId) > 0;
+            var hasNexusId = ExtractLongId(mod.NexusModsProjectId) > 0;
+            if (hasCurseId || hasNexusId)
+                continue;
+
+            try
+            {
+                var entry = await CommunityLocalizationService.GetByUniqueIdAsync(mod.UniqueId, forceRefresh: false);
+                if (entry == null)
+                    continue;
+
+                var platform = CommunityLocalizationService.NormalizePlatform(entry.Platform);
+                var id = CommunityLocalizationService.NormalizeId(entry.Id);
+
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+
+                if (string.Equals(platform, "Curseforge", StringComparison.OrdinalIgnoreCase) && ExtractLongId(id) > 0)
+                {
+                    mod.CurseforgeProjectId = id;
+                    mod.UpdateSource = "Curseforge";
+                }
+                else if (string.Equals(platform, "NexusMods", StringComparison.OrdinalIgnoreCase) && ExtractLongId(id) > 0)
+                {
+                    mod.NexusModsProjectId = id;
+                    mod.UpdateSource = "NexusMods";
+                }
+                else
+                {
+                    continue;
+                }
+
+                var credential = TryReadSourceCredential(mod) ?? new SvlSourceMetadata();
+                credential.Platform = platform;
+                credential.ProjectId = id;
+                credential.ModName = string.IsNullOrWhiteSpace(credential.ModName) ? (mod.Name ?? string.Empty) : credential.ModName;
+                _ = SvlSourceMetadataStore.WriteToDirectory(mod.ModPath, credential);
+
+                SVL.Core.Logging.Log.Info($"[VersionSettings] 更新检测回退成功: {mod.Name} -> {platform}/{id} (via UniqueID:{mod.UniqueId})");
+            }
+            catch (Exception ex)
+            {
+                SVL.Core.Logging.Log.Debug($"[VersionSettings] UniqueID 回退失败: {mod.Name}, {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 尝试获取 Mod 的本地化来源信息（从各种来源）
+    /// </summary>
+    private static (string Platform, string ProjectId)? TryGetLocalizationSourceInfo(SdVMod mod)
+    {
+        // 优先使用 svl.source.json
+        var credential = TryReadSourceCredential(mod);
+        if (credential != null && !string.IsNullOrWhiteSpace(credential.Platform) && !string.IsNullOrWhiteSpace(credential.ProjectId))
+        {
+            return (credential.Platform, credential.ProjectId);
+        }
+
+        // 其次使用 UpdateKeys
+        if (mod.Manifest?.UpdateKeys?.Count > 0)
+        {
+            foreach (var updateKey in mod.Manifest.UpdateKeys)
+            {
+                var parts = updateKey.Split(new[] { ':' }, 2);
+                if (parts.Length == 2)
+                {
+                    var source = parts[0].ToLowerInvariant();
+                    var identifier = parts[1].Trim();
+
+                    if (source == "curseforge")
+                        return ("Curseforge", identifier);
+                    if (source == "nexus")
+                        return ("NexusMods", identifier);
+                }
+            }
+        }
+
+        // 最后使用 ProjectId
+        if (!string.IsNullOrWhiteSpace(mod.CurseforgeProjectId))
+            return ("Curseforge", mod.CurseforgeProjectId);
+        if (!string.IsNullOrWhiteSpace(mod.NexusModsProjectId))
+            return ("NexusMods", mod.NexusModsProjectId);
+
+        return null;
     }
 
     /// <summary>
@@ -1174,12 +1516,16 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             : Mods.Count(m => m.IsSelected && m.HasUpdate);
         ShowSelectionActions = SelectedCount > 0;
         OnPropertyChanged(nameof(HasSelectedUpdatable));
+        OnPropertyChanged(nameof(HasSelectedLocalizableMods));
     }
 
     partial void OnSelectedUpdatableCountChanged(int value)
     {
         OnPropertyChanged(nameof(HasSelectedUpdatable));
     }
+
+    public bool HasSelectedLocalizableMods => CurrentFilterCategory != ModFilterCategory.Backup
+        && GetEffectiveSelectedMods(HasSourceCredentialForLocalization).Count > 0;
 
     private string? GetCurrentModsPath()
     {
@@ -2048,43 +2394,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         return null;
     }
 
-    private sealed class SourceCredential
+    private static SvlSourceMetadata? TryReadSourceCredential(SdVMod mod)
     {
-        public string Platform { get; set; } = string.Empty;
-        public string ProjectId { get; set; } = string.Empty;
-    }
-
-    private static SourceCredential? TryReadSourceCredential(SdVMod mod)
-    {
-        try
-        {
-            if (mod == null || string.IsNullOrWhiteSpace(mod.ModPath))
-                return null;
-
-            var path = Path.Combine(mod.ModPath, "svl-source.json");
-            if (!File.Exists(path))
-                return null;
-
-            var json = File.ReadAllText(path);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            var platform = root.TryGetProperty("platform", out var p) ? p.GetString() ?? string.Empty : string.Empty;
-            var projectId = root.TryGetProperty("projectId", out var id) ? id.GetString() ?? string.Empty : string.Empty;
-
-            if (string.IsNullOrWhiteSpace(platform) || string.IsNullOrWhiteSpace(projectId))
-                return null;
-
-            return new SourceCredential
-            {
-                Platform = platform,
-                ProjectId = projectId
-            };
-        }
-        catch
-        {
+        if (mod == null || string.IsNullOrWhiteSpace(mod.ModPath))
             return null;
-        }
+
+        return SvlSourceMetadataStore.TryReadFromDirectory(mod.ModPath);
     }
 
     private static (string Platform, long ProjectId)? ResolveUpdateSource(SdVMod mod)
@@ -2117,6 +2432,61 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             return ("NexusMods", updateNexusId);
 
         return null;
+    }
+
+    private static bool HasSourceCredentialForLocalization(SdVMod mod)
+    {
+        var credential = TryReadSourceCredential(mod);
+        return credential != null
+               && !string.IsNullOrWhiteSpace(credential.ProjectId)
+               && !string.IsNullOrWhiteSpace(credential.Platform);
+    }
+
+    [RelayCommand]
+    private async Task RefreshSelectedLocalizationAsync()
+    {
+        var selectedMods = GetEffectiveSelectedMods(HasSourceCredentialForLocalization);
+        if (selectedMods.Count == 0)
+        {
+            SvlMessageBox.Info("请先选择至少一个带来源信息的 Mod。", "无法汉化");
+            return;
+        }
+
+        int successCount = 0;
+        foreach (var mod in selectedMods)
+        {
+            var credential = TryReadSourceCredential(mod);
+            if (credential == null)
+                continue;
+
+            var localization = await CommunityLocalizationService.GetAsync("mod", credential.Platform, credential.ProjectId, forceRefresh: true);
+            if (localization == null)
+                continue;
+
+            credential.Localization = new SvlSourceLocalization
+            {
+                EntityType = localization.EntityType ?? "mod",
+                Platform = localization.Platform ?? credential.Platform,
+                Id = localization.Id ?? credential.ProjectId,
+                NameZhCn = localization.Name?.ZhCn ?? string.Empty,
+                NameSource = localization.Name?.Source ?? credential.ModName,
+                DescriptionZhCn = localization.Description?.ZhCn ?? string.Empty,
+                DescriptionSource = localization.Description?.Source ?? string.Empty,
+                SourceUrl = localization.Meta?.SourceUrl ?? string.Empty,
+                UpdatedAt = localization.Meta?.UpdatedAt ?? string.Empty,
+                Contributor = localization.Meta?.Contributor ?? string.Empty
+            };
+
+            if (SvlSourceMetadataStore.WriteToDirectory(mod.ModPath, credential))
+                successCount++;
+        }
+
+        await LoadModsAsync();
+
+        if (successCount > 0)
+            SvlMessageBox.Success($"已更新 {successCount}/{selectedMods.Count} 个 Mod 的本地化信息", "汉化完成");
+        else
+            SvlMessageBox.Warning("未找到可更新的本地化文件。", "汉化结果");
     }
 
     private async Task ShowNexusBrowserGuideAsync(long modId, long fileId, string downloadPageUrl)
@@ -2195,6 +2565,15 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             mod.IsSelected = false;
         }
         UpdateSelectionState();
+    }
+
+    [RelayCommand]
+    private void ToggleModLocalization(SdVMod mod)
+    {
+        if (mod == null || !mod.HasAnyLocalization)
+            return;
+
+        mod.SetLocalizationLanguage(!mod.IsUsingLocalizedText);
     }
 
     /// <summary>

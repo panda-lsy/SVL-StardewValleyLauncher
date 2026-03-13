@@ -43,7 +43,9 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private ModManager _modManager = new ModManager();
     private readonly Stack<SVL.Desktop.Models.ModSearchItem> _modDetailsHistory = new();
+    private DownloadRightViewModel? _cachedDownloadRightViewModel;
     private ModSearchViewModel? _cachedModSearchViewModel;
+    private ModpackSearchViewModel? _cachedModpackSearchViewModel;
 
     [ObservableProperty]
     private IStardewInstance? _selectedInstance;
@@ -586,14 +588,14 @@ public partial class MainWindowViewModel : ObservableObject
         switch (CurrentDownloadSubPage)
         {
             case DownloadSubPageType.SMAPI:
-                RightPanelContent = new DownloadRightViewModel(this);
+                RightPanelContent = _cachedDownloadRightViewModel ??= new DownloadRightViewModel(this);
                 break;
             case DownloadSubPageType.Mods:
                 RightPanelContent = _cachedModSearchViewModel ??= new ModSearchViewModel();
                 break;
             case DownloadSubPageType.Modpacks:
                 {
-                    var modpackSearchVm = new ModpackSearchViewModel();
+                    var modpackSearchVm = _cachedModpackSearchViewModel ??= new ModpackSearchViewModel();
                     RightPanelContent = modpackSearchVm;
                     _ = modpackSearchVm.InitializeAsync(); // 加载热门整合包
                     break;
@@ -861,6 +863,12 @@ public partial class MainWindowViewModel : ObservableObject
             Name = item.Name,
             Summary = item.Summary,
             Description = item.Description,
+            LocalizedNameZhCn = item.LocalizedNameZhCn,
+            LocalizedNameSource = item.LocalizedNameSource,
+            LocalizedDescriptionZhCn = item.LocalizedDescriptionZhCn,
+            LocalizedDescriptionSource = item.LocalizedDescriptionSource,
+            UseLocalizedName = item.UseLocalizedName,
+            UseLocalizedDescription = item.UseLocalizedDescription,
             IconUrl = item.IconUrl,
             LocalIconPath = item.LocalIconPath,
             Author = item.Author,
@@ -870,7 +878,8 @@ public partial class MainWindowViewModel : ObservableObject
             Category = item.Category,
             SupportedGameVersions = item.SupportedGameVersions?.ToList() ?? new List<string>(),
             Rating = item.Rating,
-            Url = item.Url
+            Url = item.Url,
+            LocalizationContributor = item.LocalizationContributor
         };
     }
 

@@ -213,7 +213,7 @@ public class ModManager : IModManager
         string parentPath,
         List<SdVMod> discoveredMods,
         IDictionary<string, SdVMod> modsByPath,
-        IReadOnlyDictionary<string, ModSourceCredential> sourceCredentialsByDir,
+        IReadOnlyDictionary<string, SvlSourceMetadata> sourceCredentialsByDir,
         SdVMod? fallbackChild)
     {
         var parentPathKey = NormalizePathKey(parentPath);
@@ -408,7 +408,7 @@ public class ModManager : IModManager
         }
     }
 
-    private void ApplySourceCredential(SdVMod mod, ModSourceCredential? sourceCredential)
+    private void ApplySourceCredential(SdVMod mod, SvlSourceMetadata? sourceCredential)
     {
         if (mod == null || sourceCredential == null)
             return;
@@ -441,6 +441,8 @@ public class ModManager : IModManager
         {
             mod.Name = sourceCredential.ModName;
         }
+
+        mod.ApplyLocalization(sourceCredential.Localization);
     }
 
     private static string GetRelativePathPortable(string basePath, string fullPath)
@@ -1059,53 +1061,9 @@ public class ModManager : IModManager
         return new string(value.Where(char.IsDigit).ToArray());
     }
 
-    private static ModSourceCredential? TryLoadSourceCredential(string modDir)
+    private static SvlSourceMetadata? TryLoadSourceCredential(string modDir)
     {
-        try
-        {
-            var path = Path.Combine(modDir, "svl-source.json");
-            if (!File.Exists(path))
-                return null;
-
-            var json = File.ReadAllText(path);
-            var credential = JsonSerializer.Deserialize<ModSourceCredential>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-            return credential;
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"[ModManager] 读取来源凭证失败: {modDir}", ex);
-            return null;
-        }
-    }
-
-    private sealed class ModSourceCredential
-    {
-        public string Platform { get; set; } = string.Empty;
-        public string ProjectId { get; set; } = string.Empty;
-        public string FileId { get; set; } = string.Empty;
-        public string ModName { get; set; } = string.Empty;
-        public string FileName { get; set; } = string.Empty;
-        public bool IsParentMod { get; set; }
-        public ParentModReference? ParentMod { get; set; }
-        public List<ChildModReference> ChildMods { get; set; } = [];
-    }
-
-    private sealed class ParentModReference
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string RelativePath { get; set; } = string.Empty;
-    }
-
-    private sealed class ChildModReference
-    {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string RelativePath { get; set; } = string.Empty;
-        public string UniqueId { get; set; } = string.Empty;
+        return SvlSourceMetadataStore.TryReadFromDirectory(modDir);
     }
 
     private static string NormalizePlatform(string? platform)

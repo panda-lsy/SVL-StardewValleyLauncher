@@ -61,20 +61,126 @@
 
                         <!-- Info -->
                         <StackPanel Grid.Column="1">
-                            <TextBlock Text="{Binding Name}"
-                                       FontSize="16"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource ColorBrush1}"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,8"/>
+                            <StackPanel Margin="0,0,0,8">
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="{Binding Summary}"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource ColorBrushGray3}"
-                                       TextWrapping="Wrap"
-                                       TextTrimming="CharacterEllipsis"
-                                       MaxHeight="40"
-                                       Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding DisplayName}"
+                                               Margin="0,0,10,0"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource ColorBrush1}"
+                                               TextWrapping="Wrap"/>
+
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Top"
+                                                Visibility="{Binding HasLocalizedName, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Button Content="中"
+                                                Command="{Binding ShowLocalizedNameCommand}"
+                                                Padding="8,2"
+                                                Margin="0,0,4,0"
+                                                FontSize="11"
+                                                BorderThickness="0"
+                                                Foreground="{DynamicResource ColorBrush1}">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding UseLocalizedName}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Button Content="EN"
+                                                Command="{Binding ShowSourceNameCommand}"
+                                                Padding="8,2"
+                                                FontSize="11"
+                                                BorderThickness="0"
+                                                Foreground="{DynamicResource ColorBrush1}">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding UseLocalizedName}" Value="False">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel Margin="0,0,0,8">
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding DisplaySummary}"
+                                               Margin="0,0,10,0"
+                                               FontSize="12"
+                                               Foreground="{DynamicResource ColorBrushGray3}"
+                                               TextWrapping="Wrap"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxHeight="40"/>
+
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Top"
+                                                Visibility="{Binding HasLocalizedDescription, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Button Content="中"
+                                                Command="{Binding ShowLocalizedDescriptionCommand}"
+                                                Padding="8,2"
+                                                Margin="0,0,4,0"
+                                                FontSize="11"
+                                                BorderThickness="0"
+                                                Foreground="{DynamicResource ColorBrush1}">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding UseLocalizedDescription}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Button Content="EN"
+                                                Command="{Binding ShowSourceDescriptionCommand}"
+                                                Padding="8,2"
+                                                FontSize="11"
+                                                BorderThickness="0"
+                                                Foreground="{DynamicResource ColorBrush1}">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding UseLocalizedDescription}" Value="False">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
 
                             <!-- Tags -->
                             <WrapPanel Orientation="Horizontal">

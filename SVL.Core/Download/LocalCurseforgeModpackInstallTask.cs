@@ -162,20 +162,13 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
             Log.Info($"[LocalCurseforgeModpack] 解析成功: {_manifest.Name}, 模组数: {_manifest.Files.Count}");
             Progress = 35;
 
-            // 获取 API Key
-            var apiKey = CurseforgeApiService.GetApiKey();
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                throw new Exception("Curseforge API Key 未配置，请在设置中配置 API Key");
-            }
-
             // 安装 SMAPI
-            await InstallSMAPIAsync(apiKey);
+            await InstallSMAPIAsync(string.Empty);
 
             Progress = 60;
 
             // 下载模组
-            await InstallModsFromManifestAsync(apiKey);
+            await InstallModsFromManifestAsync(string.Empty);
 
             Progress = 85;
 

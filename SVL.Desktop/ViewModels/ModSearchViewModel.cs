@@ -168,16 +168,6 @@ public partial class ModSearchViewModel : ObservableObject
         var warnings = new List<string>();
         var settings = AppConfig.GetSettings();
 
-        // 检查 Curseforge API（如果选择了 Curseforge 或 全部）
-        if (SelectedSource == "全部" || SelectedSource == "Curseforge")
-        {
-            var curseforgeKey = settings.CurseforgeApiKey;
-            if (string.IsNullOrEmpty(curseforgeKey))
-            {
-                warnings.Add("⚠️ Curseforge API 未配置\n请在设置页面配置 Curseforge API Key 以使用 Curseforge 源。");
-            }
-        }
-
         // 检查 NexusMods API（如果选择了 NexusMods 或 全部）
         if (SelectedSource == "全部" || SelectedSource == "NexusMods")
         {
@@ -930,6 +920,8 @@ public partial class ModSearchViewModel : ObservableObject
                 addedCount++;
             }
 
+            LocalizationDisplayHelper.ApplyLocalizationInBackground(displayMods);
+
             // 更新类型列表
             UpdateModTypes(allCategories);
 
@@ -1234,6 +1226,8 @@ public partial class ModSearchViewModel : ObservableObject
                     ModList.Add(item);
                     _ = item.LoadIconAsync();
                 }
+
+                LocalizationDisplayHelper.ApplyLocalizationInBackground(displayResults);
 
                 // 更新分页状态（任一来源还有结果就继续）
                 bool hasMore = (sortedCurseforge.Count >= fetchCount) || (sortedNexusMods.Count >= fetchCount);
@@ -1895,6 +1889,8 @@ public partial class ModSearchViewModel : ObservableObject
                 Url = modInfo.Links?.WebsiteUrl ?? ""
             };
 
+            await LocalizationDisplayHelper.ApplyLocalizationAsync(searchItem);
+
             ModList.Add(searchItem);
 
             // 异步加载图标
@@ -1951,6 +1947,8 @@ public partial class ModSearchViewModel : ObservableObject
                     Rating = mod.Endorsements,
                     Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
                 };
+
+                await LocalizationDisplayHelper.ApplyLocalizationAsync(searchItem);
 
                 ModList.Add(searchItem);
 

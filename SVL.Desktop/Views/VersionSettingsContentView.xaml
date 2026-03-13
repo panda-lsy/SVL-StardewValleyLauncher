@@ -19,6 +19,7 @@
         <converters:BoolToEnableDisableTipConverter x:Key="BoolToEnableDisableTipConverter"/>
         <Style x:Key="HoverRevealActionPanelStyle" TargetType="StackPanel">
             <Setter Property="Opacity" Value="0"/>
+            <Setter Property="MaxWidth" Value="0"/>
             <Setter Property="IsHitTestVisible" Value="False"/>
             <Setter Property="RenderTransform">
                 <Setter.Value>
@@ -28,6 +29,7 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
                     <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="MaxWidth" Value="420"/>
                     <Setter Property="IsHitTestVisible" Value="True"/>
                     <Setter Property="RenderTransform">
                         <Setter.Value>
@@ -37,6 +39,7 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}" Value="True">
                     <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="MaxWidth" Value="420"/>
                     <Setter Property="IsHitTestVisible" Value="True"/>
                     <Setter Property="RenderTransform">
                         <Setter.Value>
@@ -807,14 +810,16 @@
                                       VerticalScrollBarVisibility="Disabled">
                         <StackPanel Orientation="Horizontal">
                             <Button Command="{Binding OpenModsFolderCommand}"
+                                    Content="打开文件夹"
                                     Height="40"
                                     Margin="0,0,8,8"
                                     Padding="16,0"
+                                    FontSize="14"
+                                    Foreground="White"
                                     Cursor="Hand">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
-                                        <Setter Property="Foreground" Value="White"/>
                                         <Setter Property="BorderThickness" Value="0"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
@@ -837,21 +842,19 @@
                                         </Setter>
                                     </Style>
                                 </Button.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📁" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="打开文件夹" FontSize="14" VerticalAlignment="Center"/>
-                                </StackPanel>
                             </Button>
 
                             <Button Command="{Binding OpenBackupFolderCommand}"
+                                    Content="打开备份栏"
                                     Height="40"
                                     Margin="0,0,8,8"
                                     Padding="16,0"
+                                    FontSize="14"
+                                    Foreground="White"
                                     Cursor="Hand">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
-                                        <Setter Property="Foreground" Value="White"/>
                                         <Setter Property="BorderThickness" Value="0"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
@@ -874,23 +877,21 @@
                                         </Setter>
                                     </Style>
                                 </Button.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🗂" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="打开备份栏" FontSize="14" VerticalAlignment="Center"/>
-                                </StackPanel>
                             </Button>
 
                             <Button Command="{Binding CheckModUpdatesCommand}"
+                                    Content="检测更新"
                                     Height="40"
                                     Margin="0,0,8,8"
                                     Padding="16,0"
+                                    FontSize="14"
+                                    Foreground="White"
                                     Cursor="Hand"
                                     IsEnabled="{Binding IsCheckingUpdates, Converter={StaticResource InverseBoolConverter}}"
                                     Visibility="{Binding IsBackupFilterActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
-                                        <Setter Property="Foreground" Value="White"/>
                                         <Setter Property="BorderThickness" Value="0"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
@@ -916,21 +917,59 @@
                                         </Setter>
                                     </Style>
                                 </Button.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🔍" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="检测更新" FontSize="14" VerticalAlignment="Center"/>
-                                </StackPanel>
                             </Button>
 
-                            <Button Command="{Binding SelectAllCommand}"
+                            <Button Command="{Binding CheckModLocalizationCommand}"
+                                    Content="检测汉化"
                                     Height="40"
                                     Margin="0,0,8,8"
                                     Padding="16,0"
+                                    FontSize="14"
+                                    Foreground="White"
+                                    Cursor="Hand"
+                                    IsEnabled="{Binding IsCheckingLocalization, Converter={StaticResource InverseBoolConverter}}"
+                                    Visibility="{Binding IsBackupFilterActive, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="ButtonBorder"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Cursor="Hand">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
+                                                        </Trigger>
+                                                        <DataTrigger Binding="{Binding IsCheckingLocalization}" Value="True">
+                                                            <Setter Property="Opacity" Value="0.6" TargetName="ButtonBorder"/>
+                                                        </DataTrigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+
+                            <Button Command="{Binding SelectAllCommand}"
+                                    Content="全选"
+                                    Height="40"
+                                    Margin="0,0,8,8"
+                                    Padding="16,0"
+                                    FontSize="14"
+                                    Foreground="White"
                                     Cursor="Hand">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
-                                        <Setter Property="Foreground" Value="White"/>
                                         <Setter Property="BorderThickness" Value="0"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
@@ -953,21 +992,19 @@
                                         </Setter>
                                     </Style>
                                 </Button.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="✓" FontSize="16" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="全选" FontSize="14" VerticalAlignment="Center"/>
-                                </StackPanel>
                             </Button>
 
                             <Button Command="{Binding RefreshModsCommand}"
+                                    Content="刷新"
                                     Height="40"
                                     Margin="0,0,8,8"
                                     Padding="16,0"
+                                    FontSize="14"
+                                    Foreground="{DynamicResource ColorBrush1}"
                                     Cursor="Hand">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
                                         <Setter Property="BorderThickness" Value="0"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
@@ -991,10 +1028,6 @@
                                         </Setter>
                                     </Style>
                                 </Button.Style>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🔄" FontSize="16" Foreground="{DynamicResource ColorBrush1}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="刷新" FontSize="14" VerticalAlignment="Center"/>
-                                </StackPanel>
                             </Button>
 
                             <Button Command="{Binding InstallModFromFileCommand}"
@@ -1386,6 +1419,7 @@
                                                                 VerticalAlignment="Center"
                                                                 Margin="0,0,8,0">
                                                         <TextBlock TextTrimming="CharacterEllipsis"
+                                                                   Foreground="{DynamicResource ColorBrush1}"
                                                                    TextWrapping="NoWrap">
                                                             <Run Text="{Binding FolderName, Mode=OneWay}"
                                                                  FontSize="14"
@@ -1394,7 +1428,7 @@
                                                             <Run Text=" | "
                                                                  FontSize="13"
                                                                  Foreground="{DynamicResource ColorBrushGray3}"/>
-                                                            <Run Text="{Binding Name}"
+                                                            <Run Text="{Binding DisplayName, Mode=OneWay}"
                                                                  FontSize="13"
                                                                  Foreground="{DynamicResource ColorBrush1}"/>
                                                             <InlineUIContainer BaselineAlignment="Center">
@@ -1418,12 +1452,13 @@
                                                         </TextBlock>
 
                                                         <TextBlock Margin="0,2,0,0"
+                                                                   Foreground="{DynamicResource ColorBrushGray3}"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    TextWrapping="NoWrap">
                                                             <Run Text="描述："
                                                                  FontSize="12"
                                                                  Foreground="{DynamicResource ColorBrushGray3}"/>
-                                                            <Run Text="{Binding Description}"
+                                                            <Run Text="{Binding DisplayDescription, Mode=OneWay}"
                                                                  FontSize="12"
                                                                  Foreground="{DynamicResource ColorBrushGray3}"/>
                                                         </TextBlock>
@@ -1521,6 +1556,7 @@
                                                         </StackPanel>
 
                                                         <TextBlock Margin="0,2,0,0"
+                                                                   Foreground="{DynamicResource ColorBrushGray3}"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    TextWrapping="NoWrap"
                                                                    Visibility="{Binding TagsDisplay, Converter={StaticResource StringNotEmptyToVisibilityConverter}}">
@@ -1545,6 +1581,7 @@
 
                                                     <StackPanel Grid.Column="2"
                                                                 Orientation="Horizontal"
+                                                                HorizontalAlignment="Right"
                                                                 VerticalAlignment="Center"
                                                                 Style="{StaticResource HoverRevealActionPanelStyle}">
                                                         <Border Background="{DynamicResource ColorBrushGray3}"
@@ -1556,6 +1593,32 @@
                                                                        FontSize="11"
                                                                        Foreground="White"/>
                                                         </Border>
+
+                                                        <Button Command="{Binding DataContext.ToggleModLocalizationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Width="32"
+                                                                Height="32"
+                                                                Margin="4,0"
+                                                                Cursor="Hand"
+                                                                ToolTip="切换中文/英文显示"
+                                                                Visibility="{Binding HasAnyLocalization, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                Background="Transparent"
+                                                                BorderThickness="0">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button">
+                                                                    <Setter Property="Background" Value="Transparent"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsUsingLocalizedText}" Value="True">
+                                                                            <Setter Property="Background" Value="#1FD2A679"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                            <TextBlock Text="文"
+                                                                       FontSize="13"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource ColorBrush1}"/>
+                                                        </Button>
 
                                                         <Button Command="{Binding DataContext.ShowLocalModDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"
@@ -1746,6 +1809,7 @@
 
                                                                 <StackPanel Grid.Column="1">
                                                                     <TextBlock TextTrimming="CharacterEllipsis"
+                                                                               Foreground="{DynamicResource ColorBrush1}"
                                                                                TextWrapping="NoWrap">
                                                                           <Run Text="{Binding FolderName, Mode=OneWay}"
                                                                              FontSize="13"
@@ -1754,7 +1818,7 @@
                                                                         <Run Text=" | "
                                                                              FontSize="12"
                                                                              Foreground="{DynamicResource ColorBrushGray3}"/>
-                                                                        <Run Text="{Binding Name}"
+                                                                                                  <Run Text="{Binding DisplayName, Mode=OneWay}"
                                                                              FontSize="12"
                                                                              Foreground="{DynamicResource ColorBrush1}"/>
                                                                         <Run Text=" | 子 Mod"
@@ -1763,17 +1827,19 @@
                                                                     </TextBlock>
 
                                                                     <TextBlock Margin="0,2,0,0"
+                                                                               Foreground="{DynamicResource ColorBrushGray3}"
                                                                                TextTrimming="CharacterEllipsis"
                                                                                TextWrapping="NoWrap">
                                                                         <Run Text="描述："
                                                                              FontSize="12"
                                                                              Foreground="{DynamicResource ColorBrushGray3}"/>
-                                                                        <Run Text="{Binding Description}"
+                                                                                                  <Run Text="{Binding DisplayDescription, Mode=OneWay}"
                                                                              FontSize="12"
                                                                              Foreground="{DynamicResource ColorBrushGray3}"/>
                                                                     </TextBlock>
 
                                                                     <TextBlock Margin="0,2,0,0"
+                                                                               Foreground="{DynamicResource ColorBrushGray3}"
                                                                                Visibility="{Binding TagsDisplay, Converter={StaticResource StringNotEmptyToVisibilityConverter}}">
                                                                         <Run Text="标签："
                                                                              FontSize="12"
@@ -1786,8 +1852,35 @@
 
                                                                 <StackPanel Grid.Column="2"
                                                                             Orientation="Horizontal"
+                                                                            HorizontalAlignment="Right"
                                                                             VerticalAlignment="Top"
                                                                             Style="{StaticResource HoverRevealActionPanelStyle}">
+                                                                    <Button Command="{Binding DataContext.ToggleModLocalizationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                            CommandParameter="{Binding}"
+                                                                            Width="32"
+                                                                            Height="32"
+                                                                            Margin="4,0"
+                                                                            Cursor="Hand"
+                                                                            ToolTip="切换中文/英文显示"
+                                                                            Visibility="{Binding HasAnyLocalization, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                                            Background="Transparent"
+                                                                            BorderThickness="0">
+                                                                        <Button.Style>
+                                                                            <Style TargetType="Button">
+                                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsUsingLocalizedText}" Value="True">
+                                                                                        <Setter Property="Background" Value="#1FD2A679"/>
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Button.Style>
+                                                                        <TextBlock Text="文"
+                                                                                   FontSize="13"
+                                                                                   FontWeight="SemiBold"
+                                                                                   Foreground="{DynamicResource ColorBrush1}"/>
+                                                                    </Button>
+
                                                                     <Button Command="{Binding DataContext.ShowLocalModDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                             CommandParameter="{Binding}"
                                                                             Width="32"

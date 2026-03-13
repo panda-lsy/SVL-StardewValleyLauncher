@@ -3,18 +3,21 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SVL.Core.App;
 using SVL.Core.Config;
 using SVL.Core.IO;
 using SVL.Core.Logging;
+using SVL.Desktop.Controls;
 using SVL.Desktop.Services;
 
 namespace SVL.Desktop.ViewModels;
@@ -49,6 +52,12 @@ public partial class SettingsViewModel : ObservableObject
         "全部",
         "Curseforge",
         "NexusMods"
+    };
+
+    public List<string> LocalizationSources { get; } = new()
+    {
+        "Gitee",
+        "GitHub"
     };
 
     // 启动器更新源选项
@@ -278,6 +287,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _modDefaultSource = "全部";
 
+    [ObservableProperty]
+    private string _localizationPreferredSource = "Gitee";
+
     /// <summary>
     /// SMAPI 默认下载源变化时保存到配置
     /// </summary>
@@ -302,10 +314,16 @@ public partial class SettingsViewModel : ObservableObject
         SaveSettings();
     }
 
-    // ===== API 设置 =====
+    partial void OnLocalizationPreferredSourceChanged(string value)
+    {
+        Log.Info($"[SettingsViewModel] 社区本地化源变更: {value}");
+        if (_suppressDefaultSourceImmediateSave)
+            return;
 
-    [ObservableProperty]
-    private string _curseforgeApiKey = string.Empty;
+        SaveSettings();
+    }
+
+    // ===== API 设置 =====
 
     [ObservableProperty]
     private string _nexusModsApiKey = string.Empty;
@@ -545,6 +563,7 @@ public partial class SettingsViewModel : ObservableObject
                 // 默认下载源
                 SmapiDefaultSource = SmapiDefaultSource,
                 ModDefaultSource = ModDefaultSource,
+                LocalizationPreferredSource = LocalizationPreferredSource,
 
                 // NexusMods
                 EnableNexusModsSearchCache = EnableNexusModsSearchCache,
@@ -554,7 +573,6 @@ public partial class SettingsViewModel : ObservableObject
                 CacheRetentionMinutes = CacheRetentionMinutes,
 
                 // API 设置
-                CurseforgeApiKey = string.IsNullOrWhiteSpace(CurseforgeApiKey) ? null : CurseforgeApiKey,
                 NexusModsApiKey = string.IsNullOrWhiteSpace(NexusModsApiKey) ? null : NexusModsApiKey,
 
                 // OAuth Token（不在此处保存，由登录流程保存）
@@ -814,6 +832,37 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>
+    /// 打开缓存文件夹命令
+    /// </summary>
+    [RelayCommand]
+    private void OpenCacheFolder()
+    {
+        try
+        {
+            var cachePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SVL");
+            if (!Directory.Exists(cachePath))
+            {
+                Directory.CreateDirectory(cachePath);
+            }
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = cachePath,
+                UseShellExecute = true
+            });
+            StatusMessage = "✓ 已打开缓存文件夹";
+            Log.Info($"[SettingsViewModel] 已打开缓存文件夹: {cachePath}");
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "打开缓存文件夹失败";
+            Log.Error(ex, "[SettingsViewModel] 打开缓存文件夹失败");
+            SvlMessageBox.Warning($"无法打开缓存文件夹：{ex.Message}", "打开失败");
+        }
+    }
+
+    /// <summary>
     /// 更新缓存大小
     /// </summary>
     private async Task UpdateCacheSizeAsync()
@@ -957,7 +1006,6 @@ public partial class SettingsViewModel : ObservableObject
         CustomWindowWidth = 1280;
         CustomWindowHeight = 720;
 
-        CurseforgeApiKey = string.Empty;
         NexusModsApiKey = string.Empty;
 
         SelectedThemeModeIndex = 2;
@@ -1198,44 +1246,6 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(NexusLoginStatusText));
         OnPropertyChanged(nameof(NexusLoginActionText));
     }
-
-    /// <summary>
-    /// 测试 Curseforge API 命令
-    /// </summary>
-    [RelayCommand]
-    private async Task TestCurseforgeApiAsync()
-    {
-        if (string.IsNullOrWhiteSpace(CurseforgeApiKey))
-        {
-            CurseforgeApiStatus = "请先输入 API Key";
-            return;
-        }
-
-        try
-        {
-            CurseforgeApiStatus = "正在测试...";
-
-            // 测试 API 调用
-            var isValid = await SVL.Core.Download.CurseforgeApiService.TestApiKeyAsync(CurseforgeApiKey);
-
-            if (isValid)
-            {
-                CurseforgeApiStatus = "✓ API Key 有效";
-                Log.Info("[SettingsViewModel] Curseforge API Key 验证成功");
-            }
-            else
-            {
-                CurseforgeApiStatus = "✗ API Key 无效或网络错误";
-                Log.Warn("[SettingsViewModel] Curseforge API Key 验证失败");
-            }
-        }
-        catch (Exception ex)
-        {
-            CurseforgeApiStatus = $"✗ 验证失败: {ex.Message}";
-            Log.Error(ex, "[SettingsViewModel] Curseforge API Key 验证失败");
-        }
-    }
-
     /// <summary>
     /// 显示窗口标题占位符帮助
     /// </summary>
@@ -1274,9 +1284,6 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private string _nxmProtocolStatus = "检查中...";
-
-    [ObservableProperty]
-    private string _curseforgeApiStatus = string.Empty;
 
     // ===== 启动器更新 =====
 
@@ -1517,7 +1524,6 @@ public partial class SettingsViewModel : ObservableObject
             CustomWindowHeight = settings.CustomWindowHeight;
 
             // API 设置
-            CurseforgeApiKey = settings.CurseforgeApiKey ?? string.Empty;
             NexusModsApiKey = settings.NexusModsApiKey ?? string.Empty;
 
             // 个性化设置
@@ -1563,6 +1569,7 @@ public partial class SettingsViewModel : ObservableObject
             _suppressDefaultSourceImmediateSave = true;
             SmapiDefaultSource = settings.SmapiDefaultSource ?? "全部";
             ModDefaultSource = settings.ModDefaultSource ?? "全部";
+            LocalizationPreferredSource = string.IsNullOrWhiteSpace(settings.LocalizationPreferredSource) ? "Gitee" : settings.LocalizationPreferredSource;
             _suppressDefaultSourceImmediateSave = false;
 
             // NexusMods
@@ -1708,16 +1715,6 @@ public partial class SettingsViewModel : ObservableObject
         AutoSave();
     }
 
-    partial void OnCurseforgeApiKeyChanged(string value)
-    {
-        AutoSave();
-        // 更新运行时的 API key
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            SVL.Core.Download.CurseforgeApiService.SetApiKey(value);
-        }
-    }
-
     partial void OnNexusModsApiKeyChanged(string value)
     {
         AutoSave();
@@ -1819,6 +1816,24 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnShowModTypeFilterDisabledNoticeChanged(bool value)
     {
         AutoSave();
+    }
+
+    [RelayCommand]
+    private void OpenLocalizationContributionPage()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://svl-website.89b52195.er.aliyun-esa.net/contribute",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("[SettingsViewModel] 打开本地化贡献页面失败", ex);
+            StatusMessage = $"无法打开贡献页面: {ex.Message}";
+        }
     }
 
     partial void OnSelectedLogLevelIndexChanged(int value)

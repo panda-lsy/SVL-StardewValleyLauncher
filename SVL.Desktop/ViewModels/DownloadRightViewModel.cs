@@ -137,6 +137,9 @@ public partial class DownloadRightViewModel : ObservableObject
 
     private MainWindowViewModel _mainViewModel;
     private DownloadCategory _currentCategory;
+    private bool _hasLoadedSmapiItems;
+    private bool _hasLoadedModItems;
+    private bool _hasLoadedModpackItems;
 
     public bool IsSmapiCategory => _currentCategory == DownloadCategory.SMAPI;
 
@@ -1092,11 +1095,6 @@ public partial class DownloadRightViewModel : ObservableObject
                 source = "Curseforge";
                 id = $"curse-{smapiCurseforgeProjectId}";
             }
-            else if (!string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-            {
-                source = "Curseforge";
-                id = $"curse-{smapiCurseforgeProjectId}";
-            }
             else if (!string.IsNullOrWhiteSpace(settings.NexusModsOAuthToken))
             {
                 source = "NexusMods";
@@ -1238,12 +1236,27 @@ public partial class DownloadRightViewModel : ObservableObject
         switch (category)
         {
             case DownloadCategory.SMAPI:
+                if (_hasLoadedSmapiItems && Items.Count > 0)
+                {
+                    FilteredItems = new List<DownloadItem>(Items);
+                    return;
+                }
                 LoadSMAPIItems();
                 break;
             case DownloadCategory.Mods:
+                if (_hasLoadedModItems && Items.Count > 0)
+                {
+                    FilteredItems = new List<DownloadItem>(Items);
+                    return;
+                }
                 LoadModItems();
                 break;
             case DownloadCategory.Modpacks:
+                if (_hasLoadedModpackItems && Items.Count > 0)
+                {
+                    FilteredItems = new List<DownloadItem>(Items);
+                    return;
+                }
                 LoadModpackItems();
                 break;
         }
@@ -1256,6 +1269,7 @@ public partial class DownloadRightViewModel : ObservableObject
     /// </summary>
     private void LoadSMAPIItems()
     {
+        _hasLoadedSmapiItems = true;
         // SMAPI 页面改为 ModSearch 风格列表
         Items = new List<DownloadItem>();
         FilteredItems = new List<DownloadItem>();
@@ -1288,6 +1302,15 @@ public partial class DownloadRightViewModel : ObservableObject
                 SmapiModList = cachedList;
                 Status = $"显示 {SmapiModList.Count} 个结果";
                 Log.Debug($"[DownloadRightViewModel] SMAPI 列表命中缓存: source={SmapiSelectedSource}, count={SmapiModList.Count}");
+                
+                // 为缓存的项异步加载汉化和图标
+                foreach (var item in cachedList)
+                {
+                    _ = item.LoadIconAsync();
+                }
+                LocalizationDisplayHelper.ApplyLocalizationInBackground(cachedList);
+                
+                return;
             }
 
             var result = new List<ModSearchItem>();
@@ -1303,31 +1326,9 @@ public partial class DownloadRightViewModel : ObservableObject
             foreach (var source in sources)
             {
                 // 无法获取某个来源的信息，则不显示该来源
-                if (source == "Curseforge" && string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-                {
-                    if (SmapiSelectedSource == "Curseforge" && !_hasShownSmapiConfigWarning)
-                    {
-                        _hasShownSmapiConfigWarning = true;
-                        ApiSettingsNavigationHelper.ShowApiConfigWarningAndNavigate(
-                            "DownloadRightViewModel",
-                            "⚠️ Curseforge API 未配置\n请在设置页面配置 Curseforge API Key 以从 Curseforge 源下载 SMAPI。"
-                        );
-                    }
-                    continue;
-                }
+                
 
-                if (source == "NexusMods" && string.IsNullOrWhiteSpace(settings.NexusModsOAuthToken))
-                {
-                    if (SmapiSelectedSource == "NexusMods" && !_hasShownSmapiConfigWarning)
-                    {
-                        _hasShownSmapiConfigWarning = true;
-                        ApiSettingsNavigationHelper.ShowApiConfigWarningAndNavigate(
-                            "DownloadRightViewModel",
-                            "⚠️ NexusMods 未登录\n请在设置页面登录 NexusMods 账户以从 NexusMods 源下载 SMAPI。"
-                        );
-                    }
-                    continue;
-                }
+                
 
                 var item = new ModSearchItem
                 {
@@ -1360,10 +1361,6 @@ public partial class DownloadRightViewModel : ObservableObject
                     // 参考 ModSearch 的 icon 获取方式
                     if (source == "Curseforge")
                     {
-                        // 初始化 API Key（参考 ModSearch 的做法）
-                        SVL.Core.Download.CurseforgeApiService.SetApiKey(settings.CurseforgeApiKey);
-                        SVL.Core.Stardew.Mod.SMAPI.SmapApiService.SetCurseforgeApiKey(settings.CurseforgeApiKey);
-
                         var modInfo = await SVL.Core.Download.CurseforgeApiService.GetModInfoAsync(smapiCurseforgeProjectId);
                         var logoUrl = modInfo?.Logo?.ThumbnailUrl ?? modInfo?.Logo?.Url;
                         if (string.IsNullOrWhiteSpace(logoUrl))
@@ -1398,9 +1395,10 @@ public partial class DownloadRightViewModel : ObservableObject
                     }
                     else if (source == "NexusMods")
                     {
-                        // 复用服务层：优先 GraphQL 搜索，失败后自动 REST 回退
+                        // 列表页只获取基本信息，不加载版本列表（版本列表在Detail页加载）
+                        // SMAPI 是固定 Mod ID，直接使用 REST API 获取详情
                         var modInfo = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService
-                            .GetModDetailsWithSearchFallbackAsync(smapiNexusModId, "SMAPI - Stardew Modding API");
+                            .GetModDetailsAsync(smapiNexusModId);
 
                         if (string.IsNullOrWhiteSpace(modInfo?.PictureUrl))
                             continue;
@@ -1420,17 +1418,7 @@ public partial class DownloadRightViewModel : ObservableObject
                         if (modInfo != null && modInfo.UpdatedAt != default)
                             item.LastUpdateTime = modInfo.UpdatedAt.ToString("yyyy-MM-dd");
 
-                        try
-                        {
-                            var (versions, _, _) = await GetSmapiVersionsFromNexusModsAsync();
-                            var latest = versions.FirstOrDefault();
-                            if (latest != null && latest.PublishedDate != default)
-                                item.LastUpdateTime = latest.PublishedDate.ToString("yyyy-MM-dd");
-                        }
-                        catch
-                        {
-                            // 更新时间获取失败不影响展示
-                        }
+                        // 注意：版本列表不在列表页加载，用户点击进入Detail页时才会加载
                     }
                     else
                     {
@@ -1457,26 +1445,11 @@ public partial class DownloadRightViewModel : ObservableObject
 
                     _ = item.LoadIconAsync();
                     result.Add(item);
+                    LocalizationDisplayHelper.ApplyLocalizationInBackground(new[] { item });
                 }
                 catch (Exception ex)
                 {
-                    if (source == "NexusMods" && IsNexusUnauthorizedException(ex))
-                    {
-                        Log.Warn("[DownloadRightViewModel] SMAPI 来源 NexusMods 登录已过期", ex);
-                        HandleNexusModsTokenExpired(showNotification: false);
-
-                        if (!_hasShownSmapiConfigWarning && (SmapiSelectedSource == source || SmapiSelectedSource == "全部"))
-                        {
-                            _hasShownSmapiConfigWarning = true;
-                            ApiSettingsNavigationHelper.ShowApiConfigWarningAndNavigate(
-                                "DownloadRightViewModel",
-                                "⚠️ NexusMods 登录已过期\n请在设置页面重新登录 NexusMods 账户。",
-                                "登录状态提示"
-                            );
-                        }
-
-                        continue;
-                    }
+                    
 
                     // 无法获取该来源信息 => 不显示，但如果用户明确选择该来源（或当前为“全部”且该来源缺失），提示一次并跳转设置
                     Log.Warn($"[DownloadRightViewModel] SMAPI 来源 {source} 信息获取失败", ex);
@@ -1507,7 +1480,7 @@ public partial class DownloadRightViewModel : ObservableObject
                 _hasShownSmapiConfigWarning = true;
                 ApiSettingsNavigationHelper.ShowApiConfigWarningAndNavigate(
                     "DownloadRightViewModel",
-                    "⚠️ 未能加载任何 SMAPI 来源\n请在设置页面检查 Curseforge API Key / NexusMods 登录状态，或稍后重试。"
+                    "⚠️ 未能加载任何 SMAPI 来源\n请检查网络连接与 NexusMods 登录状态，或稍后重试。"
                 );
             }
         }
@@ -1540,24 +1513,10 @@ public partial class DownloadRightViewModel : ObservableObject
     {
         try
         {
-            // 确保在加载前 API Keys 已初始化（从 AppConfig 重新加载最新配置）
+            // 确保在加载前认证信息已初始化（从 AppConfig 重新加载最新配置）
             try
             {
                 var settings = SVL.Core.Config.AppConfig.GetSettings();
-
-                // 初始化 Curseforge API Key（用于 CurseforgeApiService）
-                if (!string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-                {
-                    SVL.Core.Download.CurseforgeApiService.SetApiKey(settings.CurseforgeApiKey);
-                    Log.Info("[DownloadRightViewModel] ✓ Curseforge API Key 已加载");
-                }
-
-                // 初始化 Curseforge API Key（用于 SmapApiService）
-                if (!string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-                {
-                    SVL.Core.Stardew.Mod.SMAPI.SmapApiService.SetCurseforgeApiKey(settings.CurseforgeApiKey);
-                    Log.Info("[DownloadRightViewModel] ✓ SMAPI Curseforge API Key 已加载");
-                }
 
                 // NexusMods 现在使用 OAuth 认证，不需要手动设置 API Key
                 if (!string.IsNullOrEmpty(settings.NexusModsOAuthToken))
@@ -1567,7 +1526,7 @@ public partial class DownloadRightViewModel : ObservableObject
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "[DownloadRightViewModel] 初始化 API Keys 失败");
+                Log.Error(ex, "[DownloadRightViewModel] 初始化认证信息失败");
             }
 
             Status = "正在加载版本列表...";
@@ -1577,27 +1536,6 @@ public partial class DownloadRightViewModel : ObservableObject
 
             List<SVL.Core.Stardew.Mod.SMAPI.SmapiVersionInfo> versions;
             string sourceName;
-
-            // 检查 Curseforge API 配置（如果选择了 Curseforge 或 全部）
-            if (SmapiSelectedSource == "Curseforge" || SmapiSelectedSource == "全部")
-            {
-                var settings = AppConfig.GetSettings();
-                var curseforgeKey = settings.CurseforgeApiKey;
-                if (string.IsNullOrEmpty(curseforgeKey) && !_hasShownSmapiConfigWarning)
-                {
-                    _hasShownSmapiConfigWarning = true;
-                    ApiSettingsNavigationHelper.ShowApiConfigWarningAndNavigate(
-                        "DownloadRightViewModel",
-                        "⚠️ Curseforge API 未配置\n请在设置页面配置 Curseforge API Key 以从 Curseforge 源下载 SMAPI。"
-                    );
-                    // 如果选择的是 Curseforge 单独源，则不继续加载
-                    if (SmapiSelectedSource == "Curseforge")
-                    {
-                        Status = "⚠️ 需要配置 Curseforge API";
-                        return;
-                    }
-                }
-            }
 
             // 检查 NexusMods 登录状态（如果选择了 NexusMods 或 全部）
             if (SmapiSelectedSource == "NexusMods" || SmapiSelectedSource == "全部")
@@ -1629,13 +1567,12 @@ public partial class DownloadRightViewModel : ObservableObject
 
                 var githubTask = SVL.Core.Stardew.Mod.SMAPI.SmapApiService.GetAllVersionsAsync(CurrentPage, PageSize);
 
-                var curseforgeTask = !string.IsNullOrWhiteSpace(settings.CurseforgeApiKey)
-                    ? SVL.Core.Stardew.Mod.SMAPI.SmapApiService.GetAllVersionsFromCurseforgeAsync(CurrentPage - 1, PageSize)
-                    : Task.FromResult(new List<SVL.Core.Stardew.Mod.SMAPI.SmapiVersionInfo>());
+                var curseforgeTask = SVL.Core.Stardew.Mod.SMAPI.SmapApiService.GetAllVersionsFromCurseforgeAsync(CurrentPage - 1, PageSize);
 
-                var nexusTask = !string.IsNullOrWhiteSpace(settings.NexusModsOAuthToken)
-                    ? GetSmapiVersionsFromNexusModsAsync()
-                    : Task.FromResult((new List<SVL.Core.Stardew.Mod.SMAPI.SmapiVersionInfo>(), string.Empty, 0));
+                
+                  var nexusTask = string.IsNullOrWhiteSpace(settings.NexusModsOAuthToken) 
+                                      ? Task.FromResult<(System.Collections.Generic.List<SVL.Core.Stardew.Mod.SMAPI.SmapiVersionInfo>, string, int)>((new System.Collections.Generic.List<SVL.Core.Stardew.Mod.SMAPI.SmapiVersionInfo>(), string.Empty, 0)) 
+                                      : GetSmapiVersionsFromNexusModsAsync();
 
                 await Task.WhenAll(githubTask, curseforgeTask, nexusTask);
 
@@ -2036,6 +1973,7 @@ public partial class DownloadRightViewModel : ObservableObject
     /// </summary>
     private async void LoadModItems()
     {
+        _hasLoadedModItems = true;
         // 如果有搜索词，执行搜索；否则显示热门Mod
         if (!string.IsNullOrWhiteSpace(ModsSearchText))
         {
@@ -2054,24 +1992,10 @@ public partial class DownloadRightViewModel : ObservableObject
     {
         Items = new List<DownloadItem>();
 
-        // 确保在加载前 API Keys 已初始化（从 AppConfig 重新加载最新配置）
+        // 确保在加载前认证信息已初始化（从 AppConfig 重新加载最新配置）
         try
         {
             var settings = SVL.Core.Config.AppConfig.GetSettings();
-
-            // 初始化 Curseforge API Key（用于 CurseforgeApiService）
-            if (!string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-            {
-                SVL.Core.Download.CurseforgeApiService.SetApiKey(settings.CurseforgeApiKey);
-                Log.Info("[DownloadRightViewModel] ✓ Curseforge API Key 已加载");
-            }
-
-            // 初始化 Curseforge API Key（用于 SmapApiService）
-            if (!string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-            {
-                SVL.Core.Stardew.Mod.SMAPI.SmapApiService.SetCurseforgeApiKey(settings.CurseforgeApiKey);
-                Log.Info("[DownloadRightViewModel] ✓ SMAPI Curseforge API Key 已加载");
-            }
 
             // NexusMods 现在使用 OAuth 认证，不需要手动设置 API Key
             if (!string.IsNullOrEmpty(settings.NexusModsOAuthToken))
@@ -2081,7 +2005,7 @@ public partial class DownloadRightViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "[DownloadRightViewModel] 初始化 API Keys 失败");
+            Log.Error(ex, "[DownloadRightViewModel] 初始化认证信息失败");
         }
 
         // 并行加载 Curseforge 和 NexusMods 的热门 Mod
@@ -2385,6 +2309,7 @@ public partial class DownloadRightViewModel : ObservableObject
     /// </summary>
     private void LoadModpackItems()
     {
+        _hasLoadedModpackItems = true;
         Items = new List<DownloadItem>();
         FilteredItems = new List<DownloadItem>();
         _ = LoadModpackItemsFromMultipleSourcesAsync();
@@ -2440,20 +2365,6 @@ public partial class DownloadRightViewModel : ObservableObject
     private async Task<List<DownloadItem>> LoadModpacksFromCurseforgeAsync(string query)
     {
         var result = new List<DownloadItem>();
-
-        if (!CurseforgeApiService.HasApiKey)
-        {
-            if (!_hasShownModpackConfigWarning)
-            {
-                _hasShownModpackConfigWarning = true;
-                ApiSettingsNavigationHelper.ShowApiConfigWarningAndNavigate(
-                    "DownloadRightViewModel",
-                    "⚠️ Curseforge API 未配置\n请在设置页面配置 API Key 以加载 Curseforge Modpack。"
-                );
-            }
-
-            return result;
-        }
 
         try
         {
@@ -2591,7 +2502,7 @@ public partial class DownloadRightViewModel : ObservableObject
                 Name = "Curseforge Modpack（示例）",
                 Author = "Curseforge",
                 Version = "等待配置",
-                Description = "请在设置中配置 Curseforge API Key 后加载整合包。",
+                Description = "请检查网络连接后重试加载 Curseforge 整合包。",
                 Thumbnail = "🧩",
                 Category = "Modpacks"
             },
@@ -2607,7 +2518,7 @@ public partial class DownloadRightViewModel : ObservableObject
             }
         };
         FilteredItems = new List<DownloadItem>(Items);
-        Status = "整合包来源未就绪，请先配置 API 或登录账户";
+        Status = "整合包来源未就绪，请检查网络或登录状态";
     }
 
     // Utilities category removed

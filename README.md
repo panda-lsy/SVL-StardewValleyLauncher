@@ -14,6 +14,12 @@
   <img src="https://img.shields.io/badge/License-Apache_2.0-green" alt="License">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows" alt="Windows">
   <img src="https://img.shields.io/github/v/release/panda-lsy/SVL-StardewValleyLauncher?include_prereleases" alt="Release">
+  <a href="https://svl-website.89b52195.er.aliyun-esa.net/" target="_blank">
+    <img src="https://img.shields.io/badge/官网-SVL%20Website-2F855A?style=flat-square" alt="Official Website">
+  </a>
+  <a href="https://svl-website.89b52195.er.aliyun-esa.net/contribute" target="_blank">
+    <img src="https://img.shields.io/badge/社区本地化-参与贡献-0F766E?style=flat-square" alt="Community Localization Contribution">
+  </a>
   <a href="https://ifdian.net/a/mcshengxia" target="_blank">
     <img src="https://img.shields.io/badge/爱发电-赞助支持-FF6B6B?logo=love&logoColor=white" alt="Sponsor">
   </a>

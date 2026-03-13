@@ -12,6 +12,7 @@ using ICSharpCode.SharpZipLib.Zip;
 using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Localization;
 using SVL.Core.Stardew.Mod;
 
 namespace SVL.Core.Download;
@@ -666,16 +667,6 @@ public class ModDownloadTask : DownloadTask
         using var httpClient = new HttpClient();
         httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
 
-        if (downloadUrl.Contains("curseforge.com"))
-        {
-            var apiKey = CurseforgeApiService.GetApiKey();
-            if (!string.IsNullOrEmpty(apiKey))
-            {
-                httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
-                Log.Info("[ModDownloadTask] 已添加 Curseforge API Key");
-            }
-        }
-
         httpClient.Timeout = TimeSpan.FromMinutes(30);
 
         var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, _linkedToken);
@@ -1236,16 +1227,16 @@ public class ModDownloadTask : DownloadTask
         return combinedPath;
     }
 
-    private Task WriteSourceCredentialFilesAsync(string targetModsPath, System.Collections.Generic.IEnumerable<string> targetModDirs)
+    private async Task WriteSourceCredentialFilesAsync(string targetModsPath, System.Collections.Generic.IEnumerable<string> targetModDirs)
     {
         try
         {
             if (_saveOnly)
-                return Task.CompletedTask;
+                return;
 
             var normalizedPlatform = NormalizePlatform(_sourcePlatform);
             if (string.IsNullOrWhiteSpace(normalizedPlatform))
-                return Task.CompletedTask;
+                return;
 
             var normalizedProjectId = NormalizeId(_sourceProjectId);
             var normalizedFileId = NormalizeId(_sourceFileId);
@@ -1255,18 +1246,20 @@ public class ModDownloadTask : DownloadTask
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var basePayload = new
+            var metadata = new SvlSourceMetadata
             {
-                platform = normalizedPlatform,
-                projectId = string.IsNullOrWhiteSpace(normalizedProjectId) ? (_sourceProjectId ?? string.Empty) : normalizedProjectId,
-                fileId = string.IsNullOrWhiteSpace(normalizedFileId) ? (_sourceFileId ?? string.Empty) : normalizedFileId,
-                modId = _modId,
-                modName = _modName,
-                fileName = _fileName,
-                downloadUrl = _downloadUrl ?? string.Empty,
-                installedAtUtc = DateTime.UtcNow.ToString("o"),
-                schemaVersion = 2
+                Platform = normalizedPlatform,
+                ProjectId = string.IsNullOrWhiteSpace(normalizedProjectId) ? (_sourceProjectId ?? string.Empty) : normalizedProjectId,
+                FileId = string.IsNullOrWhiteSpace(normalizedFileId) ? (_sourceFileId ?? string.Empty) : normalizedFileId,
+                ModId = _modId,
+                ModName = _modName,
+                FileName = _fileName,
+                DownloadUrl = _downloadUrl ?? string.Empty,
+                InstalledAtUtc = DateTime.UtcNow.ToString("o"),
+                SchemaVersion = 3
             };
+
+            metadata.Localization = await BuildLocalizationAsync(metadata).ConfigureAwait(false);
 
             var groupedByRoot = normalizedDirs
                 .GroupBy(modDir => GetTopLevelRootDir(targetModsPath, modDir), StringComparer.OrdinalIgnoreCase)
@@ -1295,41 +1288,49 @@ public class ModDownloadTask : DownloadTask
 
                 if (hasCompositeChildren)
                 {
-                    var parentPayload = new
+                    var parentPayload = new SvlSourceMetadata
                     {
-                        platform = basePayload.platform,
-                        projectId = basePayload.projectId,
-                        fileId = basePayload.fileId,
-                        modId = basePayload.modId,
-                        modName = basePayload.modName,
-                        fileName = basePayload.fileName,
-                        downloadUrl = basePayload.downloadUrl,
-                        installedAtUtc = basePayload.installedAtUtc,
-                        schemaVersion = basePayload.schemaVersion,
-                        isParentMod = true,
-                        childMods = childEntries
+                        Platform = metadata.Platform,
+                        ProjectId = metadata.ProjectId,
+                        FileId = metadata.FileId,
+                        ModId = metadata.ModId,
+                        ModName = metadata.ModName,
+                        FileName = metadata.FileName,
+                        DownloadUrl = metadata.DownloadUrl,
+                        InstalledAtUtc = metadata.InstalledAtUtc,
+                        SchemaVersion = metadata.SchemaVersion,
+                        Localization = metadata.Localization,
+                        IsParentMod = true,
+                        ChildMods = childEntries.Select(child => new SvlChildModReference
+                        {
+                            Id = child.id,
+                            Name = child.name,
+                            RelativePath = child.relativePath,
+                            UniqueId = child.uniqueId
+                        }).ToList()
                     };
 
                     WriteSourceCredentialFile(parentDir, parentPayload);
 
                     foreach (var childDir in manifestDirs)
                     {
-                        var childPayload = new
+                        var childPayload = new SvlSourceMetadata
                         {
-                            platform = basePayload.platform,
-                            projectId = basePayload.projectId,
-                            fileId = basePayload.fileId,
-                            modId = basePayload.modId,
-                            modName = basePayload.modName,
-                            fileName = basePayload.fileName,
-                            downloadUrl = basePayload.downloadUrl,
-                            installedAtUtc = basePayload.installedAtUtc,
-                            schemaVersion = basePayload.schemaVersion,
-                            parentMod = new
+                            Platform = metadata.Platform,
+                            ProjectId = metadata.ProjectId,
+                            FileId = metadata.FileId,
+                            ModId = metadata.ModId,
+                            ModName = metadata.ModName,
+                            FileName = metadata.FileName,
+                            DownloadUrl = metadata.DownloadUrl,
+                            InstalledAtUtc = metadata.InstalledAtUtc,
+                            SchemaVersion = metadata.SchemaVersion,
+                            Localization = metadata.Localization,
+                            ParentMod = new SvlParentModReference
                             {
-                                id = parentId,
-                                name = parentName,
-                                relativePath = GetRelativePathPortable(targetModsPath, parentDir).Replace(Path.DirectorySeparatorChar, '/')
+                                Id = parentId,
+                                Name = parentName,
+                                RelativePath = GetRelativePathPortable(targetModsPath, parentDir).Replace(Path.DirectorySeparatorChar, '/')
                             }
                         };
 
@@ -1341,7 +1342,7 @@ public class ModDownloadTask : DownloadTask
 
                 foreach (var modDir in manifestDirs)
                 {
-                    WriteSourceCredentialFile(modDir, basePayload);
+                    WriteSourceCredentialFile(modDir, metadata);
                 }
             }
         }
@@ -1350,7 +1351,7 @@ public class ModDownloadTask : DownloadTask
             Log.Warn("[ModDownloadTask] 写入来源凭证时发生错误", ex);
         }
 
-        return Task.CompletedTask;
+        return;
     }
 
     private static string NormalizeId(string? value)
@@ -1377,7 +1378,7 @@ public class ModDownloadTask : DownloadTask
         return string.Empty;
     }
 
-    private static void WriteSourceCredentialFile(string modDir, object payload)
+    private static void WriteSourceCredentialFile(string modDir, SvlSourceMetadata payload)
     {
         try
         {
@@ -1387,15 +1388,41 @@ public class ModDownloadTask : DownloadTask
                 return;
             }
 
-            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
-            var credentialPath = Path.Combine(modDir, "svl-source.json");
-            File.WriteAllText(credentialPath, json);
+            var credentialPath = SvlSourceMetadataStore.GetFilePath(modDir);
+            File.WriteAllText(credentialPath, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
             Log.Info($"[ModDownloadTask] 已写入来源凭证: {credentialPath}");
         }
         catch (Exception ex)
         {
             Log.Warn($"[ModDownloadTask] 写入来源凭证失败: {modDir}", ex);
         }
+    }
+
+    private static async Task<SvlSourceLocalization?> BuildLocalizationAsync(SvlSourceMetadata metadata)
+    {
+        if (metadata == null)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(metadata.ProjectId) || string.IsNullOrWhiteSpace(metadata.Platform))
+            return null;
+
+        var localization = await CommunityLocalizationService.GetAsync("mod", metadata.Platform, metadata.ProjectId).ConfigureAwait(false);
+        if (localization == null)
+            return null;
+
+        return new SvlSourceLocalization
+        {
+            EntityType = localization.EntityType ?? "mod",
+            Platform = localization.Platform ?? metadata.Platform,
+            Id = localization.Id ?? metadata.ProjectId,
+            NameZhCn = localization.Name?.ZhCn ?? string.Empty,
+            NameSource = localization.Name?.Source ?? metadata.ModName,
+            DescriptionZhCn = localization.Description?.ZhCn ?? string.Empty,
+            DescriptionSource = localization.Description?.Source ?? string.Empty,
+            SourceUrl = localization.Meta?.SourceUrl ?? string.Empty,
+            UpdatedAt = localization.Meta?.UpdatedAt ?? string.Empty,
+            Contributor = localization.Meta?.Contributor ?? string.Empty
+        };
     }
 
     private static string GetTopLevelRootDir(string targetModsPath, string modDir)

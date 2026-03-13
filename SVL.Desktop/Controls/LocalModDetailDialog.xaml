@@ -13,6 +13,31 @@
     <Window.Resources>
         <converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter"/>
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <Style x:Key="DetailActionSegmentButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#24FFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#38FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Border Background="{DynamicResource ColorBrush5}"
@@ -45,6 +70,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- MOD 名称 -->
@@ -56,8 +82,30 @@
                                TextWrapping="Wrap"
                                VerticalAlignment="Center"/>
 
+                            <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding HasLocalization, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Button Command="{Binding ShowLocalizedTextCommand}"
+                                Content="中"
+                                Padding="8,2"
+                                Margin="0,0,4,0"
+                                FontSize="11"
+                                BorderThickness="0"
+                                Background="#40FFFFFF"
+                                Foreground="White"/>
+                            <Button Command="{Binding ShowSourceTextCommand}"
+                                Content="EN"
+                                Padding="8,2"
+                                FontSize="11"
+                                BorderThickness="0"
+                                Background="#25FFFFFF"
+                                Foreground="White"/>
+                            </StackPanel>
+
                     <!-- 关闭按钮 -->
-                    <Button Grid.Column="1"
+                            <Button Grid.Column="2"
                             Command="{Binding CloseCommand}"
                             Width="32"
                             Height="32"
@@ -326,6 +374,34 @@
                     CornerRadius="0,0,12,12"
                     Padding="24,16,24,16">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Grid Margin="0,0,8,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="1"/>
+                            <ColumnDefinition Width="36"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Command="{Binding OpenLocalizationContributionCommand}"
+                                Content="贡献本地化"
+                                Height="36"
+                                Padding="16,0"
+                                Cursor="Hand"
+                                Style="{StaticResource DetailActionSegmentButtonStyle}"/>
+
+                        <Border Grid.Column="1"
+                                Width="1"
+                                Margin="0,7"
+                                Background="{DynamicResource ColorBrushSemiTransparent}"/>
+
+                        <Button Grid.Column="2"
+                                Command="{Binding ShowLocalizationContributorInfoCommand}"
+                                Content="i"
+                                Height="36"
+                                Cursor="Hand"
+                                Style="{StaticResource DetailActionSegmentButtonStyle}"/>
+                    </Grid>
+
                     <Button Content="打开文件夹"
                             Command="{Binding OpenFolderCommand}"
                             Height="36"

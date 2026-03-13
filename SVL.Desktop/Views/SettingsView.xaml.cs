@@ -33,12 +33,6 @@ public partial class SettingsView : UserControl
         {
             if (DataContext is ViewModels.SettingsViewModel viewModel)
             {
-                // 如果 Curseforge API Key 已有值，设置到 PasswordBox（会自动显示为 ●）
-                if (!string.IsNullOrEmpty(viewModel.CurseforgeApiKey))
-                {
-                    CurseforgeApiKeyPasswordBox.Password = viewModel.CurseforgeApiKey;
-                }
-
                 // 刷新 NexusMods OAuth 登录状态
                 viewModel.RefreshNexusLoginStatus();
 
@@ -139,32 +133,6 @@ public partial class SettingsView : UserControl
         tab.Background = Brushes.Transparent;
         tab.SetResourceReference(Button.ForegroundProperty, "ColorBrush1");
         tab.Opacity = 1.0; // 重置透明度
-    }
-
-    /// <summary>
-    /// 打开 Curseforge API Key 获取页面
-    /// </summary>
-    private void OnGetCurseforgeApiKeyClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            ProcessEx.OpenUrl("https://console.curseforge.com/?#/api-keys");
-        }
-        catch (Exception ex)
-        {
-            SvlMessageBox.Error($"无法打开浏览器：{ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Curseforge API Key 密码框变更时
-    /// </summary>
-    private void OnCurseforgeApiKeyPasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (sender is PasswordBox passwordBox && DataContext is ViewModels.SettingsViewModel viewModel)
-        {
-            viewModel.CurseforgeApiKey = passwordBox.Password;
-        }
     }
 
     /// <summary>

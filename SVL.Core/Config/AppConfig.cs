@@ -37,10 +37,6 @@ public static class AppConfig
                 if (settings != null)
                 {
                     // 解密 API Keys
-                    if (!string.IsNullOrEmpty(settings.CurseforgeApiKey))
-                    {
-                        settings.CurseforgeApiKey = SecureString.Decrypt(settings.CurseforgeApiKey);
-                    }
                     if (!string.IsNullOrEmpty(settings.NexusModsApiKey))
                     {
                         settings.NexusModsApiKey = SecureString.Decrypt(settings.NexusModsApiKey);
@@ -90,6 +86,7 @@ public static class AppConfig
                 // 默认下载源
                 SmapiDefaultSource = settings.SmapiDefaultSource,
                 ModDefaultSource = settings.ModDefaultSource,
+                LocalizationPreferredSource = settings.LocalizationPreferredSource,
                 MaxConcurrentModDownloads = settings.MaxConcurrentModDownloads,
 
                 // NexusMods
@@ -100,9 +97,6 @@ public static class AppConfig
                 CacheRetentionMinutes = settings.CacheRetentionMinutes,
 
                 // 加密 API Keys
-                CurseforgeApiKey = !string.IsNullOrEmpty(settings.CurseforgeApiKey)
-                    ? SecureString.Encrypt(settings.CurseforgeApiKey)
-                    : null,
                 NexusModsApiKey = !string.IsNullOrEmpty(settings.NexusModsApiKey)
                     ? SecureString.Encrypt(settings.NexusModsApiKey)
                     : null,
@@ -218,11 +212,6 @@ public class AppSettings
     public int CustomWindowHeight { get; set; } = 720;
 
     // ===== API 设置 =====
-
-    /// <summary>
-    /// Curseforge API Key
-    /// </summary>
-    public string? CurseforgeApiKey { get; set; }
 
     /// <summary>
     /// NexusMods API Key
@@ -367,6 +356,11 @@ public class AppSettings
     /// Mod 默认下载源
     /// </summary>
     public string? ModDefaultSource { get; set; } = "全部";
+
+    /// <summary>
+    /// 社区本地化首选源
+    /// </summary>
+    public string LocalizationPreferredSource { get; set; } = "Gitee";
 
     /// <summary>
     /// 整合包安装时的最大并发下载数（1-10）

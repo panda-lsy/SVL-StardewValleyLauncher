@@ -14,6 +14,104 @@
     <UserControl.Resources>
         <converters:LongToFileSizeConverter x:Key="FileSizeConverter"/>
         <converters:UrlToVisibilityConverter x:Key="UrlToVisibilityConverter"/>
+        <Style x:Key="DetailActionPillStyle" TargetType="Button">
+            <Setter Property="Width" Value="220"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+            <Setter Property="BorderBrush" Value="#22FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="20"
+                                Padding="16,0">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.92"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Opacity" Value="0.82"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="DetailActionGhostButtonStyle" TargetType="Button" BasedOn="{StaticResource DetailActionPillStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+            <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushSemiTransparent}"/>
+        </Style>
+        <Style x:Key="DetailActionShellStyle" TargetType="Border">
+            <Setter Property="Width" Value="220"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushSemiTransparent}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="20"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+        <Style x:Key="DetailActionLabelTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrushGray3}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="14,0,10,0"/>
+        </Style>
+        <Style x:Key="DetailActionSegmentButtonStyle" TargetType="Button">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#24FFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#38FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="DetailActionInfoButtonStyle" TargetType="Button" BasedOn="{StaticResource DetailActionGhostButtonStyle}">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="20">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -52,12 +150,64 @@
 
                     <!-- MOD 信息 -->
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="{Binding Mod.Name}"
-                                   FontSize="20"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource ColorBrush1}"
-                                   TextWrapping="Wrap"
-                                   Margin="0,0,0,12"/>
+                        <StackPanel Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding Mod.DisplayName}"
+                                           Margin="0,0,12,0"
+                                           FontSize="20"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource ColorBrush1}"
+                                           TextWrapping="Wrap"/>
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Top"
+                                            Visibility="{Binding Mod.HasLocalizedName, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Button Content="中"
+                                            Command="{Binding Mod.ShowLocalizedNameCommand}"
+                                            Padding="8,2"
+                                            Margin="0,0,4,0"
+                                            FontSize="11"
+                                            BorderThickness="0"
+                                            Foreground="{DynamicResource ColorBrush1}">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Mod.UseLocalizedName}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Content="EN"
+                                            Command="{Binding Mod.ShowSourceNameCommand}"
+                                            Padding="8,2"
+                                            FontSize="11"
+                                            BorderThickness="0"
+                                            Foreground="{DynamicResource ColorBrush1}">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Mod.UseLocalizedName}" Value="False">
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
 
                         <!-- 统计信息 -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
@@ -118,88 +268,139 @@
                         </StackPanel>
 
                         <!-- 描述（放在作者/来源下一行） -->
-                        <TextBlock FontSize="12"
-                                   Foreground="{DynamicResource ColorBrushGray3}"
-                                   TextWrapping="Wrap"
-                                   LineHeight="18"
-                                   Margin="0,0,0,0"
-                                   Visibility="{Binding HasAnyDescription, Converter={StaticResource BoolToVisibilityConverter}}">
-                            <Run Text="描述："/>
-                            <Run Text="{Binding DisplayDescription, Mode=OneWay}"/>
-                        </TextBlock>
+                        <Grid Visibility="{Binding Mod.HasAnyDisplayDescription, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Margin="0,0,12,0"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource ColorBrushGray3}"
+                                       TextWrapping="Wrap"
+                                       LineHeight="18">
+                                <Run Text="描述："/>
+                                <Run Text="{Binding Mod.DisplaySummary, Mode=OneWay}"/>
+                            </TextBlock>
+
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Bottom"
+                                        Visibility="{Binding Mod.HasLocalizedDescription, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Button Content="中"
+                                        Command="{Binding Mod.ShowLocalizedDescriptionCommand}"
+                                        Padding="8,2"
+                                        Margin="0,0,4,0"
+                                        FontSize="11"
+                                        BorderThickness="0"
+                                        Foreground="{DynamicResource ColorBrush1}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Mod.UseLocalizedDescription}" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="EN"
+                                        Command="{Binding Mod.ShowSourceDescriptionCommand}"
+                                        Padding="8,2"
+                                        FontSize="11"
+                                        BorderThickness="0"
+                                        Foreground="{DynamicResource ColorBrush1}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Mod.UseLocalizedDescription}" Value="False">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
 
                     <!-- 操作按钮 -->
                     <StackPanel Grid.Column="2"
-                                VerticalAlignment="Top">
+                            VerticalAlignment="Top"
+                            Margin="34,0,0,0">
                         <Button Content="转到来源"
-                                Width="100"
-                                Height="32"
-                                FontSize="12"
                                 Command="{Binding OpenSourceUrlCommand}"
-                                Margin="0,0,0,8">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
-                                    <Setter Property="Foreground" Value="White"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                    <Setter Property="Cursor" Value="Hand"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4"
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                    VerticalAlignment="Center"/>
-                                                </Border>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource ColorBrush1}"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
+                                Margin="0,0,0,10"
+                                Style="{StaticResource DetailActionPillStyle}"/>
 
-                        <Button Command="{Binding CopyNameCommand}"
-                                Content="复制名称"
-                                Width="100"
-                                Height="32"
-                                FontSize="12"
-                                Background="{DynamicResource ColorBrush3}"
-                                Foreground="{DynamicResource ColorBrush1}"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                Margin="0,0,0,8">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="4"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
+                        <Border Style="{StaticResource DetailActionShellStyle}"
+                                Margin="0,0,0,8"
+                                Padding="0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="1"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="1"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
 
-                        <Button Command="{Binding CopyIdCommand}"
-                                Content="复制 ID"
-                                Width="100"
-                                Height="32"
-                                FontSize="12"
-                                Background="{DynamicResource ColorBrush3}"
-                                Foreground="{DynamicResource ColorBrush1}"
-                                BorderThickness="0"
-                                Cursor="Hand">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="4"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
+                                <TextBlock Grid.Column="0"
+                                           Text="复制"
+                                           Style="{StaticResource DetailActionLabelTextStyle}"/>
+
+                                <Border Grid.Column="1"
+                                        Width="1"
+                                        Margin="0,7"
+                                        Background="{DynamicResource ColorBrushSemiTransparent}"/>
+
+                                <Button Grid.Column="2"
+                                        Command="{Binding CopyNameCommand}"
+                                        Content="名称"
+                                        Style="{StaticResource DetailActionSegmentButtonStyle}"/>
+
+                                <Border Grid.Column="3"
+                                        Width="1"
+                                        Margin="0,7"
+                                        Background="{DynamicResource ColorBrushSemiTransparent}"/>
+
+                                <Button Grid.Column="4"
+                                        Command="{Binding CopyIdCommand}"
+                                        Content="{Binding CopyIdButtonText}"
+                                        Style="{StaticResource DetailActionSegmentButtonStyle}"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource DetailActionShellStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="1"/>
+                                    <ColumnDefinition Width="44"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button Grid.Column="0"
+                                        Command="{Binding OpenLocalizationContributionPageCommand}"
+                                        Content="贡献本地化"
+                                        HorizontalContentAlignment="Center"
+                                        Style="{StaticResource DetailActionSegmentButtonStyle}"/>
+
+                                <Border Grid.Column="1"
+                                        Width="1"
+                                        Margin="0,7"
+                                        Background="{DynamicResource ColorBrushSemiTransparent}"/>
+
+                                <Button Grid.Column="2"
+                                        Command="{Binding ShowLocalizationContributorInfoCommand}"
+                                        Content="i"
+                                        Style="{StaticResource DetailActionSegmentButtonStyle}"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </Grid>
             </controls:MyCard>
@@ -318,6 +519,170 @@
                                                 </DataTrigger>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="{DynamicResource ColorBrush4}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </controls:MyCard>
+
+            <controls:MyCard Margin="0,0,0,20"
+                             Visibility="{Binding HasHardConflictMods, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Margin="5">
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="冲突 Mod"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   VerticalAlignment="Center"/>
+
+                        <Border Grid.Column="1"
+                                Background="#1AE35D6A"
+                                BorderBrush="#40E35D6A"
+                                BorderThickness="1"
+                                CornerRadius="999"
+                                Padding="10,4"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding HardConflictModsCount, StringFormat={}{0} 项}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#C73B4E"/>
+                        </Border>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding HardConflictMods}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.OpenRequiredModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Margin="0,0,8,8"
+                                        Padding="10,6"
+                                        Cursor="Hand"
+                                        BorderThickness="0"
+                                        ToolTip="{Binding Note}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#16E35D6A"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                BorderBrush="#40E35D6A"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="⚠"
+                                                                           Margin="0,0,6,0"
+                                                                           Foreground="#C73B4E"
+                                                                           VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding DisplayText}"
+                                                                           VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#24E35D6A"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </controls:MyCard>
+
+            <controls:MyCard Margin="0,0,0,20"
+                             Visibility="{Binding HasFunctionalOverlapMods, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Margin="5">
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="功能重复 Mod"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   VerticalAlignment="Center"/>
+
+                        <Border Grid.Column="1"
+                                Background="#1A3E9B8A"
+                                BorderBrush="#403E9B8A"
+                                BorderThickness="1"
+                                CornerRadius="999"
+                                Padding="10,4"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding FunctionalOverlapModsCount, StringFormat={}{0} 项}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#2A7C6E"/>
+                        </Border>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding FunctionalOverlapMods}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.OpenRequiredModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Margin="0,0,8,8"
+                                        Padding="10,6"
+                                        Cursor="Hand"
+                                        BorderThickness="0"
+                                        ToolTip="{Binding Note}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#143E9B8A"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                BorderBrush="#403E9B8A"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="≈"
+                                                                           Margin="0,0,6,0"
+                                                                           Foreground="#2A7C6E"
+                                                                           VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding DisplayText}"
+                                                                           VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#223E9B8A"/>
                                                 </Trigger>
                                             </Style.Triggers>
                                         </Style>

@@ -12,6 +12,7 @@ using SVL.Core.Download;
 using SVL.Core.Download.NexusMods;
 using SVL.Core.IO;
 using SVL.Core.Logging;
+using SVL.Core.Stardew.Localization;
 using SVL.Core.Stardew.Instance;
 using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
@@ -64,6 +65,7 @@ internal class GamePathInfoAdapter : IStardewInstance
 /// </summary>
 public partial class ModDetailsViewModel : ObservableObject
 {
+    private const string LocalizationContributionUrl = "https://svl-website.89b52195.er.aliyun-esa.net/contribute";
     private static readonly Dictionary<string, List<ModDependencyLink>> s_requiredModsCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly MainWindowViewModel? _mainViewModel;
     private static bool s_requiredModsExpandedPreference = true;
@@ -71,6 +73,7 @@ public partial class ModDetailsViewModel : ObservableObject
     private bool _hasShownApiConfigWarning;
     private bool _isCurseforgeModpackDownloadStarting;
     private bool _isNexusCollectionInstalling;
+    private CommunityLocalizationEntry? _communityLocalizationEntry;
     private NexusMod? _loadedNexusDetails;
 
     public ModDetailsViewModel(MainWindowViewModel? mainViewModel = null)
@@ -138,6 +141,12 @@ public partial class ModDetailsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isRequiredModsExpanded;
+
+    [ObservableProperty]
+    private ObservableCollection<ModDependencyLink> _hardConflictMods = new();
+
+    [ObservableProperty]
+    private ObservableCollection<ModDependencyLink> _functionalOverlapMods = new();
 
     [ObservableProperty]
     private ObservableCollection<string> _supportedGameVersions = new();
@@ -244,11 +253,11 @@ public partial class ModDetailsViewModel : ObservableObject
             if (Mod == null)
                 return string.Empty;
 
-            if (!string.IsNullOrWhiteSpace(Mod.Summary))
-                return Mod.Summary;
+            if (!string.IsNullOrWhiteSpace(Mod.DisplaySummary))
+                return Mod.DisplaySummary;
 
-            if (!string.IsNullOrWhiteSpace(Mod.Description))
-                return Mod.Description;
+            if (!string.IsNullOrWhiteSpace(Mod.DisplayDescription))
+                return Mod.DisplayDescription;
 
             return string.Empty;
         }
@@ -257,6 +266,14 @@ public partial class ModDetailsViewModel : ObservableObject
     public bool HasAnyDescription => !string.IsNullOrWhiteSpace(DisplayDescription);
     public bool HasRequiredMods => RequiredMods.Count > 0;
     public int RequiredModsCount => RequiredMods.Count;
+    public bool HasHardConflictMods => HardConflictMods.Count > 0;
+    public int HardConflictModsCount => HardConflictMods.Count;
+    public bool HasFunctionalOverlapMods => FunctionalOverlapMods.Count > 0;
+    public int FunctionalOverlapModsCount => FunctionalOverlapMods.Count;
+    public bool IsCollectionDetails => !string.IsNullOrWhiteSpace(Mod?.Id) && Mod.Id.StartsWith("nexuscol-", StringComparison.OrdinalIgnoreCase);
+    public string CopyIdButtonText => IsCollectionDetails ? "尾链" : "ID";
+    public string CopyIdNotificationLabel => IsCollectionDetails ? "尾链" : "ID";
+    public string LocalizationContributor => Mod?.LocalizationContributor ?? string.Empty;
 
     [RelayCommand]
     private void ToggleRequiredModsExpanded()
@@ -542,6 +559,12 @@ public partial class ModDetailsViewModel : ObservableObject
         OnPropertyChanged(nameof(DisplayDescription));
         OnPropertyChanged(nameof(HasAnyDescription));
         OnPropertyChanged(nameof(HasRequiredMods));
+        OnPropertyChanged(nameof(HasHardConflictMods));
+        OnPropertyChanged(nameof(HasFunctionalOverlapMods));
+        OnPropertyChanged(nameof(IsCollectionDetails));
+        OnPropertyChanged(nameof(CopyIdButtonText));
+        OnPropertyChanged(nameof(CopyIdNotificationLabel));
+        OnPropertyChanged(nameof(LocalizationContributor));
     }
 
     /// <summary>
@@ -551,9 +574,12 @@ public partial class ModDetailsViewModel : ObservableObject
     {
         IsModpackMode = false;
         IsLoading = true;
+        _communityLocalizationEntry = null;
         _loadedNexusDetails = null;
         RequiredMods.Clear();
         OnPropertyChanged(nameof(HasRequiredMods));
+        OnPropertyChanged(nameof(RequiredModsCount));
+        ClearCommunityRelationCollections();
         CurseforgeApiService.CurseforgeModInfo? curseforgeModInfo = null;
 
         try
@@ -569,6 +595,8 @@ public partial class ModDetailsViewModel : ObservableObject
             if (selectedMod != null)
             {
                 Mod = selectedMod;
+                await LocalizationDisplayHelper.ApplyLocalizationAsync(Mod);
+                await LoadCommunityLocalizationRelationsAsync();
                 if (string.Equals(Mod.LastUpdateTime, "0001-01-01", StringComparison.OrdinalIgnoreCase))
                     Mod.LastUpdateTime = string.Empty;
 
@@ -585,7 +613,7 @@ public partial class ModDetailsViewModel : ObservableObject
                     try
                     {
                         var modIdStr = Mod.Id.Substring(6);
-                        if (int.TryParse(modIdStr, out var curseforgeModId) && curseforgeModId > 0 && CurseforgeApiService.HasApiKey)
+                        if (int.TryParse(modIdStr, out var curseforgeModId) && curseforgeModId > 0)
                         {
                             var modInfo = await CurseforgeApiService.GetModInfoAsync(curseforgeModId);
                             if (modInfo != null)
@@ -690,20 +718,6 @@ public partial class ModDetailsViewModel : ObservableObject
                 {
                     try
                     {
-                        if (!CurseforgeApiService.HasApiKey)
-                        {
-                            Log.Warn("[ModDetailsViewModel] Curseforge API Key 未配置，跳过文件列表 API 请求");
-                            if (!_hasShownApiConfigWarning)
-                            {
-                                _hasShownApiConfigWarning = true;
-                                ApiSettingsNavigationHelper.ShowApiConfigWarningAndNavigate(
-                                    "ModDetailsViewModel",
-                                    "⚠️ Curseforge API 未配置\n请在设置页面配置 Curseforge API Key。"
-                                );
-                            }
-                            return;
-                        }
-
                         // 从 mod.Id 中提取 modId（格式：curse-{modId}）
                         string modIdStr = Mod.Id.Substring(6); // 去掉 "curse-" 前缀
                         if (int.TryParse(modIdStr, out int curseforgeModId))
@@ -771,7 +785,8 @@ public partial class ModDetailsViewModel : ObservableObject
                                     }
                                 }
 
-                                // 按版本号排序（从新到旧）
+                                // 按版本号排序（从新到旧），只展开第一个（最新）游戏版本
+                                var isFirstVersion = true;
                                 foreach (var gameVersion in allGameVersions)
                                 {
                                     SupportedGameVersions.Add(gameVersion);
@@ -787,8 +802,9 @@ public partial class ModDetailsViewModel : ObservableObject
                                         {
                                             GameVersion = gameVersion,
                                             Files = new ObservableCollection<ModVersionItem>(sortedFiles),
-                                            IsExpanded = true
+                                            IsExpanded = isFirstVersion  // 只展开最新版本
                                         });
+                                        isFirstVersion = false;
                                     }
                                 }
 
@@ -962,6 +978,8 @@ public partial class ModDetailsViewModel : ObservableObject
                                     .OrderByDescending(v => v, SemanticVersionComparer.Instance)
                                     .ToList();
 
+                                // 只展开第一个（最新）游戏版本
+                                var isFirstVersion = true;
                                 foreach (var gameVersion in orderedGameVersions)
                                 {
                                     SupportedGameVersions.Add(gameVersion);
@@ -982,8 +1000,9 @@ public partial class ModDetailsViewModel : ObservableObject
                                         {
                                             GameVersion = gameVersion,
                                             Files = new ObservableCollection<ModVersionItem>(sortedFiles),
-                                            IsExpanded = true
+                                            IsExpanded = isFirstVersion  // 只展开最新版本
                                         });
+                                        isFirstVersion = false;
                                     }
                                 }
 
@@ -1094,7 +1113,7 @@ public partial class ModDetailsViewModel : ObservableObject
                             return;
                         }
 
-                        // 按游戏版本分组（显示为 x.y.z+），使用语义化版本排序
+                        // 按游戏版本分组（显示为 x.y.z+），使用语义化版本排序，只展开第一个（最新）游戏版本
                         var groups = allVersions
                             .GroupBy(v => NormalizeGitHubGameVersionKey(v.GameVersion))
                             .OrderByDescending(g => g.Key, SemanticVersionComparer.Instance)
@@ -1103,6 +1122,7 @@ public partial class ModDetailsViewModel : ObservableObject
                         // 默认包含“全部”选项
                         DisplayedGameVersions.Add("全部");
 
+                        var isFirstVersion = true;
                         foreach (var group in groups)
                         {
                             SupportedGameVersions.Add(group.Key);
@@ -1136,8 +1156,9 @@ public partial class ModDetailsViewModel : ObservableObject
                             {
                                 GameVersion = group.Key,
                                 Files = new ObservableCollection<ModVersionItem>(versionFileItems),
-                                IsExpanded = true
+                                IsExpanded = isFirstVersion  // 只展开最新版本
                             });
+                            isFirstVersion = false;
                         }
 
                         Log.Info($"[ModDetailsViewModel] 已加载 GitHub SMAPI 版本: {allVersions.Count} 条，分组 {VersionsByGameVersion.Count} 个");
@@ -1198,6 +1219,9 @@ public partial class ModDetailsViewModel : ObservableObject
         {
             IsModpackMode = true;
             Mod = modpack;
+            _communityLocalizationEntry = null;
+            ClearCommunityRelationCollections();
+            await LocalizationDisplayHelper.ApplyLocalizationAsync(Mod);
 
             if (string.IsNullOrWhiteSpace(Mod.Source))
                 Mod.Source = "Modpack";
@@ -1390,15 +1414,10 @@ public partial class ModDetailsViewModel : ObservableObject
             return;
         }
 
-        Log.Info($"[ModDetailsViewModel] 获取 Curseforge Modpack 文件列表: modId={modId}, HasApiKey={CurseforgeApiService.HasApiKey}");
+        Log.Info($"[ModDetailsViewModel] 获取 Curseforge Modpack 文件列表: modId={modId}");
 
         try
         {
-            if (!CurseforgeApiService.HasApiKey)
-            {
-                Log.Warn("[ModDetailsViewModel] Curseforge API Key 未配置，将无法获取文件下载地址");
-            }
-
             var files = await CurseforgeApiService.GetModFilesAsync(modId, index: 0, pageSize: 50);
 
             if (files != null && files.Count > 0)
@@ -1831,11 +1850,25 @@ public partial class ModDetailsViewModel : ObservableObject
 
     private void SetRequirements(IEnumerable<ModDependencyLink> requirements)
     {
+        var mergedRequirements = (requirements ?? Enumerable.Empty<ModDependencyLink>())
+            .Where(item => item != null)
+            .Select(CloneDependencyLink)
+            .ToList();
+
+        mergedRequirements.AddRange(BuildCommunityDependencyLinks());
+
+        if (mergedRequirements.Any(item => !item.IsPlaceholder))
+        {
+            mergedRequirements = mergedRequirements
+                .Where(item => !item.IsPlaceholder)
+                .ToList();
+        }
+
         RequiredMods.Clear();
-        foreach (var requirement in requirements
+        foreach (var requirement in mergedRequirements
                      .Where(item => item != null && !string.IsNullOrWhiteSpace(item.DisplayName))
                      .GroupBy(item => $"{item.Source}|{item.ProjectId}|{item.DisplayName}", StringComparer.OrdinalIgnoreCase)
-                     .Select(group => group.First()))
+                     .Select(MergeDependencyGroup))
         {
             RequiredMods.Add(requirement);
         }
@@ -1850,9 +1883,7 @@ public partial class ModDetailsViewModel : ObservableObject
         var cacheKey = GetRequirementsCacheKey();
         if (string.IsNullOrWhiteSpace(cacheKey))
         {
-            RequiredMods.Clear();
-            OnPropertyChanged(nameof(HasRequiredMods));
-            OnPropertyChanged(nameof(RequiredModsCount));
+            SetRequirements(Array.Empty<ModDependencyLink>());
             return;
         }
 
@@ -1865,6 +1896,12 @@ public partial class ModDetailsViewModel : ObservableObject
         if (string.Equals(Mod?.Source, "NexusMods", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(Mod?.Source, "Curseforge", StringComparison.OrdinalIgnoreCase))
         {
+            if (HasCommunityDependencyData)
+            {
+                SetRequirements(Array.Empty<ModDependencyLink>());
+                return;
+            }
+
             SetRequirements(new[]
             {
                 new ModDependencyLink
@@ -1878,9 +1915,7 @@ public partial class ModDetailsViewModel : ObservableObject
             return;
         }
 
-        RequiredMods.Clear();
-        OnPropertyChanged(nameof(HasRequiredMods));
-        OnPropertyChanged(nameof(RequiredModsCount));
+        SetRequirements(Array.Empty<ModDependencyLink>());
     }
 
     private void CacheRequirements(IEnumerable<ModDependencyLink> requirements)
@@ -1925,6 +1960,161 @@ public partial class ModDetailsViewModel : ObservableObject
             Url = item.Url,
             Note = item.Note
         };
+    }
+
+    private static ModDependencyLink MergeDependencyGroup(IGrouping<string, ModDependencyLink> group)
+    {
+        var items = group
+            .Where(item => item != null)
+            .ToList();
+
+        var primary = items.FirstOrDefault(item => item.Note?.IndexOf("社区整理", StringComparison.OrdinalIgnoreCase) >= 0)
+                      ?? items.First();
+
+        var merged = CloneDependencyLink(primary);
+        merged.IsRequired = !items.Any(item => !item.IsRequired);
+
+        if (string.IsNullOrWhiteSpace(merged.MinimumVersion))
+            merged.MinimumVersion = items.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.MinimumVersion))?.MinimumVersion ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(merged.Url))
+            merged.Url = items.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Url))?.Url ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(merged.ProjectId))
+            merged.ProjectId = items.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.ProjectId))?.ProjectId ?? string.Empty;
+
+        var mergedNotes = items
+            .Select(item => item.Note?.Trim())
+            .Where(note => !string.IsNullOrWhiteSpace(note))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        merged.Note = mergedNotes.Count > 0 ? string.Join("；", mergedNotes) : string.Empty;
+        return merged;
+    }
+
+    private bool HasCommunityDependencyData => _communityLocalizationEntry?.Dependencies?.Length > 0;
+
+    private async Task LoadCommunityLocalizationRelationsAsync()
+    {
+        _communityLocalizationEntry = null;
+        ClearCommunityRelationCollections();
+
+        if (!LocalizationDisplayHelper.TryResolveRequest(Mod, out var entityType, out var platform, out var id) ||
+            !string.Equals(entityType, "mod", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            _communityLocalizationEntry = await CommunityLocalizationService.GetAsync(entityType, platform, id).ConfigureAwait(false);
+            SetHardConflictMods(BuildCommunityRelationLinks(_communityLocalizationEntry?.HardConflicts, "社区标注冲突"));
+            SetFunctionalOverlapMods(BuildCommunityRelationLinks(_communityLocalizationEntry?.FunctionalOverlaps, "社区标注功能重复"));
+        }
+        catch (Exception ex)
+        {
+            _communityLocalizationEntry = null;
+            ClearCommunityRelationCollections();
+            Log.Debug($"[ModDetailsViewModel] 加载社区本地化关系数据失败: {ex.Message}");
+        }
+    }
+
+    private List<ModDependencyLink> BuildCommunityDependencyLinks()
+    {
+        return (_communityLocalizationEntry?.Dependencies ?? Array.Empty<CommunityLocalizationDependency>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+            .Select(item => new ModDependencyLink
+            {
+                DisplayName = !string.IsNullOrWhiteSpace(item.Name) ? item.Name : item.Id,
+                ProjectId = item.Id,
+                Source = ResolveCommunityRelationSource(),
+                Url = BuildCommunityRelationUrl(item.Id),
+                IsRequired = !item.Optional,
+                Note = BuildCommunityNote("社区整理前置", item.Note)
+            })
+            .ToList();
+    }
+
+    private List<ModDependencyLink> BuildCommunityRelationLinks(IEnumerable<CommunityLocalizationRelation>? relations, string notePrefix)
+    {
+        return (relations ?? Array.Empty<CommunityLocalizationRelation>())
+            .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
+            .Select(item => new ModDependencyLink
+            {
+                DisplayName = !string.IsNullOrWhiteSpace(item.Name) ? item.Name : item.Id,
+                ProjectId = item.Id,
+                Source = ResolveCommunityRelationSource(),
+                Url = BuildCommunityRelationUrl(item.Id),
+                Note = BuildCommunityNote(notePrefix, item.Reason)
+            })
+            .ToList();
+    }
+
+    private string ResolveCommunityRelationSource()
+    {
+        if (IsNexusSource)
+            return "NexusMods";
+
+        if (IsCurseforgeSource)
+            return "Curseforge";
+
+        return Mod?.Source ?? string.Empty;
+    }
+
+    private string BuildCommunityRelationUrl(string relationId)
+    {
+        if (string.IsNullOrWhiteSpace(relationId))
+            return string.Empty;
+
+        if (IsNexusSource && long.TryParse(relationId, out _))
+            return $"https://www.nexusmods.com/stardewvalley/mods/{relationId}";
+
+        return string.Empty;
+    }
+
+    private static string BuildCommunityNote(string prefix, string detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+            return prefix;
+
+        return $"{prefix}：{detail.Trim()}";
+    }
+
+    private void SetHardConflictMods(IEnumerable<ModDependencyLink> items)
+    {
+        SetRelatedMods(HardConflictMods, items);
+        OnPropertyChanged(nameof(HasHardConflictMods));
+        OnPropertyChanged(nameof(HardConflictModsCount));
+    }
+
+    private void SetFunctionalOverlapMods(IEnumerable<ModDependencyLink> items)
+    {
+        SetRelatedMods(FunctionalOverlapMods, items);
+        OnPropertyChanged(nameof(HasFunctionalOverlapMods));
+        OnPropertyChanged(nameof(FunctionalOverlapModsCount));
+    }
+
+    private void SetRelatedMods(ObservableCollection<ModDependencyLink> target, IEnumerable<ModDependencyLink> items)
+    {
+        // 在UI线程上执行集合操作
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            target.Clear();
+            foreach (var item in (items ?? Enumerable.Empty<ModDependencyLink>())
+                         .Where(link => link != null && !string.IsNullOrWhiteSpace(link.DisplayName))
+                         .GroupBy(link => $"{link.Source}|{link.ProjectId}|{link.DisplayName}", StringComparer.OrdinalIgnoreCase)
+                         .Select(MergeDependencyGroup))
+            {
+                target.Add(item);
+            }
+        });
+    }
+
+    private void ClearCommunityRelationCollections()
+    {
+        SetHardConflictMods(Array.Empty<ModDependencyLink>());
+        SetFunctionalOverlapMods(Array.Empty<ModDependencyLink>());
     }
 
     private async Task<List<ModDependencyLink>> DetectNexusRequirementsFromDescriptionAsync(long modId)
@@ -2283,13 +2473,70 @@ public partial class ModDetailsViewModel : ObservableObject
     [RelayCommand]
     private void CopyName()
     {
-        System.Windows.Clipboard.SetText(Mod.Name);
-        Log.Info($"[ModDetailsViewModel] 已复制 MOD 名称: {Mod.Name}");
+        var displayName = Mod?.DisplayName ?? Mod?.Name ?? string.Empty;
+        System.Windows.Clipboard.SetText(displayName);
+        Log.Info($"[ModDetailsViewModel] 已复制 MOD 名称: {displayName}");
         FloatingNotificationControl.Show(
             title: "已复制",
-            message: $"已复制名称：{Mod.Name}",
+            message: $"已复制名称：{displayName}",
             autoCloseDelay: 1800,
             notificationType: NotificationType.Success);
+    }
+
+    [RelayCommand]
+    private void OpenLocalizationContributionPage()
+    {
+        try
+        {
+            // 获取与复制ID相同的值（保留完整ID格式，包括前缀）
+            var contributionId = Mod?.Id ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(Mod?.Id) && Mod.Id.StartsWith("nexuscol-", StringComparison.OrdinalIgnoreCase))
+            {
+                // Nexus集合：提取尾链(slug)
+                var slug = ExtractCollectionSlug(Mod.Url);
+                if (!string.IsNullOrWhiteSpace(slug))
+                    contributionId = slug;
+            }
+            // 其他情况直接保留 Mod.Id（如 nexus-2400, curse-898372）
+
+            // 构建URL参数：id=<完整ID或尾链>
+            var idParam = string.Empty;
+            if (!string.IsNullOrWhiteSpace(contributionId))
+            {
+                idParam = $"?id={contributionId}";
+            }
+
+            var url = $"{LocalizationContributionUrl}{idParam}&auto=1";
+            ProcessEx.OpenUrl(url);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[ModDetailsViewModel] 打开本地化贡献页面失败");
+            SvlMessageBox.Warning($"无法打开贡献页面：{ex.Message}", "打开失败");
+        }
+    }
+
+    [RelayCommand]
+    private void ShowLocalizationContributorInfo()
+    {
+        var message = "贡献本地化说明\n\n" +
+            "点击「贡献本地化」按钮可以跳转到社区本地化贡献页面，为当前 Mod 添加中文翻译。\n\n";
+
+        if (!string.IsNullOrWhiteSpace(LocalizationContributor))
+        {
+            message += $"当前资源的本地化贡献者：{LocalizationContributor}";
+        }
+        else
+        {
+            message += "当前资源还没有人进行汉化贡献，欢迎前往贡献页面参与补充。";
+        }
+
+        if (!string.IsNullOrWhiteSpace(Mod?.LocalizationUpdatedAt))
+        {
+            message += $"\n\n本地化最终更新时间：{Mod.LocalizationUpdatedAt}";
+        }
+
+        SvlMessageBox.Info(message, "贡献本地化");
     }
 
     /// <summary>
@@ -2298,11 +2545,19 @@ public partial class ModDetailsViewModel : ObservableObject
     [RelayCommand]
     private void CopyId()
     {
-        System.Windows.Clipboard.SetText(Mod.Id);
-        Log.Info($"[ModDetailsViewModel] 已复制 MOD ID: {Mod.Id}");
+        var copiedId = Mod?.Id ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(Mod?.Id) && Mod.Id.StartsWith("nexuscol-", StringComparison.OrdinalIgnoreCase))
+        {
+            var slug = ExtractCollectionSlug(Mod.Url);
+            if (!string.IsNullOrWhiteSpace(slug))
+                copiedId = slug;
+        }
+
+        System.Windows.Clipboard.SetText(copiedId);
+        Log.Info($"[ModDetailsViewModel] 已复制 MOD ID: {copiedId}");
         FloatingNotificationControl.Show(
             title: "已复制",
-            message: $"已复制 ID：{Mod.Id}",
+            message: $"已复制{CopyIdNotificationLabel}：{copiedId}",
             autoCloseDelay: 1800,
             notificationType: NotificationType.Success);
     }

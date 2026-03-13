@@ -131,16 +131,6 @@ public partial class ModpackSearchViewModel : ObservableObject
         var warnings = new List<string>();
         var settings = AppConfig.GetSettings();
 
-        // 检查 Curseforge API（如果选择了 Curseforge 或 全部）
-        if (SelectedSource == "全部" || SelectedSource == "Curseforge")
-        {
-            var curseforgeKey = settings.CurseforgeApiKey;
-            if (string.IsNullOrEmpty(curseforgeKey))
-            {
-                warnings.Add("⚠️ Curseforge API 未配置\n请在设置页面配置 Curseforge API Key 以使用 Curseforge 整合包源。");
-            }
-        }
-
         // 检查 NexusMods API（如果选择了 NexusMods 或 全部）
         if (SelectedSource == "全部" || SelectedSource == "NexusMods")
         {
@@ -323,6 +313,8 @@ public partial class ModpackSearchViewModel : ObservableObject
                 _ = item.LoadIconAsync();
             }
 
+            LocalizationDisplayHelper.ApplyLocalizationInBackground(displayItems);
+
             // 更新分页状态（任一来源有更多结果就显示下一页）
             if (displayItems.Count == 0)
             {
@@ -391,12 +383,6 @@ public partial class ModpackSearchViewModel : ObservableObject
     private async Task<List<ModSearchItem>> LoadModpacksFromCurseforgeAsync(int skip, int pageSize)
     {
         var results = new List<ModSearchItem>();
-
-        if (!CurseforgeApiService.HasApiKey)
-        {
-            Log.Warn("[ModpackSearchViewModel] Curseforge API 未配置，跳过加载");
-            return results;
-        }
 
         try
         {
@@ -583,6 +569,8 @@ public partial class ModpackSearchViewModel : ObservableObject
                 _ = item.LoadIconAsync();
             }
 
+            LocalizationDisplayHelper.ApplyLocalizationInBackground(displayResults);
+
             // 更新分页状态（任一来源还有结果就继续）
             bool hasMore = (sortedCurseforge.Count >= fetchCount) || (sortedNexus.Count >= fetchCount);
             if (hasMore)
@@ -623,11 +611,6 @@ public partial class ModpackSearchViewModel : ObservableObject
     private async Task<List<ModSearchItem>> SearchModpacksFromCurseforgeInternal(int pageSize)
     {
         var results = new List<ModSearchItem>();
-
-        if (!CurseforgeApiService.HasApiKey)
-        {
-            return results;
-        }
 
         try
         {

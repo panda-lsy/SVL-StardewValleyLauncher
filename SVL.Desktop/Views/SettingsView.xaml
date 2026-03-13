@@ -134,7 +134,7 @@
                             Cursor="Hand"/>
 
                     <Button x:Name="TabApi"
-                            Content="下载源配置"
+                            Content="下载设置"
                             Click="OnTabClick"
                             Tag="1"
                             Padding="16,12"
@@ -651,6 +651,41 @@
                                                       IsChecked="{Binding EnableDownloadCache}"
                                                       Style="{StaticResource SettingCheckBoxStyle}"
                                                       Margin="0,4,0,0"/>
+
+                                            <!-- 打开缓存文件夹按钮 -->
+                                            <Button Content="打开缓存文件夹"
+                                                    Command="{Binding OpenCacheFolderCommand}"
+                                                    Width="120"
+                                                    Height="32"
+                                                    FontSize="12"
+                                                    HorizontalAlignment="Left"
+                                                    Margin="0,12,0,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                        <Setter Property="Cursor" Value="Hand"/>
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource ColorBrush3}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsEnabled" Value="False">
+                                                                <Setter Property="Opacity" Value="0.5"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
                                         </StackPanel>
                                     </StackPanel>
                                 </Grid>
@@ -707,10 +742,10 @@
 
                     <!-- ===== API 设置 ===== -->
                     <StackPanel x:Name="PanelApi" Visibility="Collapsed">
-                        <!-- Card 1: 默认下载源设置 -->
+                        <!-- Card 1: 下载设置 -->
                         <Border Style="{StaticResource SettingCardStyle}">
                             <StackPanel>
-                                <TextBlock Text="默认下载源设置"
+                                <TextBlock Text="下载设置"
                                            Style="{StaticResource SettingTitleStyle}"/>
 
                                 <!-- SMAPI 默认下载源 -->
@@ -752,70 +787,36 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Card 2: Curseforge API -->
+                        <!-- Card 2: 社区本地化 -->
                         <Border Style="{StaticResource SettingCardStyle}">
                             <StackPanel>
-                                <TextBlock Text="Curseforge API"
+                                <TextBlock Text="本地化配置"
                                            Style="{StaticResource SettingTitleStyle}"/>
 
                                 <StackPanel Margin="0,0,0,12">
-                                    <TextBlock Text="API Key"
+                                    <TextBlock Text="社区本地化源"
                                                FontSize="13"
                                                Foreground="{DynamicResource ColorBrush1}"
                                                Margin="0,0,0,4"/>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <PasswordBox x:Name="CurseforgeApiKeyPasswordBox"
-                                                    Grid.Column="0"
-                                                    PasswordChar="●"
-                                                    Style="{StaticResource SettingPasswordBoxStyle}"
-                                                    Width="400"
-                                                    HorizontalAlignment="Left"
-                                                    PasswordChanged="OnCurseforgeApiKeyPasswordChanged"/>
-
-                                        <Button Grid.Column="1"
-                                                Content="测试"
-                                                Command="{Binding TestCurseforgeApiCommand}"
-                                                Margin="8,0,0,0"
-                                                Padding="16,8"
-                                                Background="{DynamicResource ColorBrush2}"
-                                                Foreground="White"
-                                                BorderThickness="0"
-                                                FontSize="13"
-                                                Cursor="Hand">
-                                            <Button.Resources>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="CornerRadius" Value="4"/>
-                                                </Style>
-                                            </Button.Resources>
-                                        </Button>
-                                    </Grid>
-                                    <TextBlock Text="从 Curseforge 获取你的个人 API Key"
+                                    <ComboBox ItemsSource="{Binding LocalizationSources}"
+                                              SelectedItem="{Binding LocalizationPreferredSource}"
+                                              Style="{StaticResource SettingComboBoxStyle}"
+                                              Padding="8,6"
+                                              Width="300"
+                                              HorizontalAlignment="Left"/>
+                                    <TextBlock Text="默认优先使用 Gitee，失败后自动回退到 GitHub。"
                                                Style="{StaticResource SettingDescStyle}"/>
                                 </StackPanel>
 
-                                <!-- API 状态 -->
-                                <TextBlock x:Name="CurseforgeApiStatusText"
-                                           Text="{Binding CurseforgeApiStatus}"
-                                           FontSize="12"
-                                           Foreground="{DynamicResource ColorBrush2}"
-                                           Visibility="{Binding CurseforgeApiStatus, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                                <!-- 获取 API Key 按钮 -->
-                                <Button Content="🔗 获取 Curseforge API Key"
+                                <Button Content="为 SVL 贡献本地化"
+                                        Command="{Binding OpenLocalizationContributionPageCommand}"
                                         Padding="12,8"
-                                        Margin="0,8,0,0"
                                         Background="{DynamicResource ColorBrush2}"
                                         Foreground="White"
                                         BorderThickness="0"
                                         FontSize="13"
                                         Cursor="Hand"
-                                        HorizontalAlignment="Left"
-                                        Click="OnGetCurseforgeApiKeyClick">
+                                        HorizontalAlignment="Left">
                                     <Button.Resources>
                                         <Style TargetType="Border">
                                             <Setter Property="CornerRadius" Value="4"/>

@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace SVL.Desktop.ViewModels;
 
 public partial class ModsRightViewModel : ObservableObject
 {
     private MainWindowViewModel _mainViewModel;
+    private SVL.Core.Stardew.Mod.SdVMod? _currentMod;
 
     public ModsRightViewModel(MainWindowViewModel mainViewModel)
     {
@@ -39,11 +41,15 @@ public partial class ModsRightViewModel : ObservableObject
     [ObservableProperty]
     private string _conflicts = "";
 
+    [ObservableProperty]
+    private bool _hasLocalization;
+
     public void UpdateContent()
     {
         var selectedMod = _mainViewModel.SelectedMod;
         if (selectedMod == null)
         {
+            _currentMod = null;
             Status = "请选择一个Mod查看详情";
             ModName = "";
             ModVersion = "";
@@ -52,18 +58,41 @@ public partial class ModsRightViewModel : ObservableObject
             ModUniqueId = "";
             Dependencies = "";
             Conflicts = "";
+            HasLocalization = false;
         }
         else
         {
+            _currentMod = selectedMod;
             Status = "Mod信息";
-            ModName = selectedMod.Name;
+            ModName = selectedMod.DisplayName;
             ModVersion = selectedMod.Version;
             ModAuthor = selectedMod.Author ?? "未知";
-            ModDescription = selectedMod.Description ?? "暂无描述";
+            ModDescription = string.IsNullOrWhiteSpace(selectedMod.DisplayDescription) ? "暂无描述" : selectedMod.DisplayDescription;
             ModUniqueId = selectedMod.UniqueId;
             Dependencies = FormatDependencies(selectedMod.Manifest?.Dependencies);
             Conflicts = FormatConflicts(selectedMod.ConflictingMods);
+            HasLocalization = selectedMod.HasLocalizedName || selectedMod.HasLocalizedDescription;
         }
+    }
+
+    [RelayCommand]
+    private void ShowLocalizedText()
+    {
+        if (_currentMod == null)
+            return;
+
+        _currentMod.SetLocalizationLanguage(true);
+        UpdateContent();
+    }
+
+    [RelayCommand]
+    private void ShowSourceText()
+    {
+        if (_currentMod == null)
+            return;
+
+        _currentMod.SetLocalizationLanguage(false);
+        UpdateContent();
     }
 
     private string FormatDependencies(List<SVL.Core.Stardew.Mod.ModDependency>? dependencies)

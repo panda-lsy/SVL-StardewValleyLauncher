@@ -280,16 +280,6 @@ public partial class SmapiVersionPickerDialog : Window
 
         try
         {
-            // 检查 CurseForge API Key 是否配置
-            if (!CurseforgeApiService.HasApiKey)
-            {
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    LoadingText.Text = "CurseForge API 未配置";
-                });
-                return;
-            }
-
             // 如果没有缓存，则获取所有文件
             if (_cachedVersions.Count == 0)
             {

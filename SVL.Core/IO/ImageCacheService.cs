@@ -210,6 +210,15 @@ public static class ImageCacheService
     }
 
     /// <summary>
+    /// 获取缓存目录路径
+    /// </summary>
+    /// <returns>缓存目录的完整路径</returns>
+    public static string GetCacheDirectory()
+    {
+        return CacheDir;
+    }
+
+    /// <summary>
     /// 获取缓存大小（字节）
     /// </summary>
     /// <returns>缓存大小（字节）</returns>

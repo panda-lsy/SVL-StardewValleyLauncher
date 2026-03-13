@@ -13,6 +13,8 @@ public class SdVMod : INotifyPropertyChanged
     private bool _isSelected;
     private bool _hasUpdate;
     private bool _isGroupExpanded;
+    private bool _useLocalizedName = true;
+    private bool _useLocalizedDescription = true;
 
     public string Id { get; set; }
     public string Name { get; set; }
@@ -29,6 +31,12 @@ public class SdVMod : INotifyPropertyChanged
     public List<string> ConflictingMods { get; set; } = [];
     public string Thumbnail { get; set; }
     public List<string> Tags { get; set; } = [];
+    public string LocalizedNameZhCn { get; set; } = string.Empty;
+    public string LocalizedNameSource { get; set; } = string.Empty;
+    public string LocalizedDescriptionZhCn { get; set; } = string.Empty;
+    public string LocalizedDescriptionSource { get; set; } = string.Empty;
+    public string LocalizationSourceUrl { get; set; } = string.Empty;
+    public string LocalizationUpdatedAt { get; set; } = string.Empty;
     public bool IsBackupItem { get; set; }
     public DateTime? BackupTime { get; set; }
     public string BackupLabel { get; set; } = string.Empty;
@@ -42,6 +50,16 @@ public class SdVMod : INotifyPropertyChanged
     public bool HasChildren => ChildMods.Count > 0;
     public bool CanShowOnlineDetails => !IsChildMod;
     public string GroupToggleText => IsGroupExpanded ? "⌄" : "⌃";
+    public bool HasLocalizedName => !string.IsNullOrWhiteSpace(LocalizedNameZhCn);
+    public bool HasLocalizedDescription => !string.IsNullOrWhiteSpace(LocalizedDescriptionZhCn);
+    public bool HasAnyLocalization => HasLocalizedName || HasLocalizedDescription;
+    public bool IsUsingLocalizedText => UseLocalizedName || UseLocalizedDescription;
+    public string DisplayName => UseLocalizedName && HasLocalizedName
+        ? LocalizedNameZhCn
+        : (!string.IsNullOrWhiteSpace(LocalizedNameSource) ? LocalizedNameSource : Name);
+    public string DisplayDescription => UseLocalizedDescription && HasLocalizedDescription
+        ? LocalizedDescriptionZhCn
+        : (!string.IsNullOrWhiteSpace(LocalizedDescriptionSource) ? LocalizedDescriptionSource : Description);
     public string FolderName
     {
         get
@@ -153,6 +171,67 @@ public class SdVMod : INotifyPropertyChanged
                 OnPropertyChanged(nameof(GroupToggleText));
             }
         }
+    }
+
+    public bool UseLocalizedName
+    {
+        get => _useLocalizedName;
+        set
+        {
+            if (_useLocalizedName != value)
+            {
+                _useLocalizedName = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DisplayName));
+                OnPropertyChanged(nameof(IsUsingLocalizedText));
+            }
+        }
+    }
+
+    public bool UseLocalizedDescription
+    {
+        get => _useLocalizedDescription;
+        set
+        {
+            if (_useLocalizedDescription != value)
+            {
+                _useLocalizedDescription = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DisplayDescription));
+                OnPropertyChanged(nameof(IsUsingLocalizedText));
+            }
+        }
+    }
+
+    public void ApplyLocalization(SvlSourceLocalization? localization)
+    {
+        if (localization == null)
+            return;
+
+        LocalizedNameZhCn = localization.NameZhCn ?? string.Empty;
+        LocalizedNameSource = localization.NameSource ?? string.Empty;
+        LocalizedDescriptionZhCn = localization.DescriptionZhCn ?? string.Empty;
+        LocalizedDescriptionSource = localization.DescriptionSource ?? string.Empty;
+        LocalizationSourceUrl = localization.SourceUrl ?? string.Empty;
+        LocalizationUpdatedAt = localization.UpdatedAt ?? string.Empty;
+
+        if (HasLocalizedName)
+            UseLocalizedName = true;
+        if (HasLocalizedDescription)
+            UseLocalizedDescription = true;
+
+        OnPropertyChanged(nameof(HasLocalizedName));
+        OnPropertyChanged(nameof(HasLocalizedDescription));
+        OnPropertyChanged(nameof(HasAnyLocalization));
+        OnPropertyChanged(nameof(IsUsingLocalizedText));
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(DisplayDescription));
+    }
+
+    public void SetLocalizationLanguage(bool useLocalized)
+    {
+        UseLocalizedName = useLocalized;
+        UseLocalizedDescription = useLocalized;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

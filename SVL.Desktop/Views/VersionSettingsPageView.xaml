@@ -342,6 +342,42 @@
                                 <TextBlock Text="更新" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
 
+                            <Button Command="{Binding RightContent.RefreshSelectedLocalizationCommand}"
+                                    Height="36"
+                                    Margin="0,0,8,0"
+                                    Padding="16,0"
+                                    Cursor="Hand"
+                                    Visibility="{Binding RightContent.HasSelectedLocalizableMods, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush3}"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="ButtonBorder"
+                                                            Background="{TemplateBinding Background}"
+                                                            CornerRadius="6"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Cursor="Hand">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource ColorBrush5}" TargetName="ButtonBorder"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="汉化" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+
                             <Button Command="{Binding RightContent.UpdateSelectedCommand}"
                                     Height="36"
                                     Margin="0,0,8,0"

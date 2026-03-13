@@ -159,21 +159,6 @@ public static class DownloadCacheService
             using var httpClient = new System.Net.Http.HttpClient();
             httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
 
-            // 如果是 Curseforge URL，添加 API Key（与 ModDownloadTask 保持一致）
-            if (url.Contains("curseforge.com"))
-            {
-                var apiKey = CurseforgeApiService.GetApiKey();
-                if (!string.IsNullOrEmpty(apiKey))
-                {
-                    httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
-                    Log.Info("[DownloadCache] 已添加 Curseforge API Key 到下载请求");
-                }
-                else
-                {
-                    Log.Warn("[DownloadCache] Curseforge API Key 未配置，下载可能失败");
-                }
-            }
-
             httpClient.Timeout = TimeSpan.FromMinutes(30);
 
             var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);

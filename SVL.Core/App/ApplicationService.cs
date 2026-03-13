@@ -101,8 +101,7 @@ public sealed partial class ApplicationService
     }
 
     /// <summary>
-    /// 初始化 Curseforge API Key
-    /// 注意：NexusMods 现在使用 OAuth 认证，不再需要手动设置 API Key
+    /// 初始化 API 相关运行时配置
     /// </summary>
     private static void InitializeApiKeys()
     {
@@ -121,24 +120,6 @@ public sealed partial class ApplicationService
             catch (Exception ex)
             {
                 Log.Warn("[ApplicationService] 初始化搜索缓存配置失败", ex);
-            }
-
-            // 初始化 Curseforge API Key（用于 CurseforgeApiService）
-            if (!string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-            {
-                SVL.Core.Download.CurseforgeApiService.SetApiKey(settings.CurseforgeApiKey);
-                Log.Info("[ApplicationService] ✓ Curseforge API Key 已加载");
-            }
-            else
-            {
-                Log.Info("[ApplicationService] ⚠ Curseforge API Key 未配置");
-            }
-
-            // 初始化 Curseforge API Key（用于 SmapApiService）
-            if (!string.IsNullOrWhiteSpace(settings.CurseforgeApiKey))
-            {
-                SVL.Core.Stardew.Mod.SMAPI.SmapApiService.SetCurseforgeApiKey(settings.CurseforgeApiKey);
-                Log.Info("[ApplicationService] ✓ SMAPI Curseforge API Key 已加载");
             }
 
             // NexusMods 现在使用 OAuth 认证
