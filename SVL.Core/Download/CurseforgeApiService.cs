@@ -24,11 +24,6 @@ public static class CurseforgeApiService
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
-    // 兼容旧调用链：已不再使用 API Key，保留空实现避免大范围改签名。
-    private static void EnsureApiKeyLoaded()
-    {
-    }
-
     /// <summary>
     /// 获取 Curseforge 上的 SMAPI 文件列表
     /// </summary>
@@ -218,8 +213,6 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
-
             var url = $"https://api.curse.tools/v1/cf/mods/{modId}";
             Log.Info($"[Curseforge] 获取 Mod 详情: {url}");
 
@@ -250,8 +243,6 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
-
             var url = $"https://api.curse.tools/v1/cf/mods/{modId}/files?index={index}&pageSize={pageSize}";
             Log.Info($"[Curseforge] 获取 Mod 文件列表: {url}");
 
@@ -602,8 +593,6 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
-
             var cacheKey = $"featured|gameId={gameId}|ps={pageSize}";
             if (SVL.Core.IO.SearchCacheService.TryGet<CurseforgeFeaturedModsResponse>("curseforge", cacheKey, out var cached))
             {
@@ -672,8 +661,6 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
-
             searchQuery ??= string.Empty;
             gameVersion = string.IsNullOrWhiteSpace(gameVersion) || string.Equals(gameVersion, "全部", StringComparison.OrdinalIgnoreCase)
                 ? null
@@ -736,8 +723,6 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
-
             var cacheKey = $"game-versions|gameId={gameId}";
             if (SVL.Core.IO.SearchCacheService.TryGet<List<string>>("curseforge", cacheKey, out var cached))
             {
@@ -770,7 +755,7 @@ public static class CurseforgeApiService
 
     private static async Task<List<string>> TryGetGameVersionsV2Async(int gameId)
     {
-        var url = $"https://api.curseforge.com/v2/games/{gameId}/versions";
+        var url = $"https://api.curse.tools/v1/cf/games/{gameId}/versions";
         var response = await _httpClient.GetAsync(url);
         var body = await response.Content.ReadAsStringAsync();
 
@@ -790,7 +775,7 @@ public static class CurseforgeApiService
 
     private static async Task<List<string>> TryGetGameVersionsV1Async(int gameId)
     {
-        var url = $"https://api.curseforge.com/v1/games/{gameId}/versions";
+        var url = $"https://api.curse.tools/v1/cf/games/{gameId}/versions";
         var response = await _httpClient.GetAsync(url);
         var body = await response.Content.ReadAsStringAsync();
 
@@ -811,8 +796,7 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
-            var url = $"https://api.curseforge.com/v1/games/{gameId}/dependencies";
+            var url = $"https://api.curse.tools/v1/cf/games/{gameId}/dependencies";
             Log.Info($"[Curseforge] 获取游戏依赖定义: {url}");
 
             var response = await _httpClient.GetAsync(url);
@@ -842,8 +826,6 @@ public static class CurseforgeApiService
     {
         try
         {
-            EnsureApiKeyLoaded();
-
             searchQuery ??= string.Empty;
             pageSize = Math.Max(1, Math.Min(50, pageSize));
             var modpackClassId = await TryGetModpackClassIdAsync(gameId);

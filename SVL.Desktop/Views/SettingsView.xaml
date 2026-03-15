@@ -787,7 +787,93 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Card 2: 社区本地化 -->
+                        <!-- Card 2: 更新设置 -->
+                        <Border Style="{StaticResource SettingCardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="更新设置"
+                                           Style="{StaticResource SettingTitleStyle}"/>
+
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock Text="Mod 更新检测线程数"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource ColorBrush1}"
+                                               Margin="0,0,0,4"/>
+
+                                    <Grid Width="360" HorizontalAlignment="Left">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Slider Grid.Column="0"
+                                                Minimum="1"
+                                                Maximum="16"
+                                                TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding MaxConcurrentModUpdateChecks, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0,0,12,0"
+                                                VerticalAlignment="Center"/>
+
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource ColorBrush5}"
+                                                BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="10,4"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MaxConcurrentModUpdateChecks}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource ColorBrush1}"/>
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock Text="用于“版本管理 - Mods 管理 - 检测更新”的并发检测线程数，修改后自动保存。"
+                                               Style="{StaticResource SettingDescStyle}"/>
+                                </StackPanel>
+
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock Text="Mod 汉化检测线程数"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource ColorBrush1}"
+                                               Margin="0,0,0,4"/>
+
+                                    <Grid Width="360" HorizontalAlignment="Left">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Slider Grid.Column="0"
+                                                Minimum="1"
+                                                Maximum="16"
+                                                TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding MaxConcurrentModLocalizationChecks, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0,0,12,0"
+                                                VerticalAlignment="Center"/>
+
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource ColorBrush5}"
+                                                BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="10,4"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MaxConcurrentModLocalizationChecks}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource ColorBrush1}"/>
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock Text="用于“版本管理 - Mods 管理 - 检测汉化”的并发检测线程数，修改后自动保存。"
+                                               Style="{StaticResource SettingDescStyle}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Card 3: 社区本地化 -->
                         <Border Style="{StaticResource SettingCardStyle}">
                             <StackPanel>
                                 <TextBlock Text="本地化配置"

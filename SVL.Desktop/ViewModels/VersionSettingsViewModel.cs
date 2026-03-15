@@ -55,7 +55,39 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             LoadInstanceData(value);
         }
+
+        OnPropertyChanged(nameof(IsBaseInstance));
+        OnPropertyChanged(nameof(CanDeleteVersion));
+        OnPropertyChanged(nameof(CanUninstallBaseSmapi));
+        OnPropertyChanged(nameof(IsBaseWithSmapiInstalled));
+        OnPropertyChanged(nameof(SwitchToSMAPITipText));
     }
+
+    public bool IsBaseInstance => SelectedInstance != null
+        && (SelectedInstance.Tags?.Any(t => string.Equals(t, "Base", StringComparison.OrdinalIgnoreCase)) ?? false);
+
+    public bool CanDeleteVersion => SelectedInstance != null && !IsBaseInstance && SelectedInstance.EnableIsolation;
+
+    public bool CanUninstallBaseSmapi => SelectedInstance != null && IsBaseInstance && SelectedInstance.IsSMAPIInstance;
+
+    /// <summary>
+    /// Base 实例是否已安装 SMAPI（用于自动安装页面禁用按钮）
+    /// </summary>
+    public bool IsBaseWithSmapiInstalled => SelectedInstance != null
+        && IsBaseInstance
+        && SelectedInstance.HasSMAPIInstalled
+        && !SelectedInstance.IsSMAPIInstance;
+
+    /// <summary>
+    /// 切换到 SMAPI 提示文本
+    /// </summary>
+    public string SwitchToSMAPITipText => $"检测到该路径已安装 SMAPI {SelectedInstance?.SMAPIVersion}，切换到 SMAPI 版本以启用自动安装功能。";
+
+    public string DeleteVersionButtonText => CanDeleteVersion ? "🗑️ 删除版本" : "🔒 Base 版本不可删除";
+
+    public string DeleteVersionHintText => IsBaseInstance
+        ? "Base 版本是根路径基座，不能删除。你可以使用“卸载 Base SMAPI”来移除 SMAPI。"
+        : "此操作会将版本目录移入回收站，请谨慎操作。";
 
     // 第一个卡片：版本信息
     [ObservableProperty]
@@ -133,10 +165,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             InstanceName = instance.Name;
             InstanceVersion = instance.DisplayVersion;
-            IsSMAPIInstance = instance.IsSMAPIInstance;
-            // 使用实例的自定义图标（如果有）
+            // 使用实例图标（SMAPI 实例应显示 Modded 图标）
             InstanceIcon = instance.GetIconPath();
             InstanceGamePath = instance.GamePath;
+
+            // 设置 SMAPI 实例状态
+            IsSMAPIInstance = instance.IsSMAPIInstance;
 
             // 使用实例中已检测的 SMAPI 版本
             if (instance.IsSMAPIInstance && !string.IsNullOrEmpty(instance.SMAPIVersion))
@@ -151,6 +185,15 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
             Description = instance.Description ?? string.Empty;
             IsFavorite = instance.IsFavorite;
+
+            OnPropertyChanged(nameof(IsBaseInstance));
+            OnPropertyChanged(nameof(CanDeleteVersion));
+            OnPropertyChanged(nameof(CanUninstallBaseSmapi));
+            OnPropertyChanged(nameof(IsBaseWithSmapiInstalled));
+            OnPropertyChanged(nameof(DeleteVersionButtonText));
+            OnPropertyChanged(nameof(DeleteVersionHintText));
+            OnPropertyChanged(nameof(DeleteVersionButtonText));
+            OnPropertyChanged(nameof(DeleteVersionHintText));
 
             // 检查文件夹（传入实例信息以支持版本隔离）
             CheckFolders(instance);
@@ -376,9 +419,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             Log.Info($"[VersionSettings] 开始更改 SMAPI 版本，实例: {SelectedInstance.Name}");
 
+            // Base 实例始终更新到根目录，避免被实例设置中的隔离开关影响。
+            var useIsolationInstall = SelectedInstance.EnableIsolation && !IsBaseInstance;
+
             // 获取版本隔离路径
             string targetPath;
-            if (SelectedInstance.EnableIsolation)
+            if (useIsolationInstall)
             {
                 var instanceFolderName = InstanceIsolationService.GenerateVersionFolderName(
                     SelectedInstance.Name, SelectedInstance.IsSMAPIInstance);
@@ -413,7 +459,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                         SelectedInstance.Name,
                         selectedVersion.Version,
                         SmapiSource.NexusMods,
-                        selectedVersion.FileId.Value);
+                        selectedVersion.FileId.Value,
+                        useIsolationInstall: useIsolationInstall);
                 }
                 else if (selectedVersion.Source == "Curseforge" && !string.IsNullOrEmpty(selectedVersion.DownloadUrl))
                 {
@@ -423,7 +470,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                         SelectedInstance.Name,
                         selectedVersion.Version,
                         SmapiSource.Curseforge,
-                        downloadUrl: selectedVersion.DownloadUrl);
+                        downloadUrl: selectedVersion.DownloadUrl,
+                        useIsolationInstall: useIsolationInstall);
                 }
                 else
                 {
@@ -432,7 +480,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                         gameBasePath: SelectedInstance.GamePath,
                         instanceName: SelectedInstance.Name,
                         smapiVersion: selectedVersion.Version,
-                        source: SmapiSource.GitHub);
+                        source: SmapiSource.GitHub,
+                        useIsolationInstall: useIsolationInstall);
                 }
 
                 // 标记为更新模式（不删除旧版本目录，由 SmapiDownloadTask 处理）
@@ -582,6 +631,12 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             return;
         }
 
+        if (!CanDeleteVersion)
+        {
+            SvlMessageBox.Info("Base 版本不能删除。如需移除 SMAPI，请使用下方“卸载 Base SMAPI”按钮。", "提示");
+            return;
+        }
+
         // 显示删除路径信息（使用版本名称而非ID）
         var versionFolderName = InstanceIsolationService.GenerateVersionFolderName(
             SelectedInstance.Name,
@@ -620,6 +675,50 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                     "删除失败");
             }
         }
+    }
+
+    [RelayCommand]
+    private void UninstallBaseSmapi()
+    {
+        if (SelectedInstance == null)
+        {
+            SvlMessageBox.Error("未选择实例");
+            return;
+        }
+
+        if (!CanUninstallBaseSmapi)
+        {
+            SvlMessageBox.Info("当前实例不是可卸载的 Base SMAPI 实例。", "提示");
+            return;
+        }
+
+        if (!SvlMessageBox.Confirm(
+                "确定要卸载 Base 的 SMAPI 吗？\n\n该操作会移除 SMAPI 核心文件，并保留你自己的 Mods。",
+                "确认卸载"))
+        {
+            return;
+        }
+
+        var success = SmapApiService.UninstallSmapiFromPath(SelectedInstance.GamePath, out var errorMessage);
+        if (!success)
+        {
+            SvlMessageBox.Error($"卸载 Base SMAPI 失败：{errorMessage}");
+            return;
+        }
+
+        // 卸载后刷新状态。
+        SelectedInstance.IsSMAPIInstance = false;
+        SelectedInstance.HasSMAPIInstalled = false;
+        SelectedInstance.SMAPIVersion = string.Empty;
+        IsSMAPIInstance = false;
+        SmapiVersion = string.Empty;
+
+        SaveInstanceConfig("✓ 已卸载 Base SMAPI");
+        GlobalEvents.OnInstanceChanged(string.Empty);
+        SvlMessageBox.Success("Base SMAPI 已卸载。即将返回主页面。", "完成");
+
+        // 卸载完成后直接返回主页面，避免用户停留在已失效的 SMAPI 设置上下文。
+        _mainViewModel.NavigateToLaunchCommand.Execute(null);
     }
 
     // ========== MOD 管理相关 ==========
@@ -709,14 +808,22 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     private bool _isCheckingUpdates = false;
 
     [ObservableProperty]
-    private string _updateStatus = "点击检查更新";
+    private string _updateStatus = "更新检测进度 0/0";
+
+    [ObservableProperty]
+    private string _currentUpdateProcessingModName = string.Empty;
 
     // 汉化检查状态
     [ObservableProperty]
     private bool _isCheckingLocalization = false;
 
     [ObservableProperty]
-    private string _localizationStatus = "点击检测汉化";
+    private string _localizationStatus = "汉化检测进度 0/0";
+
+    [ObservableProperty]
+    private string _currentLocalizationProcessingModName = string.Empty;
+
+    public bool HasRunningModTask => IsCheckingUpdates || IsCheckingLocalization;
 
     // MOD 管理器
     private IModManager _modManager;
@@ -762,6 +869,24 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         OnPropertyChanged(nameof(CanGoPreviousPage));
         OnPropertyChanged(nameof(CanGoNextPage));
         OnPropertyChanged(nameof(PageInfo));
+    }
+
+    partial void OnIsCheckingUpdatesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(HasRunningModTask));
+        if (!value)
+        {
+            CurrentUpdateProcessingModName = string.Empty;
+        }
+    }
+
+    partial void OnIsCheckingLocalizationChanged(bool value)
+    {
+        OnPropertyChanged(nameof(HasRunningModTask));
+        if (!value)
+        {
+            CurrentLocalizationProcessingModName = string.Empty;
+        }
     }
 
     partial void OnTotalPagesChanged(int value)
@@ -1003,14 +1128,73 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         try
         {
             IsCheckingUpdates = true;
-            UpdateStatus = "正在检查更新...";
+            UpdateStatus = "更新检测：准备中 | 0/0";
+            CurrentUpdateProcessingModName = "准备中";
 
-            await EnsureUpdateSourcesFromUniqueIdAsync(Mods.ToList());
+            var modsToCheck = Mods.ToList();
+            var settings = SVL.Core.Config.AppConfig.GetSettings();
+            var maxThreads = Math.Max(1, Math.Min(16, settings.MaxConcurrentModUpdateChecks));
+            var totalCount = modsToCheck.Count;
+            var completedCount = 0;
 
-            await _modManager.CheckModUpdatesAsync(Mods.ToList());
+            async Task ReportUpdateProgressAsync(int completed, string processingModName)
+            {
+                var text = $"更新检测：{processingModName} | {completed}/{totalCount}（线程数 {maxThreads}）";
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher != null && !dispatcher.CheckAccess())
+                {
+                    await dispatcher.InvokeAsync(() =>
+                    {
+                        CurrentUpdateProcessingModName = processingModName;
+                        UpdateStatus = text;
+                    });
+                }
+                else
+                {
+                    CurrentUpdateProcessingModName = processingModName;
+                    UpdateStatus = text;
+                }
+            }
+
+            await ReportUpdateProgressAsync(0, "准备中");
+
+            using var semaphore = new SemaphoreSlim(maxThreads, maxThreads);
+            var tokenExpiredFlag = 0;
+
+            var tasks = modsToCheck.Select(async mod =>
+            {
+                await semaphore.WaitAsync();
+                try
+                {
+                    await ReportUpdateProgressAsync(Volatile.Read(ref completedCount), mod.Name);
+                    await _modManager.CheckModUpdatesAsync(new List<SdVMod> { mod });
+                }
+                catch (SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsTokenExpiredException)
+                {
+                    Interlocked.Exchange(ref tokenExpiredFlag, 1);
+                }
+                catch (Exception ex)
+                {
+                    SVL.Core.Logging.Log.Error(ex, $"[VersionSettings] 并发更新检测失败: {mod.Name}");
+                }
+                finally
+                {
+                    var completed = Interlocked.Increment(ref completedCount);
+                    await ReportUpdateProgressAsync(completed, mod.Name);
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            if (tokenExpiredFlag == 1)
+            {
+                throw new SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsTokenExpiredException();
+            }
 
             UpdateModsCount();
-            UpdateStatus = $"检查完成 - {UpdatableModsCount} 个可更新";
+            CurrentUpdateProcessingModName = "已完成";
+            UpdateStatus = $"更新检测：已完成 | {totalCount}/{totalCount}（可更新 {UpdatableModsCount}，线程数 {maxThreads}）";
         }
         catch (SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsTokenExpiredException)
         {
@@ -1050,7 +1234,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         try
         {
             IsCheckingLocalization = true;
-            LocalizationStatus = "正在检测汉化...";
+            LocalizationStatus = "汉化检测：准备中 | 0/0";
+            CurrentLocalizationProcessingModName = "准备中";
             SVL.Core.Logging.Log.Info($"[VersionSettings] 开始检测汉化，共 {Mods.Count} 个 Mod");
 
             int foundCount = 0;
@@ -1061,52 +1246,99 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             // 获取所有可能带有来源信息的 Mod（包括 svl.source.json、UpdateKeys、ProjectId、UniqueId）
             var modsWithSource = Mods.Where(HasAnySourceForLocalization).ToList();
             SVL.Core.Logging.Log.Info($"[VersionSettings] 找到 {modsWithSource.Count} 个可能带有来源信息的 Mod");
+            var totalToCheck = modsWithSource.Count;
+            var settings = SVL.Core.Config.AppConfig.GetSettings();
+            var maxThreads = Math.Max(1, Math.Min(16, settings.MaxConcurrentModLocalizationChecks));
 
-            var autoApplyList = new List<(SdVMod Mod, CommunityLocalizationEntry Entry)>();
-
-            foreach (var mod in modsWithSource)
+            async Task ReportLocalizationProgressAsync(string processingModName)
             {
-                var sourceInfo = TryGetLocalizationSourceInfo(mod);
-                CommunityLocalizationEntry? localization = null;
-
-                if (sourceInfo != null)
+                var text = $"汉化检测：{processingModName} | {checkedCount}/{totalToCheck}（命中 {foundCount}，可更新 {outdatedCount}，线程数 {maxThreads}）";
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher != null && !dispatcher.CheckAccess())
                 {
-                    checkedCount++;
-                    SVL.Core.Logging.Log.Debug($"[VersionSettings] 正在检测 Mod '{mod.Name}' 的汉化 ({sourceInfo.Value.Platform}/{sourceInfo.Value.ProjectId})...");
-                    localization = await CommunityLocalizationService.GetAsync("mod", sourceInfo.Value.Platform, sourceInfo.Value.ProjectId, forceRefresh: false);
-                }
-                else if (!string.IsNullOrWhiteSpace(mod.UniqueId))
-                {
-                    checkedCount++;
-                    SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 使用 UniqueID 回退检测汉化 ({mod.UniqueId})...");
-                    localization = await CommunityLocalizationService.GetByUniqueIdAsync(mod.UniqueId, forceRefresh: false);
-                }
-                else
-                {
-                    SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 无法获取来源信息，跳过");
-                    continue;
-                }
-
-                if (localization != null)
-                {
-                    foundCount++;
-                    SVL.Core.Logging.Log.Info($"[VersionSettings] Mod '{mod.Name}' 找到汉化: {localization.Name?.ZhCn ?? "N/A"}");
-
-                    if (ShouldApplyLocalization(mod, localization))
+                    await dispatcher.InvokeAsync(() =>
                     {
-                        outdatedCount++;
-                        autoApplyList.Add((mod, localization));
-                        mod.IsSelected = true;
-                    }
+                        CurrentLocalizationProcessingModName = processingModName;
+                        LocalizationStatus = text;
+                    });
                 }
                 else
                 {
-                    SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 未找到汉化");
+                    CurrentLocalizationProcessingModName = processingModName;
+                    LocalizationStatus = text;
                 }
             }
 
+            await ReportLocalizationProgressAsync("准备中");
+
+            var autoApplyBag = new System.Collections.Concurrent.ConcurrentBag<(SdVMod Mod, CommunityLocalizationEntry Entry)>();
+
+            using (var semaphore = new SemaphoreSlim(maxThreads, maxThreads))
+            {
+                var detectTasks = modsWithSource.Select(async mod =>
+                {
+                    await semaphore.WaitAsync();
+                    try
+                    {
+                        var sourceInfo = TryGetLocalizationSourceInfo(mod);
+                        CommunityLocalizationEntry? localization = null;
+
+                        if (sourceInfo != null)
+                        {
+                            await ReportLocalizationProgressAsync(mod.Name);
+                            SVL.Core.Logging.Log.Debug($"[VersionSettings] 正在检测 Mod '{mod.Name}' 的汉化 ({sourceInfo.Value.Platform}/{sourceInfo.Value.ProjectId})...");
+                            localization = await CommunityLocalizationService.GetAsync("mod", sourceInfo.Value.Platform, sourceInfo.Value.ProjectId, forceRefresh: false);
+                        }
+                        else if (!string.IsNullOrWhiteSpace(mod.UniqueId))
+                        {
+                            await ReportLocalizationProgressAsync(mod.Name);
+                            SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 使用 UniqueID 回退检测汉化 ({mod.UniqueId})...");
+                            localization = await CommunityLocalizationService.GetByUniqueIdAsync(mod.UniqueId, forceRefresh: false);
+                        }
+
+                        if (localization != null)
+                        {
+                            Interlocked.Increment(ref foundCount);
+                            SVL.Core.Logging.Log.Info($"[VersionSettings] Mod '{mod.Name}' 找到汉化: {localization.Name?.ZhCn ?? "N/A"}");
+
+                            if (ShouldApplyLocalization(mod, localization))
+                            {
+                                Interlocked.Increment(ref outdatedCount);
+                                autoApplyBag.Add((mod, localization));
+                            }
+                        }
+                        else
+                        {
+                            SVL.Core.Logging.Log.Debug($"[VersionSettings] Mod '{mod.Name}' 未找到汉化");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        SVL.Core.Logging.Log.Warn($"[VersionSettings] 检测 Mod 汉化失败: {mod.Name}", ex);
+                    }
+                    finally
+                    {
+                        Interlocked.Increment(ref checkedCount);
+                        await ReportLocalizationProgressAsync(mod.Name);
+                        semaphore.Release();
+                    }
+                });
+
+                await Task.WhenAll(detectTasks);
+            }
+
+            var autoApplyList = autoApplyBag.ToList();
+
             foreach (var item in autoApplyList)
             {
+                item.Mod.IsSelected = true;
+            }
+
+            for (var i = 0; i < autoApplyList.Count; i++)
+            {
+                var item = autoApplyList[i];
+                CurrentLocalizationProcessingModName = item.Mod.Name;
+                LocalizationStatus = $"汉化应用：{item.Mod.Name} | {i}/{autoApplyList.Count}（已应用 {appliedCount}）";
                 if (await ApplyLocalizationEntryToModAsync(item.Mod, item.Entry, forceRefresh: true))
                 {
                     appliedCount++;
@@ -1118,7 +1350,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 UpdateSelectionState();
             }
 
-            LocalizationStatus = $"检测完成 - {foundCount}/{checkedCount} 个有汉化，{outdatedCount} 个可更新，已应用 {appliedCount} 个";
+            CurrentLocalizationProcessingModName = "已完成";
+            LocalizationStatus = $"汉化检测：已完成 | {checkedCount}/{totalToCheck}（命中 {foundCount}，可更新 {outdatedCount}，已应用 {appliedCount}）";
             SVL.Core.Logging.Log.Info($"[VersionSettings] 汉化检测完成 - {foundCount}/{checkedCount} 个有汉化，{outdatedCount} 个可更新，已应用 {appliedCount} 个");
 
             var summary =
@@ -1416,6 +1649,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         {
             FilteredMods.Add(mod);
         }
+
+        OnPropertyChanged(nameof(IsCurrentPageAllSelected));
     }
 
     private void UpdatePageNumbers()
@@ -1517,6 +1752,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         ShowSelectionActions = SelectedCount > 0;
         OnPropertyChanged(nameof(HasSelectedUpdatable));
         OnPropertyChanged(nameof(HasSelectedLocalizableMods));
+        OnPropertyChanged(nameof(IsCurrentPageAllSelected));
     }
 
     partial void OnSelectedUpdatableCountChanged(int value)
@@ -1526,6 +1762,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     public bool HasSelectedLocalizableMods => CurrentFilterCategory != ModFilterCategory.Backup
         && GetEffectiveSelectedMods(HasSourceCredentialForLocalization).Count > 0;
+
+    public bool IsCurrentPageAllSelected => FilteredMods.Count > 0 && FilteredMods.All(m => m.IsSelected);
 
     private string? GetCurrentModsPath()
     {
@@ -1547,6 +1785,22 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     /// </summary>
     [RelayCommand]
     private void SelectAll()
+    {
+        if (_filteredSource.Count == 0)
+            return;
+
+        var allSelected = _filteredSource.All(m => m.IsSelected);
+
+        foreach (var mod in _filteredSource)
+        {
+            SetSelectionState(mod, !allSelected, cascadeToChildren: !mod.IsChildMod);
+        }
+
+        UpdateSelectionState();
+    }
+
+    [RelayCommand]
+    private void ToggleCurrentPageSelection()
     {
         if (FilteredMods.Count == 0)
             return;
@@ -2982,6 +3236,116 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         catch (Exception ex)
         {
             SvlMessageBox.Error($"删除 MOD 失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 切换到 SMAPI 版本
+    /// </summary>
+    [RelayCommand]
+    private void SwitchToSMAPIVersion()
+    {
+        try
+        {
+            if (SelectedInstance == null)
+            {
+                SvlMessageBox.Error("未选择实例");
+                return;
+            }
+
+            if (SelectedInstance.IsSMAPIInstance)
+            {
+                SvlMessageBox.Info("当前已经是 SMAPI 版本。", "提示");
+                return;
+            }
+
+            if (!SelectedInstance.HasSMAPIInstalled)
+            {
+                SvlMessageBox.Error("该路径未安装 SMAPI，无法切换到 SMAPI 版本。", "错误");
+                return;
+            }
+
+            var currentSmapiVersion = SelectedInstance.SMAPIVersion;
+            if (string.IsNullOrWhiteSpace(currentSmapiVersion))
+            {
+                currentSmapiVersion = GetSMAPIVersionFromInstance(SelectedInstance);
+            }
+
+            if (string.IsNullOrWhiteSpace(currentSmapiVersion) || string.Equals(currentSmapiVersion, "未知版本", StringComparison.OrdinalIgnoreCase))
+            {
+                currentSmapiVersion = "未知版本";
+            }
+
+            // 确认切换
+            if (!SvlMessageBox.Confirm(
+                $"确定要切换到 SMAPI 版本吗？\n\n当前 SMAPI 版本：{currentSmapiVersion}\n\n切换后将启用自动安装功能。",
+                "确认切换"))
+            {
+                return;
+            }
+
+            // 保存到配置：优先选择同路径已有 SMAPI 实例；否则将当前实例切换为 SMAPI。
+            var allInstances = SettingsService.LoadInstances();
+            var samePathSmapiInstance = allInstances.FirstOrDefault(i =>
+                !string.Equals(i.Id, SelectedInstance.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(i.GamePath, SelectedInstance.GamePath, StringComparison.OrdinalIgnoreCase)
+                && i.IsSMAPIInstance);
+
+            if (samePathSmapiInstance != null)
+            {
+                if (string.IsNullOrWhiteSpace(samePathSmapiInstance.SMAPIVersion) ||
+                    string.Equals(samePathSmapiInstance.SMAPIVersion, "未知版本", StringComparison.OrdinalIgnoreCase))
+                {
+                    samePathSmapiInstance.SMAPIVersion = currentSmapiVersion;
+                }
+
+                SettingsService.SaveInstances(allInstances);
+                SettingsService.SaveDefaultInstance(samePathSmapiInstance.Id);
+
+                SelectedInstance = samePathSmapiInstance;
+                IsSMAPIInstance = samePathSmapiInstance.IsSMAPIInstance;
+                SmapiVersion = samePathSmapiInstance.SMAPIVersion;
+                LoadInstanceData(samePathSmapiInstance);
+            }
+            else
+            {
+                SelectedInstance.IsSMAPIInstance = true;
+                SelectedInstance.HasSMAPIInstalled = true;
+                SelectedInstance.SMAPIVersion = currentSmapiVersion;
+                IsSMAPIInstance = true;
+                SmapiVersion = currentSmapiVersion;
+
+                var existingInstance = allInstances.FirstOrDefault(i => i.Id == SelectedInstance.Id);
+                if (existingInstance != null)
+                {
+                    existingInstance.IsSMAPIInstance = true;
+                    existingInstance.HasSMAPIInstalled = true;
+                    existingInstance.SMAPIVersion = currentSmapiVersion;
+                }
+                else
+                {
+                    allInstances.Add(SelectedInstance);
+                }
+
+                SettingsService.SaveInstances(allInstances);
+                SettingsService.SaveDefaultInstance(SelectedInstance.Id);
+                LoadInstanceData(SelectedInstance);
+            }
+
+            // 刷新显示
+            OnPropertyChanged(nameof(IsSMAPIInstance));
+            OnPropertyChanged(nameof(IsBaseWithSmapiInstalled));
+            OnPropertyChanged(nameof(SwitchToSMAPITipText));
+
+            SvlMessageBox.Success("已切换到 SMAPI 版本，自动安装功能已启用。");
+
+            // 触发全局事件通知刷新
+            GlobalEvents.OnInstanceChanged(SelectedInstance.Id);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[VersionSettings] 切换到 SMAPI 版本失败");
+            SvlMessageBox.Error($"切换失败：{ex.Message}");
         }
     }
 }

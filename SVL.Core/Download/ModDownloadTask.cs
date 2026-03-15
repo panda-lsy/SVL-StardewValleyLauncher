@@ -52,11 +52,6 @@ public class ModDownloadTask : DownloadTask
     private readonly System.Collections.Generic.List<string> _extractedRootDirs = new();
 
     /// <summary>
-    /// 临时解压目录（用于整合包MOD安装，确保取消时能完全清理）
-    /// </summary>
-    private string? _tempExtractPath;
-
-    /// <summary>
     /// 临时下载的图标文件路径（用于 finally 清理）
     /// </summary>
     private string? _tempDownloadedIconPath;
@@ -67,11 +62,8 @@ public class ModDownloadTask : DownloadTask
     /// <param name="modId">MOD ID</param>
     /// <param name="modName">MOD 名称</param>
     /// <param name="fileName">文件名</param>
-    /// <param name="downloadUrl">下载 URL</param>
-    /// <param name="gameBasePath">游戏基础路径（可选）</param>
     /// <param name="targetModsPath">目标 Mods 文件夹路径（如果为 null，则打开另存为对话框）</param>
     /// <param name="saveOnly">是否只保存 ZIP 文件而不安装（默认 false）</param>
-    /// <param name="isModpack">是否为整合包（默认 false）</param>
     /// <param name="parentCancellationToken">父任务的取消令牌（可选）</param>
     public ModDownloadTask(
         string modId,
@@ -106,7 +98,6 @@ public class ModDownloadTask : DownloadTask
         _modpackIconUrl = modpackIconUrl;
         _modpackIconLocalPath = modpackIconLocalPath;
         _isChildTask = parentCancellationToken.CanBeCanceled;
-
         // 创建取消令牌源，如果提供了父令牌则链接
         if (parentCancellationToken.CanBeCanceled)
         {
@@ -669,59 +660,180 @@ public class ModDownloadTask : DownloadTask
 
         httpClient.Timeout = TimeSpan.FromMinutes(30);
 
-        var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, _linkedToken);
-        response.EnsureSuccessStatusCode();
+        var candidateUrls = BuildCurseforgeDownloadCandidates(downloadUrl);
+        Exception? lastException = null;
+        string? lastFailureDetail = null;
 
-        var totalBytes = response.Content.Headers.ContentLength ?? 0;
-        Log.Info($"[ModDownloadTask] 文件大小: {totalBytes} 字节");
-
-        using var fs = new FileStream(targetPath, FileMode.Create);
-        using var stream = await response.Content.ReadAsStreamAsync();
-
-        var buffer = new byte[8192];
-        int bytesRead;
-        long totalRead = 0;
-
-        // 速度计算
-        var startTime = DateTime.UtcNow;
-        var lastUpdateTime = startTime;
-        const int updateIntervalMs = 500; // 每 500ms 更新一次显示
-        var typeLabel = _isModpack ? "整合包" : "MOD";
-
-        while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, _linkedToken)) > 0)
+        for (var i = 0; i < candidateUrls.Count; i++)
         {
-            await fs.WriteAsync(buffer, 0, bytesRead, _linkedToken);
-            totalRead += bytesRead;
-
-            var now = DateTime.UtcNow;
-            var elapsedMs = (int)(now - lastUpdateTime).TotalMilliseconds;
-
-            if (elapsedMs >= updateIntervalMs && totalBytes > 0)
+            var candidateUrl = candidateUrls[i];
+            try
             {
-                // 计算下载速度
-                var totalElapsedSec = (now - startTime).TotalSeconds;
-                var speed = totalElapsedSec > 0 ? totalRead / totalElapsedSec : 0;
+                StatusMessage = $"正在下载{(_isModpack ? "整合包" : "MOD")}...\n尝试地址 {i + 1}/{candidateUrls.Count}";
 
-                // 计算进度
-                var currentProgress = (double)totalRead / totalBytes;
-                var progressValue = 10 + (int)(currentProgress * 40);
-                Progress = progressValue;
+                if (i > 0)
+                {
+                    Log.Warn($"[ModDownloadTask] 尝试备用下载地址 ({i + 1}/{candidateUrls.Count}): {candidateUrl}");
+                }
 
-                // 格式化显示：百分比 + 已下载 / 总大小 (速度)
-                var progressPercent = currentProgress * 100;
-                var downloadedMB = totalRead / (1024.0 * 1024.0);
-                var totalMB = totalBytes / (1024.0 * 1024.0);
-                var speedMB = speed / (1024.0 * 1024.0);
+                using var requestTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(_linkedToken);
+                if (IsCurseforgeSource())
+                {
+                    // 对第三方 CDN 单地址设置较短超时，避免全部不可用时任务长时间无响应。
+                    requestTimeoutCts.CancelAfter(TimeSpan.FromSeconds(20));
+                }
 
-                StatusMessage = $"正在下载{typeLabel}...\n{progressPercent:F2}%\t{downloadedMB:F1} MB / {totalMB:F1} MB ({speedMB:F1} MB/s)";
+                var response = await httpClient.GetAsync(candidateUrl, HttpCompletionOption.ResponseHeadersRead, requestTimeoutCts.Token);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var code = (int)response.StatusCode;
+                    lastFailureDetail = $"{response.StatusCode} ({candidateUrl})";
+                    var canRetry = IsCurseforgeSource() && i < candidateUrls.Count - 1
+                        && (code == 403 || code == 404 || code >= 500);
 
-                lastUpdateTime = now;
+                    if (canRetry)
+                    {
+                        Log.Warn($"[ModDownloadTask] 下载地址返回 {response.StatusCode}，准备切换备用地址");
+                        continue;
+                    }
+
+                    response.EnsureSuccessStatusCode();
+                }
+
+                var totalBytes = response.Content.Headers.ContentLength ?? 0;
+                Log.Info($"[ModDownloadTask] 文件大小: {totalBytes} 字节");
+
+                using var fs = new FileStream(targetPath, FileMode.Create);
+                using var stream = await response.Content.ReadAsStreamAsync();
+
+                var buffer = new byte[8192];
+                int bytesRead;
+                long totalRead = 0;
+
+                // 速度计算
+                var startTime = DateTime.UtcNow;
+                var lastUpdateTime = startTime;
+                const int updateIntervalMs = 500; // 每 500ms 更新一次显示
+                var typeLabel = _isModpack ? "整合包" : "MOD";
+
+                while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, _linkedToken)) > 0)
+                {
+                    await fs.WriteAsync(buffer, 0, bytesRead, _linkedToken);
+                    totalRead += bytesRead;
+
+                    var now = DateTime.UtcNow;
+                    var elapsedMs = (int)(now - lastUpdateTime).TotalMilliseconds;
+
+                    if (elapsedMs >= updateIntervalMs && totalBytes > 0)
+                    {
+                        // 计算下载速度
+                        var totalElapsedSec = (now - startTime).TotalSeconds;
+                        var speed = totalElapsedSec > 0 ? totalRead / totalElapsedSec : 0;
+
+                        // 计算进度
+                        var currentProgress = (double)totalRead / totalBytes;
+                        var progressValue = 10 + (int)(currentProgress * 40);
+                        Progress = progressValue;
+
+                        // 格式化显示：百分比 + 已下载 / 总大小 (速度)
+                        var progressPercent = currentProgress * 100;
+                        var downloadedMB = totalRead / (1024.0 * 1024.0);
+                        var totalMB = totalBytes / (1024.0 * 1024.0);
+                        var speedMB = speed / (1024.0 * 1024.0);
+
+                        StatusMessage = $"正在下载{typeLabel}...\n{progressPercent:F2}%\t{downloadedMB:F1} MB / {totalMB:F1} MB ({speedMB:F1} MB/s)";
+                        lastUpdateTime = now;
+                    }
+                }
+
+                // 下载完成，显示最终状态
+                var finalMB = totalRead / (1024.0 * 1024.0);
+                StatusMessage = $"正在下载{typeLabel}...\n100.00%\t{finalMB:F1} MB / {finalMB:F1} MB (完成)";
+                return;
+            }
+            catch (Exception ex)
+            {
+                lastException = ex;
+                if (ex is OperationCanceledException && !_linkedToken.IsCancellationRequested)
+                {
+                    lastFailureDetail = $"请求超时 ({candidateUrl})";
+                }
+                else if (!string.IsNullOrWhiteSpace(ex.Message))
+                {
+                    lastFailureDetail = ex.Message;
+                }
+
+                Log.Warn($"[ModDownloadTask] 地址尝试失败 ({i + 1}/{candidateUrls.Count}): {candidateUrl}, {ex.GetType().Name}: {ex.Message}");
+                try
+                {
+                    if (File.Exists(targetPath))
+                    {
+                        File.Delete(targetPath);
+                    }
+                }
+                catch
+                {
+                    // 忽略清理失败。
+                }
             }
         }
 
-        // 下载完成，显示最终状态
-        var finalMB = totalRead / (1024.0 * 1024.0);
-        StatusMessage = $"正在下载{typeLabel}...\n100.00%\t{finalMB:F1} MB / {finalMB:F1} MB (完成)";
+        var reasonText = string.IsNullOrWhiteSpace(lastFailureDetail)
+            ? "未知原因"
+            : lastFailureDetail;
+        StatusMessage = $"下载失败：已尝试 {candidateUrls.Count} 个地址，均不可用（{reasonText}）";
+
+        if (lastException != null)
+            throw new HttpRequestException($"所有下载地址均失败：{reasonText}", lastException);
+
+        throw new HttpRequestException("下载失败：未获取到可用下载地址");
+    }
+
+    private List<string> BuildCurseforgeDownloadCandidates(string primaryUrl)
+    {
+        var result = new List<string>();
+
+        void Add(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return;
+
+            if (!result.Contains(url, StringComparer.OrdinalIgnoreCase))
+            {
+                result.Add(url);
+            }
+        }
+
+        Add(primaryUrl);
+
+        if (!IsCurseforgeSource())
+            return result;
+
+        Add(SwapCdnHost(primaryUrl, "mediafilez.forgecdn.net"));
+        Add(SwapCdnHost(primaryUrl, "media.forgecdn.net"));
+        Add(SwapCdnHost(primaryUrl, "edge.forgecdn.net"));
+
+        return result;
+    }
+
+    private static string? SwapCdnHost(string? url, string targetHost)
+    {
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(targetHost))
+            return null;
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return null;
+
+        if (!uri.Host.Contains("forgecdn.net", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var builder = new UriBuilder(uri)
+        {
+            Host = targetHost,
+            Port = -1
+        };
+
+        return builder.Uri.ToString();
     }
 
     private bool IsCurseforgeSource()
@@ -759,11 +871,28 @@ public class ModDownloadTask : DownloadTask
             return apiUrl;
         }
 
-        // 2. API 失败，尝试 CDN 硬解析作为 fallback
-        Log.Warn($"[ModDownloadTask] API 返回空，尝试使用 CDN 硬解析: fileId={fileId}, fileName={_fileName}");
+        // 2. API 失败后，先尝试从文件列表拿到精确文件名（很多文件名与展示名不同）
+        string cdnFileName = _fileName;
         try
         {
-            return CurseforgeApiService.BuildCdnUrl(fileId, _fileName);
+            var files = await CurseforgeApiService.GetModFilesAsync(projectId, index: 0, pageSize: 1000);
+            var exact = files?.FirstOrDefault(f => f.Id == fileId);
+            if (exact != null && !string.IsNullOrWhiteSpace(exact.FileName))
+            {
+                cdnFileName = exact.FileName;
+                Log.Info($"[ModDownloadTask] 使用 Curseforge 文件列表中的精确文件名: {cdnFileName}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[ModDownloadTask] 获取 Curseforge 文件列表失败，继续使用任务文件名回退: {ex.Message}");
+        }
+
+        // 3. 构建 CDN 硬解析 URL 作为 fallback
+        Log.Warn($"[ModDownloadTask] API 返回空，尝试使用 CDN 硬解析: fileId={fileId}, fileName={cdnFileName}");
+        try
+        {
+            return CurseforgeApiService.BuildCdnUrl(fileId, cdnFileName);
         }
         catch (Exception ex)
         {

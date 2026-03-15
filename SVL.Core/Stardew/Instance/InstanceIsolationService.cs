@@ -196,11 +196,17 @@ public static class InstanceIsolationService
             return (false, "实例名称过长（最多100个字符）");
         }
 
-        // 检查实例名称是否已存在于实例列表
+        // 检查实例名称是否已存在于实例列表（同 Base 路径内唯一）
         var existingInstances = SettingsService.LoadInstances();
-        if (existingInstances.Any(i => i.Name.Equals(instanceName, StringComparison.OrdinalIgnoreCase)))
+        var duplicateInSameBase = existingInstances.Any(i =>
+            i.Name.Equals(instanceName, StringComparison.OrdinalIgnoreCase)
+            && (!string.IsNullOrWhiteSpace(gamePath)
+                ? string.Equals(i.GamePath, gamePath, StringComparison.OrdinalIgnoreCase)
+                : true));
+
+        if (duplicateInSameBase)
         {
-            return (false, $"实例名称 '{instanceName}' 已存在，请使用不同的名称");
+            return (false, $"实例名称 '{instanceName}' 在当前游戏路径下已存在，请使用不同的名称");
         }
 
         // 如果提供了游戏路径，检查版本目录是否存在

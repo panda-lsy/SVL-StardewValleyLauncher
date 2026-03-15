@@ -821,16 +821,14 @@ public class ModBatchUpdateTask : DownloadTask
             Progress = 10 + (completedCount * 80 / ModList.Count);
             StatusMessage = $"正在更新 MOD ({completedCount}/{ModList.Count})...";
 
-            // 如果成功或跳过（非 Premium 用户等待浏览器），继续处理下一个
-            if (success || nextItem.Status == ModBatchUpdateStatus.WaitingBrowser)
+            // 失败也应继续后续任务；仅 WaitingBrowser 需要暂停等待用户操作。
+            if (nextItem.Status == ModBatchUpdateStatus.WaitingBrowser)
             {
-                if (nextItem.Status != ModBatchUpdateStatus.WaitingBrowser)
-                {
-                    // 非等待状态，继续下一个
-                    await ProcessNextModAsync();
-                }
                 // 等待状态，不继续，等待用户操作后通过 ContinueInstallAfterDownloadAsync 调用 ProcessNextModAsync
+                return;
             }
+
+            await ProcessNextModAsync();
         }
         catch (Exception ex)
         {

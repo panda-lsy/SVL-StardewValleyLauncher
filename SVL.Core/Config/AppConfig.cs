@@ -88,6 +88,8 @@ public static class AppConfig
                 ModDefaultSource = settings.ModDefaultSource,
                 LocalizationPreferredSource = settings.LocalizationPreferredSource,
                 MaxConcurrentModDownloads = settings.MaxConcurrentModDownloads,
+                MaxConcurrentModUpdateChecks = settings.MaxConcurrentModUpdateChecks,
+                MaxConcurrentModLocalizationChecks = settings.MaxConcurrentModLocalizationChecks,
 
                 // NexusMods
                 EnableNexusModsSearchCache = settings.EnableNexusModsSearchCache,
@@ -366,6 +368,16 @@ public class AppSettings
     /// 整合包安装时的最大并发下载数（1-10）
     /// </summary>
     public int MaxConcurrentModDownloads { get; set; } = 3;
+
+    /// <summary>
+    /// Mod 更新检测的最大并发线程数（1-16）
+    /// </summary>
+    public int MaxConcurrentModUpdateChecks { get; set; } = 4;
+
+    /// <summary>
+    /// Mod 汉化检测的最大并发线程数（1-16）
+    /// </summary>
+    public int MaxConcurrentModLocalizationChecks { get; set; } = 4;
 
     /// <summary>
     /// 启用 NexusMods 搜索结果缓存（搜索记录缓存）

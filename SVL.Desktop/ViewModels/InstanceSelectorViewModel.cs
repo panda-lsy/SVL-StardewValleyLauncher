@@ -107,6 +107,51 @@ public partial class InstanceSelectorViewModel : ObservableObject
             var savedInstances = SettingsService.LoadInstances();
             System.Diagnostics.Debug.WriteLine($"[InstanceSelector] Loaded {savedInstances.Count} instances from config");
 
+            // 同步 Base 实例的检测信息（尤其是 SMAPI 安装状态与版本），避免显示旧缓存。
+            var groupedByPath = savedInstances
+                .Where(i => !string.IsNullOrWhiteSpace(i.GamePath))
+                .GroupBy(i => i.GamePath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var pathGroup in groupedByPath)
+            {
+                try
+                {
+                    var detectedBaseInfos = GamePathService.CreateGamePathInfos(pathGroup.Key);
+                    if (detectedBaseInfos.Count == 0)
+                        continue;
+
+                    foreach (var detected in detectedBaseInfos)
+                    {
+                        var saved = pathGroup.FirstOrDefault(i =>
+                            !i.EnableIsolation
+                            && string.Equals(i.Name, detected.Name, StringComparison.OrdinalIgnoreCase));
+
+                        if (saved != null)
+                        {
+                            saved.Version = detected.Version;
+                            saved.SMAPIVersion = detected.SMAPIVersion;
+                            saved.HasSMAPIInstalled = detected.HasSMAPIInstalled;
+                            saved.IsSMAPIInstance = detected.IsSMAPIInstance;
+                            if (saved.Tags == null)
+                                saved.Tags = new List<string>();
+                            if (!saved.Tags.Any(t => string.Equals(t, "Base", StringComparison.OrdinalIgnoreCase)))
+                                saved.Tags.Add("Base");
+                        }
+                        else
+                        {
+                            savedInstances.Add(detected);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"[InstanceSelector] 同步 Base 实例失败: {pathGroup.Key}, {ex.Message}");
+                }
+            }
+
+            SettingsService.SaveInstances(savedInstances);
+
             // 按路径分组
             var pathEntries = GamePathService.GroupInstancesByPath(savedInstances);
             System.Diagnostics.Debug.WriteLine($"[InstanceSelector] Grouped into {pathEntries.Count} path entries");
@@ -167,6 +212,24 @@ public partial class InstanceSelectorViewModel : ObservableObject
                 {
                     SelectedPathEntry = previousEntry;
                     System.Diagnostics.Debug.WriteLine($"[InstanceSelector] Restored previous path: {previousEntry.DisplayName}");
+                    return;
+                }
+            }
+
+            // 若是从某个已选实例进入“版本选择”，优先选中该实例所在的路径分组。
+            var preferredPath =
+                _mainViewModel.SelectedVersionSettingsInstance?.GamePath
+                ?? _mainViewModel.SelectedInstance?.Path;
+
+            if (!string.IsNullOrWhiteSpace(preferredPath))
+            {
+                var preferredEntry = PathEntries.FirstOrDefault(e =>
+                    string.Equals(e.GamePath, preferredPath, StringComparison.OrdinalIgnoreCase));
+
+                if (preferredEntry != null)
+                {
+                    SelectedPathEntry = preferredEntry;
+                    System.Diagnostics.Debug.WriteLine($"[InstanceSelector] Auto-selected preferred path: {preferredEntry.DisplayName}");
                     return;
                 }
             }
@@ -259,6 +322,8 @@ public partial class InstanceSelectorViewModel : ObservableObject
             {
                 try
                 {
+                    var detectedBaseInfos = GamePathService.CreateGamePathInfos(entry.GamePath);
+
                     // *** 检测已删除的版本 ***
                     var existingInstances = entry.Instances.ToList();
                     var instancesToRemove = new List<GamePathInfo>();
@@ -292,24 +357,58 @@ public partial class InstanceSelectorViewModel : ObservableObject
                         entry.Instances.Remove(instance);
                     }
 
+                    var survivingInstances = existingInstances.Except(instancesToRemove).ToList();
+
+                    var savedByName = survivingInstances
+                        .ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
+
+                    var mergedBaseInfos = new List<GamePathInfo>();
+                    foreach (var detected in detectedBaseInfos)
+                    {
+                        if (savedByName.TryGetValue(detected.Name, out var saved))
+                        {
+                            saved.Version = detected.Version;
+                            saved.SMAPIVersion = detected.SMAPIVersion;
+                            saved.HasSMAPIInstalled = detected.HasSMAPIInstalled;
+                            saved.IsSMAPIInstance = detected.IsSMAPIInstance;
+                            saved.EnableIsolation = detected.EnableIsolation;
+                            mergedBaseInfos.Add(saved);
+                            savedByName.Remove(detected.Name);
+                        }
+                        else
+                        {
+                            mergedBaseInfos.Add(detected);
+                        }
+                    }
+
+                    var survivingIsolated = survivingInstances
+                        .Where(i => i.EnableIsolation)
+                        .ToList();
+
                     // 扫描versions文件夹中的版本隔离实例
-                    var isolatedInstances = GamePathService.ScanVersionIsolatedInstances(entry.GamePath, existingInstances);
+                    var isolatedInstances = GamePathService.ScanVersionIsolatedInstances(
+                        entry.GamePath,
+                        mergedBaseInfos.Concat(survivingIsolated).ToList());
+
+                    var allInstances = mergedBaseInfos
+                        .Concat(survivingIsolated)
+                        .Concat(isolatedInstances)
+                        .GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .ToList();
+
+                    entry.Instances.Clear();
+                    foreach (var info in allInstances)
+                    {
+                        entry.Instances.Add(info);
+                    }
 
                     if (isolatedInstances.Count > 0)
                     {
-                        // 合并实例列表
-                        var allInstances = entry.Instances.Concat(isolatedInstances).ToList();
-
-                        // 更新实例列表
-                        entry.Instances.Clear();
-                        foreach (var info in allInstances)
-                        {
-                            entry.Instances.Add(info);
-                        }
-
                         totalIsolatedCount += isolatedInstances.Count;
-                        pathRefreshCount++;
                     }
+
+                    pathRefreshCount++;
                 }
                 catch
                 {
@@ -407,6 +506,8 @@ public partial class InstanceSelectorViewModel : ObservableObject
             {
                 try
                 {
+                    var detectedBaseInfos = GamePathService.CreateGamePathInfos(entry.GamePath);
+
                     // *** 检测已删除的版本 ***
                     var existingInstances = entry.Instances.ToList();
                     var instancesToRemove = new System.Collections.Generic.List<GamePathInfo>();
@@ -438,20 +539,50 @@ public partial class InstanceSelectorViewModel : ObservableObject
                         entry.Instances.Remove(instance);
                     }
 
-                    // 扫描versions文件夹中的版本隔离实例
-                    var isolatedInstances = GamePathService.ScanVersionIsolatedInstances(entry.GamePath, existingInstances);
+                    var survivingInstances = existingInstances.Except(instancesToRemove).ToList();
 
-                    if (isolatedInstances.Count > 0)
+                    var savedByName = survivingInstances
+                        .ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
+
+                    var mergedBaseInfos = new List<GamePathInfo>();
+                    foreach (var detected in detectedBaseInfos)
                     {
-                        // 合并实例列表
-                        var allInstances = entry.Instances.Concat(isolatedInstances).ToList();
-
-                        // 更新实例列表
-                        entry.Instances.Clear();
-                        foreach (var info in allInstances)
+                        if (savedByName.TryGetValue(detected.Name, out var saved))
                         {
-                            entry.Instances.Add(info);
+                            saved.Version = detected.Version;
+                            saved.SMAPIVersion = detected.SMAPIVersion;
+                            saved.HasSMAPIInstalled = detected.HasSMAPIInstalled;
+                            saved.IsSMAPIInstance = detected.IsSMAPIInstance;
+                            saved.EnableIsolation = detected.EnableIsolation;
+                            mergedBaseInfos.Add(saved);
+                            savedByName.Remove(detected.Name);
                         }
+                        else
+                        {
+                            mergedBaseInfos.Add(detected);
+                        }
+                    }
+
+                    var survivingIsolated = survivingInstances
+                        .Where(i => i.EnableIsolation)
+                        .ToList();
+
+                    // 扫描versions文件夹中的版本隔离实例
+                    var isolatedInstances = GamePathService.ScanVersionIsolatedInstances(
+                        entry.GamePath,
+                        mergedBaseInfos.Concat(survivingIsolated).ToList());
+
+                    var allInstances = mergedBaseInfos
+                        .Concat(survivingIsolated)
+                        .Concat(isolatedInstances)
+                        .GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .ToList();
+
+                    entry.Instances.Clear();
+                    foreach (var info in allInstances)
+                    {
+                        entry.Instances.Add(info);
                     }
                 }
                 catch

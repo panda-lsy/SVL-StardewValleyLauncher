@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using SVL.Core.Logging;
+using SVL.Core.Stardew.Mod.SMAPI;
 
 namespace SVL.Core.Stardew.Instance;
 
@@ -338,6 +339,40 @@ public class GamePathInfo : System.ComponentModel.INotifyPropertyChanged
         }
     }
 
+    private bool _overrideSteamLaunchOptions;
+    /// <summary>
+    /// 是否覆写 Steam 启动参数为该实例
+    /// </summary>
+    public bool OverrideSteamLaunchOptions
+    {
+        get => _overrideSteamLaunchOptions;
+        set
+        {
+            if (_overrideSteamLaunchOptions != value)
+            {
+                _overrideSteamLaunchOptions = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private string _steamLaunchOptions = string.Empty;
+    /// <summary>
+    /// Steam 启动参数覆写文本
+    /// </summary>
+    public string SteamLaunchOptions
+    {
+        get => _steamLaunchOptions;
+        set
+        {
+            if (_steamLaunchOptions != value)
+            {
+                _steamLaunchOptions = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     #endregion
 
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
@@ -479,9 +514,7 @@ public static class GamePathService
             var smapiExe = Path.Combine(gamePath, "StardewModdingAPI.exe");
             if (File.Exists(smapiExe))
             {
-                // 读取 EXE 版本信息
-                var versionInfo = FileVersionInfo.GetVersionInfo(smapiExe);
-                smapiVersion = versionInfo.FileVersion ?? "Unknown";
+                smapiVersion = SmapApiService.GetInstalledSmapiVersion(gamePath) ?? "Unknown";
                 return true;
             }
 
@@ -528,7 +561,8 @@ public static class GamePathService
                 GamePath = gamePath,
                 Version = version,
                 IsSMAPIInstance = false,
-                HasSMAPIInstalled = true
+                HasSMAPIInstalled = true,
+                Tags = new List<string> { "Base" }
             });
 
             // 2. SMAPI 实例
@@ -539,7 +573,8 @@ public static class GamePathService
                 Version = version,
                 IsSMAPIInstance = true,
                 SMAPIVersion = smapiVersion,
-                HasSMAPIInstalled = true
+                HasSMAPIInstalled = true,
+                Tags = new List<string> { "Base" }
             });
         }
         else
@@ -551,7 +586,8 @@ public static class GamePathService
                 GamePath = gamePath,
                 Version = version,
                 IsSMAPIInstance = false,
-                HasSMAPIInstalled = false
+                HasSMAPIInstalled = false,
+                Tags = new List<string> { "Base" }
             });
         }
 

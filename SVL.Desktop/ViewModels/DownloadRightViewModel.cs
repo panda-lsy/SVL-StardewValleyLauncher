@@ -720,7 +720,7 @@ public partial class DownloadRightViewModel : ObservableObject
 
         LoadItemsForCategory(_currentCategory);
         CheckGamePathStatus();
-        _ = LoadGameVersionsAsync();
+        // 注意：游戏版本列表不再在构造函数中加载，延迟到进入SMAPI Detail页面时加载
 
         // 初始化页码列表
         UpdatePageNumbers();

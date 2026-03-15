@@ -26,6 +26,7 @@ public class SmapiDownloadTask : DownloadTask
     private readonly string? _localZipPath;  // 本地zip文件路径（已下载好的文件）
     private readonly CancellationTokenSource _cts = new();
     private readonly bool _debugMode;       // Debug 模式
+    private readonly bool _useIsolationInstall; // 是否安装到隔离目录（false 时直接安装到 Base 目录）
 
     // NexusMods 相关信息（用于 NXM 回调）
     private const long SMAPI_MOD_ID = 2400;
@@ -43,7 +44,7 @@ public class SmapiDownloadTask : DownloadTask
     /// <summary>
     /// 构造函数：从网络下载SMAPI
     /// </summary>
-    public SmapiDownloadTask(string gameBasePath, string instanceName, string smapiVersion, SmapiSource source = SmapiSource.GitHub, long? fileId = null, string? downloadUrl = null, bool debugMode = false)
+    public SmapiDownloadTask(string gameBasePath, string instanceName, string smapiVersion, SmapiSource source = SmapiSource.GitHub, long? fileId = null, string? downloadUrl = null, bool debugMode = false, bool useIsolationInstall = true)
     {
         _gameBasePath = gameBasePath;
         _instanceName = instanceName;
@@ -52,6 +53,7 @@ public class SmapiDownloadTask : DownloadTask
         _fileId = fileId;
         _downloadUrl = downloadUrl;
         _debugMode = debugMode;
+        _useIsolationInstall = useIsolationInstall;
         _localZipPath = null;
 
         Type = DownloadTaskType.SMAPI;
@@ -62,7 +64,7 @@ public class SmapiDownloadTask : DownloadTask
     /// <summary>
     /// 构造函数：从本地zip文件安装SMAPI（已下载好的文件）
     /// </summary>
-    public SmapiDownloadTask(string gameBasePath, string instanceName, string localZipPath, SmapiSource source, bool debugMode = false, string? version = null)
+    public SmapiDownloadTask(string gameBasePath, string instanceName, string localZipPath, SmapiSource source, bool debugMode = false, string? version = null, bool useIsolationInstall = true)
     {
         _gameBasePath = gameBasePath;
         _instanceName = instanceName;
@@ -71,6 +73,7 @@ public class SmapiDownloadTask : DownloadTask
         _fileId = null;
         _downloadUrl = null;
         _debugMode = debugMode;
+        _useIsolationInstall = useIsolationInstall;
 
         // 优先使用传入的版本号，否则从文件名提取
         _smapiVersion = !string.IsNullOrEmpty(version) ? version : ExtractVersionFromPath(localZipPath);
@@ -135,31 +138,66 @@ public class SmapiDownloadTask : DownloadTask
                 ? $"[DownloadManager] 开始更新实例 {_instanceName}，SMAPI 版本: {_smapiVersion}"
                 : $"[DownloadManager] 开始创建实例 {_instanceName}，SMAPI 版本: {_smapiVersion}");
 
-            // 1. 获取游戏文件安装路径（gameBasePath/versions/实例名称）
-            var gameFilesPath = InstanceIsolationService.GetVersionPath(_gameBasePath, _instanceName);
+            // 1. 获取游戏文件安装路径（隔离模式：versions；Base模式：根目录）
+            var gameFilesPath = _useIsolationInstall
+                ? InstanceIsolationService.GetVersionPath(_gameBasePath, _instanceName)
+                : _gameBasePath;
             Log.Info($"[DownloadManager] 游戏文件安装路径: {gameFilesPath}");
+
+            // Base 目录安装/更新时，若游戏仍在运行会导致部分文件无法覆盖，进而触发运行时异常。
+            if (!_useIsolationInstall && TryGetRunningGameProcessInPath(_gameBasePath, out var runningProcessName))
+            {
+                throw new Exception($"检测到游戏进程仍在运行（{runningProcessName}），请先关闭游戏和 SMAPI 控制台后再安装/更新 Base SMAPI。");
+            }
 
             // 2. 检查版本目录
             if (Directory.Exists(gameFilesPath))
             {
                 if (IsUpdateMode)
                 {
-                    // 更新模式：清理旧版本目录内容（保留目录本身）
-                    Log.Info($"[DownloadManager] 更新模式：清理旧版本目录: {gameFilesPath}");
-                    CleanupVersionDirectoryForUpdate(gameFilesPath);
+                    if (_useIsolationInstall)
+                    {
+                        // 更新模式：清理旧版本目录内容（保留目录本身）
+                        Log.Info($"[DownloadManager] 更新模式：清理旧版本目录: {gameFilesPath}");
+                        CleanupVersionDirectoryForUpdate(gameFilesPath);
+                    }
+                    else
+                    {
+                        // Base 更新模式：先移除旧 SMAPI 文件，避免运行时残留导致冲突。
+                        Log.Info($"[DownloadManager] Base 更新模式：准备清理旧 SMAPI 文件: {gameFilesPath}");
+                        var removed = SmapApiService.UninstallSmapiFromPath(gameFilesPath, out var uninstallError);
+                        if (removed)
+                        {
+                            Log.Info("[DownloadManager] Base 更新模式：旧 SMAPI 文件清理完成");
+                        }
+                        else
+                        {
+                            Log.Warn($"[DownloadManager] Base 更新模式：清理旧 SMAPI 失败，将继续覆盖安装: {uninstallError}");
+                        }
+                    }
                 }
                 else
                 {
-                    // 新建模式：版本名重复
-                    Log.Error($"[DownloadManager] 版本目录已存在: {gameFilesPath}");
-                    throw new Exception($"版本名称 '{_instanceName}' 已存在，请使用不同的名称");
+                    if (_useIsolationInstall)
+                    {
+                        // 新建模式：版本名重复
+                        Log.Error($"[DownloadManager] 版本目录已存在: {gameFilesPath}");
+                        throw new Exception($"版本名称 '{_instanceName}' 已存在，请使用不同的名称");
+                    }
                 }
             }
             else
             {
-                // 3. 创建游戏文件目录（空目录，让 SMAPI installer 填充）
-                Directory.CreateDirectory(gameFilesPath);
-                Log.Info($"[DownloadManager] 创建游戏文件目录: {gameFilesPath}");
+                if (_useIsolationInstall)
+                {
+                    // 3. 创建隔离目录
+                    Directory.CreateDirectory(gameFilesPath);
+                    Log.Info($"[DownloadManager] 创建游戏文件目录: {gameFilesPath}");
+                }
+                else
+                {
+                    throw new Exception($"Base 游戏目录不存在: {gameFilesPath}");
+                }
             }
 
             // *** 关键修改：不在安装前创建符号链接 ***
@@ -290,22 +328,42 @@ public class SmapiDownloadTask : DownloadTask
             StatusMessage = "正在安装 SMAPI...";
             Progress = 50;
 
-            // 使用 SmapiInstallHelper 统一安装（Content 链接 → SMAPI 安装 → 游戏文件复制 → Mods 目录）
-            var success = await SmapiInstallHelper.SetupIsolatedSmapiAsync(
-                smapiZipPath,
-                _gameBasePath,
-                gameFilesPath,
-                progressCallback: p =>
-                {
-                    Progress = 50 + (int)(p * 42); // 50-92: 安装阶段
-                    StatusMessage = $"正在安装 SMAPI... {(int)(p * 100)}%";
-                });
+            bool success;
+            if (_useIsolationInstall)
+            {
+                // 隔离实例：统一安装流程（SMAPI + 复制游戏文件）
+                success = await SmapiInstallHelper.SetupIsolatedSmapiAsync(
+                    smapiZipPath,
+                    _gameBasePath,
+                    gameFilesPath,
+                    progressCallback: p =>
+                    {
+                        Progress = 50 + (int)(p * 42); // 50-92: 安装阶段
+                        StatusMessage = $"正在安装 SMAPI... {(int)(p * 100)}%";
+                    });
+            }
+            else
+            {
+                // Base 实例：直接覆盖安装到根目录，不进行游戏文件复制。
+                success = await SmapApiService.InstallFromZipAsync(
+                    smapiZipPath,
+                    _gameBasePath,
+                    progressCallback: p =>
+                    {
+                        Progress = 50 + (int)(p * 42);
+                        StatusMessage = $"正在安装 SMAPI... {(int)(p * 100)}%";
+                    },
+                    enableIsolation: false);
+            }
 
             if (_cts.Token.IsCancellationRequested)
             {
                 Status = DownloadTaskStatus.Cancelled;
                 StatusMessage = "已取消";
-                CleanupVersionDirectory(gameFilesPath);
+                if (_useIsolationInstall)
+                {
+                    CleanupVersionDirectory(gameFilesPath);
+                }
                 return;
             }
 
@@ -346,6 +404,7 @@ public class SmapiDownloadTask : DownloadTask
                         existingInstance.SMAPIVersion = _smapiVersion;
                         existingInstance.HasSMAPIInstalled = true;
                         existingInstance.Version = gameVersion;
+                        existingInstance.IsSMAPIInstance = true;
                         Log.Info($"[DownloadManager] ✓ 更新现有实例配置: {_instanceName}, SMAPI 版本: {_smapiVersion}");
                     }
                     else
@@ -361,7 +420,7 @@ public class SmapiDownloadTask : DownloadTask
                             IsSMAPIInstance = true,
                             SMAPIVersion = _smapiVersion,
                             HasSMAPIInstalled = true,
-                            EnableIsolation = true
+                            EnableIsolation = _useIsolationInstall
                         });
                     }
                 }
@@ -377,7 +436,7 @@ public class SmapiDownloadTask : DownloadTask
                         IsSMAPIInstance = true,
                         SMAPIVersion = _smapiVersion,  // 使用实际版本号
                         HasSMAPIInstalled = true,
-                        EnableIsolation = true  // 启用版本隔离
+                        EnableIsolation = _useIsolationInstall
                     };
                     existingInstances.Add(newInstance);
                     Log.Info($"[DownloadManager] ✓ 创建新实例配置: {_instanceName}");
@@ -421,8 +480,11 @@ public class SmapiDownloadTask : DownloadTask
                 // 清理创建的文件（Debug 模式下保留文件用于调试）
                 if (!_debugMode)
                 {
-                    CleanupVersionDirectory(gameFilesPath);
-                    Log.Info($"[DownloadManager] 已清理版本目录");
+                    if (_useIsolationInstall)
+                    {
+                        CleanupVersionDirectory(gameFilesPath);
+                        Log.Info($"[DownloadManager] 已清理版本目录");
+                    }
                 }
                 else
                 {
@@ -446,8 +508,11 @@ public class SmapiDownloadTask : DownloadTask
             {
                 try
                 {
-                    var gameFilesPath = InstanceIsolationService.GetVersionPath(_gameBasePath, _instanceName);
-                    CleanupVersionDirectory(gameFilesPath);
+                    if (_useIsolationInstall)
+                    {
+                        var gameFilesPath = InstanceIsolationService.GetVersionPath(_gameBasePath, _instanceName);
+                        CleanupVersionDirectory(gameFilesPath);
+                    }
                 }
                 catch (Exception cleanupEx)
                 {
@@ -625,6 +690,51 @@ public class SmapiDownloadTask : DownloadTask
         {
             Log.Warn($"[DownloadManager] 删除版本目录失败: {versionPath}", ex);
         }
+    }
+
+    private static bool TryGetRunningGameProcessInPath(string gamePath, out string processName)
+    {
+        processName = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(gamePath) || !Directory.Exists(gamePath))
+            return false;
+
+        var normalizedGamePath = Path.GetFullPath(gamePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        foreach (var process in Process.GetProcesses())
+        {
+            try
+            {
+                if (process.HasExited)
+                    continue;
+
+                var name = process.ProcessName ?? string.Empty;
+                if (!name.Contains("stardew", StringComparison.OrdinalIgnoreCase) &&
+                    !name.Contains("smapi", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var executablePath = process.MainModule?.FileName;
+                if (string.IsNullOrWhiteSpace(executablePath))
+                    continue;
+
+                var processDir = Path.GetDirectoryName(executablePath);
+                if (string.IsNullOrWhiteSpace(processDir))
+                    continue;
+
+                var normalizedProcessDir = Path.GetFullPath(processDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (string.Equals(normalizedProcessDir, normalizedGamePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    processName = name;
+                    return true;
+                }
+            }
+            catch
+            {
+                // 某些系统进程读取 MainModule 会抛权限异常，忽略继续。
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

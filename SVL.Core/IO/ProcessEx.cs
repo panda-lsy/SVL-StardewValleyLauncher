@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace SVL.Core.IO
@@ -26,6 +28,43 @@ namespace SVL.Core.IO
         /// </summary>
         public static void OpenUrl(string url)
         {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            {
+                var browserPaths = new[]
+                {
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft", "Edge", "Application", "msedge.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft", "Edge", "Application", "msedge.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Google", "Chrome", "Application", "chrome.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Google", "Chrome", "Application", "chrome.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Google", "Chrome", "Application", "chrome.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Mozilla Firefox", "firefox.exe"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Mozilla Firefox", "firefox.exe")
+                };
+
+                foreach (var browserPath in browserPaths)
+                {
+                    if (!File.Exists(browserPath))
+                        continue;
+
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = browserPath,
+                            Arguments = url,
+                            UseShellExecute = false
+                        });
+                        return;
+                    }
+                    catch
+                    {
+                        // 尝试下一个浏览器
+                    }
+                }
+            }
+
             Process.Start(new ProcessStartInfo
             {
                 FileName = url,

@@ -216,7 +216,7 @@
             </StackPanel>
         </Border>
 
-        <!-- 服务器卡片 -->
+        <!-- Steam 启动参数覆写卡片 -->
         <Border Background="{DynamicResource ColorBrushTransparentBackground}"
                 BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
                 BorderThickness="1"
@@ -230,13 +230,18 @@
                                 Opacity="0.1"/>
             </Border.Effect>
             <StackPanel>
-                <TextBlock Text="服务器"
+                <TextBlock Text="Steam 启动参数覆写"
                            FontSize="16"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource ColorBrush1}"
                            Margin="0,0,0,16"/>
 
-                <!-- 自动进入服务器 -->
+                <TextBlock Text="默认参数会自动指向当前实例的 SMAPI 可执行文件，你也可以手动编辑后写入 Steam。"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorBrushGray3}"
+                           Margin="0,0,0,16"/>
+
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="120"/>
@@ -244,20 +249,25 @@
                     </Grid.ColumnDefinitions>
 
                     <TextBlock Grid.Column="0"
-                               Text="自动进入"
+                               Text="默认命令"
                                FontSize="14"
                                Foreground="{DynamicResource ColorBrush1}"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Top"
+                               Margin="0,8,0,0"/>
 
-                    <CheckBox Grid.Column="1"
-                              IsChecked="{Binding AutoConnectServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              Content="启动时自动连接服务器"
-                              FontSize="14"
-                              Foreground="{DynamicResource ColorBrush1}"
-                              Cursor="Hand"/>
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource ColorBrushTransparentBackground}"
+                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="10,8">
+                        <TextBlock Text="{Binding DefaultSteamLaunchOptions}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   TextWrapping="Wrap"/>
+                    </Border>
                 </Grid>
 
-                <!-- 服务器地址 -->
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="120"/>
@@ -265,59 +275,13 @@
                     </Grid.ColumnDefinitions>
 
                     <TextBlock Grid.Column="0"
-                               Text="服务器地址"
+                               Text="编辑参数"
                                FontSize="14"
                                Foreground="{DynamicResource ColorBrush1}"
                                VerticalAlignment="Center"/>
 
                     <TextBox Grid.Column="1"
-                             Text="{Binding ServerAddress, UpdateSourceTrigger=PropertyChanged}"
-                             MinHeight="32"
-                             Padding="8,6"
-                             VerticalContentAlignment="Center"
-                             FontSize="13"
-                             Foreground="{DynamicResource ColorBrush1}"
-                             CaretBrush="{DynamicResource ColorBrush1}"
-                             BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
-                             IsEnabled="{Binding AutoConnectServer}">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox">
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="TextBox">
-                                            <Border x:Name="Border"
-                                                    Background="{DynamicResource ColorBrushTransparentBackground}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4"
-                                                    Padding="{TemplateBinding Padding}"
-                                                    MinHeight="{TemplateBinding MinHeight}">
-                                                <ScrollViewer x:Name="PART_ContentHost"
-                                                              VerticalAlignment="Center"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </TextBox.Style>
-                    </TextBox>
-                </Grid>
-
-                <!-- Steam 邀请码 -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="120"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock Grid.Column="0"
-                               Text="Steam 邀请码"
-                               FontSize="14"
-                               Foreground="{DynamicResource ColorBrush1}"
-                               VerticalAlignment="Center"/>
-
-                    <TextBox Grid.Column="1"
-                             Text="{Binding SteamInviteCode, UpdateSourceTrigger=PropertyChanged}"
+                             Text="{Binding SteamLaunchOptions, UpdateSourceTrigger=PropertyChanged}"
                              MinHeight="32"
                              Padding="8,6"
                              VerticalContentAlignment="Center"
@@ -347,6 +311,69 @@
                         </TextBox.Style>
                     </TextBox>
                 </Grid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="参数预览"
+                               FontSize="14"
+                               Foreground="{DynamicResource ColorBrush1}"
+                               VerticalAlignment="Top"
+                               Margin="0,8,0,0"/>
+
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource ColorBrushTransparentBackground}"
+                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="10,8"
+                            Margin="0,0,0,10">
+                        <TextBlock Text="{Binding SteamLaunchOptionsPreview}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button Content="写入 Steam 启动参数"
+                            Command="{Binding WriteSteamLaunchOptionsCommand}"
+                            Width="160"
+                            Height="36"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush2}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="ButtonBorder"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}"
+                                                    Cursor="Hand">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrush3}" TargetName="ButtonBorder"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
             </StackPanel>
         </Border>
 

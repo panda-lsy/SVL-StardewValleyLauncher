@@ -907,7 +907,6 @@ public class NexusModsService
             int lastLoggedProgress = 0;  // 上次记录日志的进度（每25%记录一次）
 
             var lastUpdateTime = DateTime.UtcNow;
-            int lastReportedProgress = 25;
 
             int read;
             while ((read = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)

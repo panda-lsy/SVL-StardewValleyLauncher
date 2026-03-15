@@ -337,6 +337,17 @@ public partial class DownloadManagerViewModel : ObservableObject
         {
             LoadTasks();
 
+            // 失败时优先将状态页切到当前失败任务，避免继续显示无关任务。
+            if (_mainViewModel?.LeftPanelContent is TaskStatusViewModel statusViewModel)
+            {
+                statusViewModel.SetFailureInfo(
+                    taskName: task.Name,
+                    errorMessage: task.StatusMessage ?? exception.Message,
+                    detailMessage: exception.Message,
+                    exception: exception,
+                    taskId: task.Id);
+            }
+
             // 如果是整合包安装任务，触发实例列表刷新（可能删除了不完整的版本目录）
             if (task.Type == DownloadTaskType.Modpack)
             {

@@ -70,7 +70,6 @@ public partial class ModDetailsViewModel : ObservableObject
     private readonly MainWindowViewModel? _mainViewModel;
     private static bool s_requiredModsExpandedPreference = true;
     private bool _hasHandledNexusTokenExpired;
-    private bool _hasShownApiConfigWarning;
     private bool _isCurseforgeModpackDownloadStarting;
     private bool _isNexusCollectionInstalling;
     private CommunityLocalizationEntry? _communityLocalizationEntry;

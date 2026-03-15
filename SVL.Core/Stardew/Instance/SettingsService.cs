@@ -147,6 +147,14 @@ public static class SettingsService
                 return (false, $"找不到实例: {instanceId}");
             }
 
+            // Base 实例属于根路径基座，不允许删除。
+            var isBaseInstance = !instanceToDelete.EnableIsolation
+                && (instanceToDelete.Tags?.Any(t => string.Equals(t, "Base", StringComparison.OrdinalIgnoreCase)) ?? false);
+            if (isBaseInstance)
+            {
+                return (false, "Base 版本不能删除，请使用 SMAPI 卸载或切换实例。" );
+            }
+
             // 如果实例启用了版本隔离，删除版本目录
             if (instanceToDelete.EnableIsolation && !string.IsNullOrEmpty(instanceToDelete.GamePath))
             {

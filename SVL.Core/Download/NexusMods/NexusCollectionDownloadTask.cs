@@ -24,7 +24,6 @@ public class NexusCollectionDownloadTask : DownloadTask
     private readonly string? _oauthToken;
     private readonly CancellationTokenSource _cts = new();
 
-    private int _completedMods = 0;
     private int _totalMods = 0;
 
     // 安装相关参数（参考 CurseforgeModpackDownloadTask）

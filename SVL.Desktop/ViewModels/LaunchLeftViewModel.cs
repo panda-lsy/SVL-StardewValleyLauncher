@@ -368,6 +368,12 @@ public partial class LaunchLeftViewModel : ObservableObject
     [RelayCommand]
     private void NavigateToVersionSelect()
     {
+        // 进入“版本选择”前，传递当前选中的实例用于默认路径定位。
+        if (SelectedGamePath != null)
+        {
+            _mainViewModel.SelectedVersionSettingsInstance = SelectedGamePath;
+        }
+
         _mainViewModel.NavigateToInstancesCommand.Execute(null);
     }
 

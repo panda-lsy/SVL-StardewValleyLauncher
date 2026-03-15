@@ -787,7 +787,11 @@ public partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var baseInstance = preferredBaseInstance ?? GetActiveVersionSettingsInstance(requireModManage: false) ?? SelectedVersionSettingsInstance;
+            var baseInstance = preferredBaseInstance
+                ?? GetActiveVersionSettingsInstance(requireModManage: false)
+                ?? SelectedVersionSettingsInstance
+                ?? SettingsService.LoadInstances().FirstOrDefault(i =>
+                    string.Equals(i.Id, SettingsService.LoadDefaultInstanceId(), StringComparison.OrdinalIgnoreCase));
             var gameBasePath = baseInstance?.GamePath ?? string.Empty;
 
             string? confirmedGameBasePath = null;

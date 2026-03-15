@@ -291,6 +291,18 @@ public partial class SettingsViewModel : ObservableObject
     private string _localizationPreferredSource = "Gitee";
 
     /// <summary>
+    /// Mod 更新检测并发线程数（1-16）
+    /// </summary>
+    [ObservableProperty]
+    private int _maxConcurrentModUpdateChecks = 4;
+
+    /// <summary>
+    /// Mod 汉化检测并发线程数（1-16）
+    /// </summary>
+    [ObservableProperty]
+    private int _maxConcurrentModLocalizationChecks = 4;
+
+    /// <summary>
     /// SMAPI 默认下载源变化时保存到配置
     /// </summary>
     partial void OnSmapiDefaultSourceChanged(string value)
@@ -564,6 +576,8 @@ public partial class SettingsViewModel : ObservableObject
                 SmapiDefaultSource = SmapiDefaultSource,
                 ModDefaultSource = ModDefaultSource,
                 LocalizationPreferredSource = LocalizationPreferredSource,
+                MaxConcurrentModUpdateChecks = MaxConcurrentModUpdateChecks,
+                MaxConcurrentModLocalizationChecks = MaxConcurrentModLocalizationChecks,
 
                 // NexusMods
                 EnableNexusModsSearchCache = EnableNexusModsSearchCache,
@@ -1570,6 +1584,8 @@ public partial class SettingsViewModel : ObservableObject
             SmapiDefaultSource = settings.SmapiDefaultSource ?? "全部";
             ModDefaultSource = settings.ModDefaultSource ?? "全部";
             LocalizationPreferredSource = string.IsNullOrWhiteSpace(settings.LocalizationPreferredSource) ? "Gitee" : settings.LocalizationPreferredSource;
+            MaxConcurrentModUpdateChecks = Math.Max(1, Math.Min(16, settings.MaxConcurrentModUpdateChecks));
+            MaxConcurrentModLocalizationChecks = Math.Max(1, Math.Min(16, settings.MaxConcurrentModLocalizationChecks));
             _suppressDefaultSourceImmediateSave = false;
 
             // NexusMods
@@ -1815,6 +1831,46 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnShowModTypeFilterDisabledNoticeChanged(bool value)
     {
+        AutoSave();
+    }
+
+    partial void OnMaxConcurrentModUpdateChecksChanged(int value)
+    {
+        if (_suppressDefaultSourceImmediateSave)
+            return;
+
+        if (value < 1)
+        {
+            MaxConcurrentModUpdateChecks = 1;
+            return;
+        }
+
+        if (value > 16)
+        {
+            MaxConcurrentModUpdateChecks = 16;
+            return;
+        }
+
+        AutoSave();
+    }
+
+    partial void OnMaxConcurrentModLocalizationChecksChanged(int value)
+    {
+        if (_suppressDefaultSourceImmediateSave)
+            return;
+
+        if (value < 1)
+        {
+            MaxConcurrentModLocalizationChecks = 1;
+            return;
+        }
+
+        if (value > 16)
+        {
+            MaxConcurrentModLocalizationChecks = 16;
+            return;
+        }
+
         AutoSave();
     }
 
