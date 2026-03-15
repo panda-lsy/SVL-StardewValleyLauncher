@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/License-Apache_2.0-green" alt="License">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows" alt="Windows">
   <img src="https://img.shields.io/github/v/release/panda-lsy/SVL-StardewValleyLauncher?include_prereleases" alt="Release">
-  <a href="https://svl-website.89b52195.er.aliyun-esa.net/" target="_blank">
+  <a href="https://svl.qzz.io" target="_blank">
     <img src="https://img.shields.io/badge/官网-SVL%20Website-2F855A?style=flat-square" alt="Official Website">
   </a>
   <a href="https://svl-website.89b52195.er.aliyun-esa.net/contribute" target="_blank">
@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <a href="https://marki.89b52195.er.aliyun-esa.net/view/README.md" target="_blank">
+  <a href="https://wiki.svl.qzz.io/" target="_blank">
     <img src="https://img.shields.io/badge/📖_查看_Wiki-使用教程-4A90D9?style=flat-square" alt="View Wiki">
   </a>
   <a href="https://github.com/panda-lsy/SVL-Wiki/tree/main" target="_blank">

@@ -65,7 +65,7 @@ internal class GamePathInfoAdapter : IStardewInstance
 /// </summary>
 public partial class ModDetailsViewModel : ObservableObject
 {
-    private const string LocalizationContributionUrl = "https://svl-website.89b52195.er.aliyun-esa.net/contribute";
+    private const string LocalizationContributionUrl = "https://svl.qzz.io/contribute";
     private static readonly Dictionary<string, List<ModDependencyLink>> s_requiredModsCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly MainWindowViewModel? _mainViewModel;
     private static bool s_requiredModsExpandedPreference = true;

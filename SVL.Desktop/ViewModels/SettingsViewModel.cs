@@ -1881,7 +1881,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = "https://svl-website.89b52195.er.aliyun-esa.net/contribute",
+                FileName = "https://svl.qzz.io/contribute.html",
                 UseShellExecute = true
             });
         }

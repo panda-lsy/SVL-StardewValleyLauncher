@@ -341,19 +341,19 @@ public partial class LocalModDetailDialogViewModel : ObservableObject
             {
                 // 有平台信息，使用id参数
                 var idParam = platform.ToLowerInvariant() == "curseforge" ? $"curse-{projectId}" : $"nexus-{projectId}";
-                url = $"https://svl-website.89b52195.er.aliyun-esa.net/contribute?id={idParam}&auto=1";
+                url = $"https://svl.qzz.io/contribute.html?id={idParam}&auto=1";
             }
             else if (!string.IsNullOrWhiteSpace(_mod.UniqueId))
             {
                 // 没有平台信息但有UniqueID，使用UniqueID模式
                 var rawTitle = Uri.EscapeDataString(_mod.Name ?? "");
                 var rawDescription = Uri.EscapeDataString(_mod.Description ?? "");
-                url = $"https://svl-website.89b52195.er.aliyun-esa.net/contribute?uniqueid={_mod.UniqueId}&rawtitle={rawTitle}&rawdescription={rawDescription}&auto=1";
+                url = $"https://svl.qzz.io/contribute.html?uniqueid={_mod.UniqueId}&rawtitle={rawTitle}&rawdescription={rawDescription}&auto=1";
             }
             else
             {
                 // 没有任何信息，只打开贡献页面
-                url = "https://svl-website.89b52195.er.aliyun-esa.net/contribute";
+                url = "https://svl.qzz.io/contribute.html";
             }
 
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
