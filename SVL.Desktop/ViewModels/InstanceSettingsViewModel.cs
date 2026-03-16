@@ -30,12 +30,6 @@ public partial class InstanceSettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 版本隔离
-    /// </summary>
-    [ObservableProperty]
-    private bool _enableIsolation;
-
-    /// <summary>
     /// 游戏窗口标题
     /// </summary>
     [ObservableProperty]
@@ -85,7 +79,7 @@ public partial class InstanceSettingsViewModel : ObservableObject
     /// <summary>
     /// 切换到 SMAPI 提示文本
     /// </summary>
-    public string SwitchToSMAPITipText => $"检测到该路径已安装 SMAPI {_instance.SMAPIVersion}，切换到 SMAPI 版本以启用自动安装功能。";
+    public string SwitchToSMAPITipText => "检测到该路径已安装SMAPI，切换到SMAPI 版本以启用Mod管理功能。";
 
     public string DefaultSteamLaunchOptions => BuildDefaultSteamLaunchOptions();
 
@@ -108,8 +102,12 @@ public partial class InstanceSettingsViewModel : ObservableObject
     /// </summary>
     private void LoadSettings()
     {
+        if (!_instance.IsSMAPIInstance && _instance.EnableIsolation)
+        {
+            _instance.EnableIsolation = false;
+        }
+
         // 从实例配置加载设置
-        EnableIsolation = _instance.EnableIsolation;
         WindowTitle = _instance.WindowTitle;
         CustomArguments = _instance.CustomArguments;
         AutoConnectServer = _instance.AutoConnectServer;
@@ -144,7 +142,6 @@ public partial class InstanceSettingsViewModel : ObservableObject
             System.Diagnostics.Debug.WriteLine($"[InstanceSettings] Saving settings for instance: {_instance.Id}");
 
             // 保存设置到实例对象
-            _instance.EnableIsolation = EnableIsolation;
             _instance.WindowTitle = WindowTitle;
             _instance.CustomArguments = CustomArguments;
             _instance.AutoConnectServer = AutoConnectServer;
@@ -152,43 +149,6 @@ public partial class InstanceSettingsViewModel : ObservableObject
             _instance.SteamInviteCode = SteamInviteCode;
             _instance.OverrideSteamLaunchOptions = OverrideSteamLaunchOptions;
             _instance.SteamLaunchOptions = SteamLaunchOptions;
-
-            // 如果开启了版本隔离，初始化隔离目录
-            if (EnableIsolation)
-            {
-                var instanceFolderName = InstanceIsolationService.GenerateVersionFolderName(
-                    _instance.Name,
-                    _instance.IsSMAPIInstance);
-
-                System.Diagnostics.Debug.WriteLine($"[InstanceSettings] Initializing isolation directories for: {instanceFolderName}");
-
-                // 验证实例名称
-                if (!InstanceIsolationService.IsValidVersionName(instanceFolderName))
-                {
-                    SvlMessageBox.Error(
-                        $"实例名称无效：{instanceFolderName}\n\n实例名称包含非法字符或使用了保留名称。\n\n请修改实例名称后再开启版本隔离。");
-                    return;
-                }
-
-                var success = InstanceIsolationService.InitializeIsolationDirectories(
-                    _instance.GamePath,
-                    instanceFolderName,
-                    _instance.IsSMAPIInstance);
-
-                if (!success)
-                {
-                    if (!SvlMessageBox.Confirm(
-                        "初始化版本隔离目录失败，是否仍要保存设置？\n\n游戏可能无法以隔离模式启动。",
-                        "警告"))
-                    {
-                        return; // 用户取消保存
-                    }
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[InstanceSettings] ✓ Isolation directories initialized successfully");
-                }
-            }
 
             // 重新加载所有实例，更新当前实例，然后保存
             var allInstances = SettingsService.LoadInstances();
@@ -201,7 +161,6 @@ public partial class InstanceSettingsViewModel : ObservableObject
                 System.Diagnostics.Debug.WriteLine($"[InstanceSettings] Found existing instance: {existingInstance.Name}");
 
                 // 更新已存在的实例
-                existingInstance.EnableIsolation = _instance.EnableIsolation;
                 existingInstance.WindowTitle = _instance.WindowTitle;
                 existingInstance.CustomArguments = _instance.CustomArguments;
                 existingInstance.AutoConnectServer = _instance.AutoConnectServer;
@@ -242,7 +201,6 @@ public partial class InstanceSettingsViewModel : ObservableObject
             "确定要重置为默认设置吗？",
             "确认重置"))
         {
-            EnableIsolation = true;
             WindowTitle = SVL.Core.Stardew.Launch.WindowTitlePlaceholderService.GetDefaultTitleTemplate(_instance.IsSMAPIInstance);
             CustomArguments = string.Empty;
             AutoConnectServer = false;
@@ -355,17 +313,11 @@ public partial class InstanceSettingsViewModel : ObservableObject
             return string.Empty;
 
         string smapiBasePath;
-        if (_instance.EnableIsolation)
-        {
-            var instanceFolderName = InstanceIsolationService.GenerateVersionFolderName(
-                _instance.Name,
-                _instance.IsSMAPIInstance);
-            smapiBasePath = InstanceIsolationService.GetVersionPath(_instance.GamePath, instanceFolderName);
-        }
-        else
-        {
-            smapiBasePath = _instance.GamePath;
-        }
+        smapiBasePath = _instance.EnableIsolation
+            ? InstanceIsolationService.GetVersionPath(
+                _instance.GamePath,
+                InstanceIsolationService.GenerateVersionFolderName(_instance.Name, _instance.IsSMAPIInstance))
+            : _instance.GamePath;
 
         var smapiExePath = Path.Combine(smapiBasePath, "StardewModdingAPI.exe");
         if (!File.Exists(smapiExePath))
@@ -770,7 +722,6 @@ public partial class InstanceSettingsViewModel : ObservableObject
         var existingInstance = allInstances.FirstOrDefault(i => i.Id == _instance.Id);
         if (existingInstance != null)
         {
-            existingInstance.EnableIsolation = _instance.EnableIsolation;
             existingInstance.WindowTitle = _instance.WindowTitle;
             existingInstance.CustomArguments = _instance.CustomArguments;
             existingInstance.AutoConnectServer = _instance.AutoConnectServer;

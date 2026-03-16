@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
 using SVL.Core.Logging;
+using SVL.Core.Stardew.Instance;
 
 namespace SVL.Desktop.Controls;
 
@@ -64,10 +65,9 @@ public partial class GamePathSelectionDialog : Window
             return false;
         }
 
-        var exePath = Path.Combine(path, "Stardew Valley.exe");
-        if (!File.Exists(exePath))
+        if (!GamePathService.IsValidGamePath(path))
         {
-            ShowError("所选目录不包含游戏文件（Stardew Valley.exe）");
+            ShowError("所选目录不包含可识别的游戏核心文件（如 Stardew Valley.dll）");
             ConfirmButton.IsEnabled = false;
             return false;
         }

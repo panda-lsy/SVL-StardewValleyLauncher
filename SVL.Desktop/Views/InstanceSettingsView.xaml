@@ -57,27 +57,6 @@
                            Foreground="{DynamicResource ColorBrush1}"
                            Margin="0,0,0,16"/>
 
-                <!-- 版本隔离 -->
-                <Grid Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="120"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock Grid.Column="0"
-                               Text="版本隔离"
-                               FontSize="14"
-                               Foreground="{DynamicResource ColorBrush1}"
-                               VerticalAlignment="Center"/>
-
-                    <CheckBox Grid.Column="1"
-                              IsChecked="{Binding EnableIsolation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                              Content="开启版本隔离（Mod 独立，存档共享）"
-                              FontSize="14"
-                              Foreground="{DynamicResource ColorBrush1}"
-                              Cursor="Hand"/>
-                </Grid>
-
                 <!-- 游戏窗口标题 -->
                 <Grid Margin="0,0,0,16">
                     <Grid.ColumnDefinitions>

@@ -81,7 +81,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     /// <summary>
     /// 切换到 SMAPI 提示文本
     /// </summary>
-    public string SwitchToSMAPITipText => $"检测到该路径已安装 SMAPI {SelectedInstance?.SMAPIVersion}，切换到 SMAPI 版本以启用自动安装功能。";
+    public string SwitchToSMAPITipText => "检测到该路径已安装SMAPI，切换到SMAPI 版本以启用Mod管理功能。";
 
     public string DeleteVersionButtonText => CanDeleteVersion ? "🗑️ 删除版本" : "🔒 Base 版本不可删除";
 

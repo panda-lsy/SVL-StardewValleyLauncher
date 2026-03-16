@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using SVL.Core.Logging;
+using SVL.Core.Stardew.Instance;
 
 namespace SVL.Core.Config;
 
@@ -35,15 +36,11 @@ public static class GamePathConfig
                 if (config != null && !string.IsNullOrEmpty(config.GamePath))
                 {
                     // 验证路径是否仍然有效
-                    if (Directory.Exists(config.GamePath))
+                    if (GamePathService.IsValidGamePath(config.GamePath))
                     {
-                        var exePath = Path.Combine(config.GamePath, "Stardew Valley.exe");
-                        if (File.Exists(exePath))
-                        {
-                            _cachedGamePath = config.GamePath;
-                            Log.Info($"[GamePathConfig] 加载游戏路径: {_cachedGamePath}");
-                            return _cachedGamePath;
-                        }
+                        _cachedGamePath = config.GamePath;
+                        Log.Info($"[GamePathConfig] 加载游戏路径: {_cachedGamePath}");
+                        return _cachedGamePath;
                     }
                 }
             }
@@ -70,10 +67,9 @@ public static class GamePathConfig
                 return false;
             }
 
-            var exePath = Path.Combine(gamePath, "Stardew Valley.exe");
-            if (!File.Exists(exePath))
+            if (!GamePathService.IsValidGamePath(gamePath))
             {
-                Log.Error($"[GamePathConfig] 游戏路径不包含游戏文件: {gamePath}");
+                Log.Error($"[GamePathConfig] 游戏路径不包含可识别的游戏核心文件: {gamePath}");
                 return false;
             }
 

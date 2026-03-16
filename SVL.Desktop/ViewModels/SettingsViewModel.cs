@@ -121,8 +121,10 @@ public partial class SettingsViewModel : ObservableObject
         InitializeColorSchemes();
 
         // 初始化应用版本号
-        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-        AppVersion = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.1.1";
+        var version = LauncherUpdateService.CurrentVersion;
+        AppVersion = version.Revision > 0
+            ? $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}"
+            : $"{version.Major}.{version.Minor}.{version.Build}";
 
         // 加载设置
         LoadSettings();
@@ -1490,8 +1492,7 @@ public partial class SettingsViewModel : ObservableObject
 
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
-                    ?? new Version(1, 1, 1, 0);
+                var currentVersion = LauncherUpdateService.CurrentVersion;
 
                 var dialog = new Controls.UpdateDialog(currentVersion, _latestReleaseInfo)
                 {

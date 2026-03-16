@@ -229,7 +229,7 @@
                                    FontWeight="SemiBold"
                                    Foreground="#FFA500"
                                    Margin="0,0,0,4" />
-                        <TextBlock Text="安装 SMAPI 之前需要先选择 Stardew Valley 游戏的安装目录（包含 Stardew Valley.exe 的文件夹）"
+                        <TextBlock Text="安装 SMAPI 之前需要先选择 Stardew Valley 游戏的安装目录（应包含 Stardew Valley.dll 等核心文件）"
                                    FontSize="12"
                                    Foreground="{DynamicResource ColorBrushGray3}"
                                    TextWrapping="Wrap" />

@@ -3087,44 +3087,34 @@ public partial class DownloadRightViewModel : ObservableObject
                 Log.Info($"[DownloadRightViewModel] 检查实例: {instance.Name}, GamePath: {gamePath}");
 
                 // 验证路径
-                if (System.IO.Directory.Exists(gamePath))
+                if (SVL.Core.Stardew.Instance.GamePathService.IsValidGamePath(gamePath))
                 {
-                    var exePath = System.IO.Path.Combine(gamePath, "Stardew Valley.exe");
-                    if (System.IO.File.Exists(exePath))
+                    // 显示确认对话框
+                    var confirmDialog = new SVL.Desktop.Controls.GamePathConfirmDialog();
+                    confirmDialog.SetGamePath(gamePath);
+                    if (owner != null)
                     {
-                        Log.Info($"[DownloadRightViewModel] ✓ 找到游戏文件: {exePath}");
+                        confirmDialog.Owner = owner;
+                    }
 
-                        // 显示确认对话框
-                        var confirmDialog = new SVL.Desktop.Controls.GamePathConfirmDialog();
-                        confirmDialog.SetGamePath(gamePath);
-                        if (owner != null)
-                        {
-                            confirmDialog.Owner = owner;
-                        }
-
-                        var confirmResult = confirmDialog.ShowDialog();
-                        if (confirmResult == true)
-                        {
-                            // 用户确认使用此路径，保存配置
-                            SVL.Core.Config.GamePathConfig.SaveGamePath(gamePath);
-                            Log.Info($"[DownloadRightViewModel] ✓ 用户确认使用路径: {gamePath}");
-                            return gamePath;
-                        }
-                        else
-                        {
-                            // 用户拒绝，继续查找其他实例
-                            Log.Info("[DownloadRightViewModel] 用户拒绝了此路径，继续查找其他实例");
-                            continue;
-                        }
+                    var confirmResult = confirmDialog.ShowDialog();
+                    if (confirmResult == true)
+                    {
+                        // 用户确认使用此路径，保存配置
+                        SVL.Core.Config.GamePathConfig.SaveGamePath(gamePath);
+                        Log.Info($"[DownloadRightViewModel] ✓ 用户确认使用路径: {gamePath}");
+                        return gamePath;
                     }
                     else
                     {
-                        Log.Warn($"[DownloadRightViewModel] 游戏文件不存在: {exePath}");
+                        // 用户拒绝，继续查找其他实例
+                        Log.Info("[DownloadRightViewModel] 用户拒绝了此路径，继续查找其他实例");
+                        continue;
                     }
                 }
                 else
                 {
-                    Log.Warn($"[DownloadRightViewModel] 目录不存在: {gamePath}");
+                    Log.Warn($"[DownloadRightViewModel] 路径不是有效游戏目录: {gamePath}");
                 }
             }
         }

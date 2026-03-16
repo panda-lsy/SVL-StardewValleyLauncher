@@ -17,7 +17,7 @@
   <a href="https://svl.qzz.io" target="_blank">
     <img src="https://img.shields.io/badge/官网-SVL%20Website-2F855A?style=flat-square" alt="Official Website">
   </a>
-  <a href="https://svl-website.89b52195.er.aliyun-esa.net/contribute" target="_blank">
+  <a href="https://svl.qzz.io/contribute.html" target="_blank">
     <img src="https://img.shields.io/badge/社区本地化-参与贡献-0F766E?style=flat-square" alt="Community Localization Contribution">
   </a>
   <a href="https://ifdian.net/a/mcshengxia" target="_blank">
@@ -32,6 +32,15 @@
   <a href="https://github.com/panda-lsy/SVL-Wiki/tree/main" target="_blank">
     <img src="https://img.shields.io/badge/✏️_参与编写-Wiki贡献-28A745?style=flat-square" alt="Contribute Wiki">
   </a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fapi.svl.qzz.io%2Fapi%2Fstats%2Fbadges%2Fusers-total.json&style=flat" alt="SVL 用户总量">
+  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fapi.svl.qzz.io%2Fapi%2Fstats%2Fbadges%2Fusers-daily.json&style=flat" alt="SVL 近24小时活跃用户">
+</p>
+
+<p align="center">
+  <img src="https://api.svl.qzz.io/api/stats/charts/users-trend.svg" alt="SVL 匿名用户趋势图" width="760">
 </p>
 
 ---

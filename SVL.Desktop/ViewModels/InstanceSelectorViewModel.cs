@@ -266,7 +266,7 @@ public partial class InstanceSelectorViewModel : ObservableObject
                 {
                     SvlMessageBox.Warning(
                         $"所选路径不是有效的游戏目录：\n{selectedPath}\n\n" +
-                        "请确保目录包含 'Stardew Valley.exe' 文件",
+                        "请确保目录包含可识别的游戏核心文件（如 Stardew Valley.dll）",
                         "无效路径");
                     return;
                 }

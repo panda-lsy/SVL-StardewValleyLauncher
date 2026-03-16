@@ -225,6 +225,9 @@ public partial class App : System.Windows.Application
             await ApplicationService.InitializeAsync();
             Log.Info("[App] ApplicationService initialized");
 
+            // 匿名活跃统计（每日一次，失败静默，不阻塞启动）
+            _ = Services.AnonymousUsageTelemetryService.ReportDailyActiveAsync();
+
             // 恢复上次保存的主题设置
             try
             {
@@ -398,8 +401,7 @@ public partial class App : System.Windows.Application
             {
                 if (result.ReleaseInfo == null) return;
 
-                var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
-                    ?? new Version(1, 1, 1, 0);
+                var currentVersion = LauncherUpdateService.CurrentVersion;
 
                 var dialog = new Controls.UpdateDialog(currentVersion, result.ReleaseInfo)
                 {

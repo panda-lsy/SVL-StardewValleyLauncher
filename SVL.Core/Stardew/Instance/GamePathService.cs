@@ -440,6 +440,19 @@ public class GamePathEntry
 /// </summary>
 public static class GamePathService
 {
+    private static readonly string[] s_gameCoreFiles =
+    {
+        "Stardew Valley.dll",
+        "Stardew Valley.deps.json"
+    };
+
+    private static readonly string[] s_smapiMarkerFiles =
+    {
+        "StardewModdingAPI.dll",
+        "StardewModdingAPI.deps.json",
+        "StardewModdingAPI.runtimeconfig.json"
+    };
+
     /// <summary>
     /// 从游戏路径获取版本号
     /// </summary>
@@ -510,15 +523,30 @@ public static class GamePathService
 
         try
         {
-            // 直接检查根目录的 StardewModdingAPI.exe（和 IsValidGamePath 一样的方式）
-            var smapiExe = Path.Combine(gamePath, "StardewModdingAPI.exe");
-            if (File.Exists(smapiExe))
+            var hasSmapiMarker = s_smapiMarkerFiles.Any(fileName => File.Exists(Path.Combine(gamePath, fileName)));
+            if (!hasSmapiMarker)
             {
-                smapiVersion = SmapApiService.GetInstalledSmapiVersion(gamePath) ?? "Unknown";
+                return false;
+            }
+
+            // 优先使用已有版本解析逻辑；若失败则回退到 DLL 文件版本。
+            smapiVersion = SmapApiService.GetInstalledSmapiVersion(gamePath) ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(smapiVersion))
+            {
                 return true;
             }
 
-            return false;
+            var smapiDllPath = Path.Combine(gamePath, "StardewModdingAPI.dll");
+            if (File.Exists(smapiDllPath))
+            {
+                smapiVersion = GetFileVersionOrUnknown(smapiDllPath);
+            }
+            else
+            {
+                smapiVersion = "Unknown";
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
@@ -528,15 +556,14 @@ public static class GamePathService
     }
 
     /// <summary>
-    /// 检查游戏是否可运行（验证 exe 存在）
+    /// 检查游戏目录是否有效（不再仅依赖 exe，优先检查核心 DLL）
     /// </summary>
     public static bool IsValidGamePath(string path)
     {
         if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
             return false;
 
-        var exePath = Path.Combine(path, "Stardew Valley.exe");
-        return File.Exists(exePath);
+        return s_gameCoreFiles.Any(fileName => File.Exists(Path.Combine(path, fileName)));
     }
 
     /// <summary>
@@ -656,17 +683,10 @@ public static class GamePathService
                     var hasGameLink = Directory.Exists(gameLinkPath);
                     Log.Info($"[GamePathService] game链接存在: {hasGameLink} (路径: {gameLinkPath})");
 
-                    // 检查是否是SMAPI实例
-                    var smapiExePath = hasGameLink
-                        ? Path.Combine(gameLinkPath, "StardewModdingAPI.exe")
-                        : Path.Combine(versionFolder, "StardewModdingAPI.exe");
-                    var isSMAPI = File.Exists(smapiExePath);
-                    Log.Info($"[GamePathService] SMAPI存在: {isSMAPI} (路径: {smapiExePath})");
-
                     // 获取版本信息
                     var targetPath = hasGameLink ? gameLinkPath : versionFolder;
                     var version = GetGameVersion(targetPath);
-                    var smapiVersion = isSMAPI ? GetSMAPIVersion(smapiExePath) : string.Empty;
+                    var isSMAPI = CheckSMAPI(targetPath, out var smapiVersion);
                     Log.Info($"[GamePathService] 版本: {version}, SMAPI版本: {smapiVersion}");
 
                     // 创建新实例
@@ -715,6 +735,24 @@ public static class GamePathService
         {
             return "Unknown";
         }
+    }
+
+    private static string GetFileVersionOrUnknown(string filePath)
+    {
+        try
+        {
+            var versionInfo = FileVersionInfo.GetVersionInfo(filePath);
+            if (!string.IsNullOrWhiteSpace(versionInfo.FileVersion))
+            {
+                return versionInfo.FileVersion;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return "Unknown";
     }
 
     /// <summary>

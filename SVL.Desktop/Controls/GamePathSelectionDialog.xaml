@@ -52,7 +52,7 @@
 
                 <!-- 说明文本 -->
                 <TextBlock Grid.Row="1"
-                           Text="SMAPI 需要游戏本体文件才能安装。请选择游戏的安装目录（包含 Stardew Valley.exe 的文件夹）。"
+                           Text="SMAPI 需要游戏本体文件才能安装。请选择游戏安装目录（应包含 Stardew Valley.dll 等核心文件）。"
                            FontSize="12"
                            Foreground="{DynamicResource ColorBrushGray3}"
                            TextWrapping="Wrap"

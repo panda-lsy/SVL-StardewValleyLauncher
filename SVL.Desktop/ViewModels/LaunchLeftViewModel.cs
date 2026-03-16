@@ -215,7 +215,7 @@ public partial class LaunchLeftViewModel : ObservableObject
             string launchPath;
             string workingDirectory;
 
-            if (SelectedGamePath.EnableIsolation)
+            if (SelectedGamePath.EnableIsolation && SelectedGamePath.IsSMAPIInstance)
             {
                 instanceFolderName = InstanceIsolationService.GenerateVersionFolderName(
                     SelectedGamePath.Name,
@@ -237,33 +237,38 @@ public partial class LaunchLeftViewModel : ObservableObject
 
             Process? gameProcess = null;
 
-            if (SelectedGamePath.EnableIsolation && instanceFolderName != null)
+            if (SelectedGamePath.EnableIsolation && SelectedGamePath.IsSMAPIInstance && instanceFolderName != null)
             {
-                // 使用隔离路径启动
-                launchPath = InstanceIsolationService.GetLaunchPath(
-                    SelectedGamePath.GamePath,
-                    instanceFolderName,
-                    SelectedGamePath.IsSMAPIInstance);
-
                 workingDirectory = InstanceIsolationService.GetWorkingDirectory(
                     SelectedGamePath.GamePath,
                     instanceFolderName,
                     SelectedGamePath.IsSMAPIInstance);
 
+                // 使用智能路径解析：兼容原版/SMAPI 启动文件被改名或缺失的情况
+                launchPath = ResolveLaunchPath(
+                    workingDirectory,
+                    SelectedGamePath.IsSMAPIInstance,
+                    out var launchHint);
+                if (!string.IsNullOrWhiteSpace(launchHint))
+                {
+                    SvlMessageBox.Info(launchHint, "启动兼容提示");
+                }
+
                 System.Diagnostics.Debug.WriteLine($"[Launch] Isolated launch path: {launchPath}");
                 System.Diagnostics.Debug.WriteLine($"[Launch] Isolated working directory: {workingDirectory}");
             }
-            else if (SelectedGamePath.IsSMAPIInstance)
-            {
-                // 非隔离 SMAPI 模式
-                launchPath = Path.Combine(SelectedGamePath.GamePath, "StardewModdingAPI.exe");
-                workingDirectory = SelectedGamePath.GamePath;
-            }
             else
             {
-                // 原版游戏
-                launchPath = Path.Combine(SelectedGamePath.GamePath, "Stardew Valley.exe");
+                // 非隔离模式：同样使用智能路径解析
                 workingDirectory = SelectedGamePath.GamePath;
+                launchPath = ResolveLaunchPath(
+                    SelectedGamePath.GamePath,
+                    SelectedGamePath.IsSMAPIInstance,
+                    out var launchHint);
+                if (!string.IsNullOrWhiteSpace(launchHint))
+                {
+                    SvlMessageBox.Info(launchHint, "启动兼容提示");
+                }
             }
 
             // 检查启动文件是否存在
@@ -363,6 +368,53 @@ public partial class LaunchLeftViewModel : ObservableObject
             IsLaunching = false;
             LaunchButtonText = "启动游戏";
         }
+    }
+
+    private static string ResolveLaunchPath(string launchDirectory, bool preferSmapi, out string? hint)
+    {
+        hint = null;
+
+        var vanillaExe = Path.Combine(launchDirectory, "Stardew Valley.exe");
+        var smapiExe = Path.Combine(launchDirectory, "StardewModdingAPI.exe");
+        var hasVanillaExe = File.Exists(vanillaExe);
+        var hasSmapiExe = File.Exists(smapiExe);
+        var hasSmapiInstalled = GamePathService.CheckSMAPI(launchDirectory, out _);
+
+        if (preferSmapi)
+        {
+            if (hasSmapiExe)
+            {
+                return smapiExe;
+            }
+
+            // 兼容：用户把 StardewModdingAPI.exe 改名成 Stardew Valley.exe
+            if (hasVanillaExe && hasSmapiInstalled)
+            {
+                hint = "未找到 StardewModdingAPI.exe，已使用兼容方式启动（检测到该目录已安装 SMAPI）。";
+                return vanillaExe;
+            }
+
+            return smapiExe;
+        }
+
+        if (hasVanillaExe)
+        {
+            if (!hasSmapiExe && hasSmapiInstalled)
+            {
+                hint = "未检测到原版独立启动程序，当前“原版启动”可能实际运行 SMAPI。";
+            }
+
+            return vanillaExe;
+        }
+
+        // 原版启动兜底：若原版 EXE 缺失但 SMAPI 启动程序存在，则自动回退可执行文件。
+        if (hasSmapiExe && hasSmapiInstalled)
+        {
+            hint = "未找到 Stardew Valley.exe，已自动切换为 SMAPI 启动。";
+            return smapiExe;
+        }
+
+        return vanillaExe;
     }
 
     [RelayCommand]

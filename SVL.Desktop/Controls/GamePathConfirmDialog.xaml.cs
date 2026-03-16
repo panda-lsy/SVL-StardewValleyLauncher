@@ -136,7 +136,7 @@ public partial class GamePathConfirmDialog : Window
 
         if (!GamePathService.IsValidGamePath(GamePath))
         {
-            ValidationTextBlock.Text = "当前 BASE 不包含 Stardew Valley.exe，请重新选择。";
+            ValidationTextBlock.Text = "当前 BASE 不包含可识别的游戏核心文件（如 Stardew Valley.dll），请重新选择。";
             ValidationTextBlock.Visibility = Visibility.Visible;
             ConfirmButton.IsEnabled = false;
             return false;
