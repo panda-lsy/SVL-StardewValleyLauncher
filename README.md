@@ -20,17 +20,14 @@
   <a href="https://svl.qzz.io/contribute.html" target="_blank">
     <img src="https://img.shields.io/badge/社区本地化-参与贡献-0F766E?style=flat-square" alt="Community Localization Contribution">
   </a>
-  <a href="https://ifdian.net/a/mcshengxia" target="_blank">
-    <img src="https://img.shields.io/badge/爱发电-赞助支持-FF6B6B?logo=love&logoColor=white" alt="Sponsor">
-  </a>
-</p>
-
-<p align="center">
   <a href="https://wiki.svl.qzz.io/" target="_blank">
     <img src="https://img.shields.io/badge/📖_查看_Wiki-使用教程-4A90D9?style=flat-square" alt="View Wiki">
   </a>
   <a href="https://github.com/panda-lsy/SVL-Wiki/tree/main" target="_blank">
     <img src="https://img.shields.io/badge/✏️_参与编写-Wiki贡献-28A745?style=flat-square" alt="Contribute Wiki">
+  </a>
+  <a href="https://ifdian.net/a/mcshengxia" target="_blank">
+    <img src="https://img.shields.io/badge/爱发电-赞助支持-FF6B6B?logo=love&logoColor=white" alt="Sponsor">
   </a>
 </p>
 
