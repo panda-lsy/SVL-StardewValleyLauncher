@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using SVL.Core.Logging;
+using SVL.Core.IO;
 
 namespace SVL.Core.Stardew.Instance;
 
@@ -112,34 +113,11 @@ public static class InstanceIsolationService
             return (false, "实例名称不能为空");
         }
 
-        // 检查是否包含非法字符
-        var invalidChars = Path.GetInvalidFileNameChars();
-        if (instanceName.IndexOfAny(invalidChars) >= 0)
+        // 使用 SVL.Core.IO.FileNameValidator 进行基础验证
+        var validation = FileNameValidator.ValidateFolderName(instanceName);
+        if (!validation.IsValid)
         {
-            return (false, "实例名称包含非法字符");
-        }
-
-        // 检查是否以点开头或结尾（Windows 限制）
-        if (instanceName.StartsWith(".") || instanceName.EndsWith("."))
-        {
-            return (false, "实例名称不能以点开头或结尾");
-        }
-
-        // 检查是否包含 Windows 保留名称
-        var reservedNames = new[] { "CON", "PRN", "AUX", "NUL",
-            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
-
-        var upperName = instanceName.ToUpper();
-        if (reservedNames.Contains(upperName))
-        {
-            return (false, $"实例名称 '{instanceName}' 是系统保留名称");
-        }
-
-        // 检查长度限制（Windows MAX_PATH = 260）
-        if (instanceName.Length > 100)
-        {
-            return (false, "实例名称过长（最多100个字符）");
+            return (validation.IsValid, validation.ErrorMessage);
         }
 
         // 检查实例名称是否已存在（复用 Curseforge 整合包的验证逻辑）
@@ -160,40 +138,11 @@ public static class InstanceIsolationService
     /// <returns>(是否有效, 错误消息)</returns>
     public static (bool isValid, string errorMessage) ValidateInstanceName(string instanceName, string? gamePath = null)
     {
-        // 基础验证
-        if (string.IsNullOrWhiteSpace(instanceName))
+        // 使用 SVL.Core.IO.FileNameValidator 进行基础验证
+        var validation = FileNameValidator.ValidateFolderName(instanceName);
+        if (!validation.IsValid)
         {
-            return (false, "实例名称不能为空");
-        }
-
-        // 检查是否包含非法字符
-        var invalidChars = Path.GetInvalidFileNameChars();
-        if (instanceName.IndexOfAny(invalidChars) >= 0)
-        {
-            return (false, "实例名称包含非法字符");
-        }
-
-        // 检查是否以点开头或结尾（Windows 限制）
-        if (instanceName.StartsWith(".") || instanceName.EndsWith("."))
-        {
-            return (false, "实例名称不能以点开头或结尾");
-        }
-
-        // 检查是否包含 Windows 保留名称
-        var reservedNames = new[] { "CON", "PRN", "AUX", "NUL",
-            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
-
-        var upperName = instanceName.ToUpper();
-        if (reservedNames.Contains(upperName))
-        {
-            return (false, $"实例名称 '{instanceName}' 是系统保留名称");
-        }
-
-        // 检查长度限制（Windows MAX_PATH = 260）
-        if (instanceName.Length > 100)
-        {
-            return (false, "实例名称过长（最多100个字符）");
+            return (validation.IsValid, validation.ErrorMessage);
         }
 
         // 检查实例名称是否已存在于实例列表（同 Base 路径内唯一）
@@ -239,32 +188,7 @@ public static class InstanceIsolationService
     /// </summary>
     public static bool IsValidVersionName(string instanceName)
     {
-        if (string.IsNullOrWhiteSpace(instanceName))
-            return false;
-
-        // 检查是否包含非法字符
-        var invalidChars = Path.GetInvalidFileNameChars();
-        if (instanceName.IndexOfAny(invalidChars) >= 0)
-            return false;
-
-        // 检查是否以点开头或结尾（Windows 限制）
-        if (instanceName.StartsWith(".") || instanceName.EndsWith("."))
-            return false;
-
-        // 检查是否包含 Windows 保留名称
-        var reservedNames = new[] { "CON", "PRN", "AUX", "NUL",
-            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
-
-        var upperName = instanceName.ToUpper();
-        if (reservedNames.Contains(upperName))
-            return false;
-
-        // 检查长度限制（Windows MAX_PATH = 260）
-        if (instanceName.Length > 100) // 保守限制，给路径其他部分留空间
-            return false;
-
-        return true;
+        return FileNameValidator.IsValidFolderName(instanceName);
     }
 
     /// <summary>

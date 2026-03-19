@@ -10,8 +10,10 @@ namespace SVL.Core.IO;
 /// </summary>
 public static class FileNameValidator
 {
-    // Windows 非法文件名字符
-    private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
+    // Windows 非法文件名字符（排除空格，因为空格可以作为文件夹名称）
+    private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars()
+        .Where(c => c != ' ')
+        .ToArray();
 
     // Windows 保留设备名称
     private static readonly string[] ReservedDeviceNames =
@@ -40,12 +42,6 @@ public static class FileNameValidator
         if (folderName.Length > 255)
         {
             return (false, "文件夹名称不能超过255个字符");
-        }
-
-        // 检查是否以空格开头或结尾
-        if (folderName.StartsWith(" ") || folderName.EndsWith(" "))
-        {
-            return (false, "文件夹名称不能以空格开头或结尾");
         }
 
         // 检查是否包含非法字符

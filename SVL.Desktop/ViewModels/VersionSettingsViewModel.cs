@@ -304,13 +304,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     private static bool IsValidInstanceName(string name)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            return false;
-
-        if (name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(" ", StringComparison.Ordinal))
-            return false;
-
-        return name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
+        return SVL.Core.IO.FileNameValidator.IsValidFolderName(name);
     }
 
     private string GetSMAPIVersionFromInstance(GamePathInfo instance)

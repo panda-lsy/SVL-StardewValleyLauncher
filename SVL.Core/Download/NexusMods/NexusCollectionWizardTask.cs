@@ -621,7 +621,7 @@ public class NexusCollectionWizardTask : DownloadTask
             }
 
             // 使用 Mod 的真实名称作为 ZIP 文件名（清理非法字符）
-            var safeModName = FileNameValidator.SanitizeFolderName(mod.Name);
+            var safeModName = SVL.Core.IO.FileNameValidator.SanitizeFolderName(mod.Name);
             var zipFileName = $"{safeModName}.zip";
             var zipFilePath = Path.Combine(_targetModsPath, zipFileName);
 
@@ -1350,7 +1350,7 @@ public class NexusCollectionWizardTask : DownloadTask
             else
             {
                 // 缓存中没有，查找本地已下载的文件
-                var safeModName = FileNameValidator.SanitizeFolderName(mod.Name);
+                var safeModName = SVL.Core.IO.FileNameValidator.SanitizeFolderName(mod.Name);
                 var expectedZipFileName = $"{safeModName}.zip";
                 var expectedZipPath = Path.Combine(_targetModsPath, expectedZipFileName);
 
@@ -1475,7 +1475,7 @@ public class NexusCollectionWizardTask : DownloadTask
             else
             {
                 // 如果没有单一的根目录，创建以 MOD 名称命名的子目录
-                var modFolderName = FileNameValidator.SanitizeFolderName(mod.Name);
+                var modFolderName = SVL.Core.IO.FileNameValidator.SanitizeFolderName(mod.Name);
                 extractPath = Path.Combine(targetModsPath, modFolderName);
 
                 // 如果目标文件夹已存在，先删除
@@ -1960,7 +1960,7 @@ public class NexusCollectionWizardTask : DownloadTask
             return null;
 
         // 1. 首先尝试精确匹配（清理后的名称）
-        var safeModName = FileNameValidator.SanitizeFolderName(modName);
+        var safeModName = SVL.Core.IO.FileNameValidator.SanitizeFolderName(modName);
         var exactPath = Path.Combine(_targetModsPath, safeModName);
         if (Directory.Exists(exactPath))
             return exactPath;
