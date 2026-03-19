@@ -2,6 +2,37 @@
 
 All notable changes to SVL (Stardew Valley Launcher) will be documented in this file.
 
+## [1.1.8.3] - 2026-03-19
+
+### Added
+
+- **自动更新文件名智能管理**
+
+  - 更新器现在会检测当前文件名是否符合发布规范格式（`SVL.Desktop_v{version}_{Build}.exe`）
+  - 如果当前文件名**不是**规范格式（如用户重命名的 `SVL.exe`），更新后将删除旧文件并覆盖为原始文件名，保持桌面快捷方式有效
+  - 如果当前文件名**是**规范格式，则创建带版本号的新文件，便于版本管理和回滚
+
+### Changed
+
+- **实例名称输入优化**
+
+  - 实例名称现在支持包含空格作为分隔符（例如："My SMAPI Instance"）
+  - 移除了文件夹名称不能以空格开头或结尾的限制
+  - 统一使用 `SVL.Core.IO.FileNameValidator` 进行文件名验证，确保跨平台兼容性
+
+- **代码质量改进**
+
+  - 删除 `InstanceIsolationService.cs` 中重复的 `FileNameValidator` 类定义
+  - 修复 `NexusCollectionWizardTask.cs` 中的命名空间不明确引用问题
+  - 优化 `UpdateDialog.xaml.cs` 批处理脚本字符串格式
+
+### Fixed
+
+- 修复拖入 SMAPI 时实例名称输入框无法输入空格的问题
+- 修复 `FileNameValidator` 重复定义导致的编译错误
+- 修复更新脚本中的字符串转义问题
+- 修复非规范格式文件名更新时旧文件未被删除、新旧文件共存的问题
+
 ## [1.1.8.2] - 2026-03-16
 
 ### Added
