@@ -354,6 +354,27 @@ public class StringNotEmptyToVisibilityConverter : IValueConverter
 }
 
 /// <summary>
+/// 字符串为空检查转换器
+/// </summary>
+public class StringEmptyToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is string strValue)
+        {
+            return string.IsNullOrWhiteSpace(strValue) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        return Visibility.Visible;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+/// <summary>
 /// URL 检测转换器 - 判断字符串是否为 HTTP(S) URL、WPF Pack URI 或本地文件路径
 /// </summary>
 public class UrlToVisibilityConverter : IValueConverter

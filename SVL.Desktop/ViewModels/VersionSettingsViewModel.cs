@@ -32,6 +32,42 @@ public enum VersionSettingsPage
     Export         // 导出
 }
 
+public sealed class ModTagFilterOption
+{
+    public string Key { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string TagId { get; set; } = string.Empty;
+    public bool IsFolderTag { get; set; }
+    public bool IsAllOption { get; set; }
+    public string DisplayText => IsAllOption ? Name : $"{(IsFolderTag ? "📁" : "🏷")} {Name}";
+}
+
+public sealed partial class ModTagPanelItem : ObservableObject
+{
+    public ModTagFilterOption Option { get; }
+
+    [ObservableProperty]
+    private bool _isSelected;
+
+    public ModTagPanelItem(ModTagFilterOption option)
+    {
+        Option = option;
+    }
+
+    public string Key => Option.Key;
+    public string Name => Option.Name;
+    public string TagId => Option.TagId;
+    public bool IsFolderTag => Option.IsFolderTag;
+    public bool IsCustomTag => !Option.IsFolderTag && !Option.IsAllOption;
+    public string DisplayText => Option.DisplayText;
+}
+
+public sealed class TagOrderMoveRequest
+{
+    public string SourceKey { get; set; } = string.Empty;
+    public string TargetKey { get; set; } = string.Empty;
+}
+
 public partial class VersionSettingsRightViewModel : ObservableObject
 {
     private MainWindowViewModel _mainViewModel;
@@ -797,6 +833,33 @@ public partial class VersionSettingsRightViewModel : ObservableObject
     [ObservableProperty]
     private int _backupModsCount = 0;
 
+    [ObservableProperty]
+    private ObservableCollection<ModTagFilterOption> _tagFilters = new();
+
+    [ObservableProperty]
+    private ObservableCollection<ModTagPanelItem> _tagPanelItems = new();
+
+    [ObservableProperty]
+    private ModTagFilterOption? _selectedTagFilter;
+
+    [ObservableProperty]
+    private ObservableCollection<ModTagFilterOption> _customTagDefinitions = new();
+
+    [ObservableProperty]
+    private ModTagFilterOption? _selectedCustomTag;
+
+    [ObservableProperty]
+    private string _newCustomTagName = string.Empty;
+
+    [ObservableProperty]
+    private string _renameCustomTagName = string.Empty;
+
+    [ObservableProperty]
+    private string _inlineTagHint = "点击标签可多选，批量绑定到当前已选 Mod。";
+
+    private ModTagConfig _modTagConfig = new();
+    private string _currentModsPathForTagConfig = string.Empty;
+
     // 更新检查状态
     [ObservableProperty]
     private bool _isCheckingUpdates = false;
@@ -821,6 +884,11 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     // MOD 管理器
     private IModManager _modManager;
+
+    public bool HasSelectedCustomTag => SelectedCustomTag != null;
+    public bool HasSelectedTagPanelItems => TagPanelItems.Any(item => item.IsSelected);
+    public bool CanBatchAddSelectedTags => !IsBackupFilterActive && SelectedCount > 0 && HasSelectedTagPanelItems;
+    public bool CanBatchRemoveSelectedTags => !IsBackupFilterActive && SelectedCount > 0 && HasSelectedTagPanelItems;
 
     partial void OnCurrentPageChanged(VersionSettingsPage value)
     {
@@ -852,6 +920,20 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         ApplyFilter();
         OnPropertyChanged(nameof(IsBackupFilterActive));
         OnPropertyChanged(nameof(HasSelectedUpdatable));
+        OnPropertyChanged(nameof(CanBatchAddSelectedTags));
+        OnPropertyChanged(nameof(CanBatchRemoveSelectedTags));
+    }
+
+    partial void OnSelectedTagFilterChanged(ModTagFilterOption? value)
+    {
+        CurrentPageIndex = 1;
+        ApplyFilter();
+    }
+
+    partial void OnSelectedCustomTagChanged(ModTagFilterOption? value)
+    {
+        RenameCustomTagName = value?.Name ?? string.Empty;
+        OnPropertyChanged(nameof(HasSelectedCustomTag));
     }
 
     partial void OnCurrentPageIndexChanged(int value)
@@ -967,6 +1049,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 {
                     BackupMods.Add(backup);
                 }
+
+                LoadAndApplyTags(modsPath);
                 ApplyFilter();
             });
         }
@@ -1076,18 +1160,127 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
     private static bool MatchesKeyword(SdVMod mod, string keyword)
     {
-         return (!string.IsNullOrWhiteSpace(mod.Name) && mod.Name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-             || (!string.IsNullOrWhiteSpace(mod.Author) && mod.Author.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-             || (!string.IsNullOrWhiteSpace(mod.UniqueId) && mod.UniqueId.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-             || (!string.IsNullOrWhiteSpace(mod.FolderName) && mod.FolderName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+        return (!string.IsNullOrWhiteSpace(mod.Name) && mod.Name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+            || (!string.IsNullOrWhiteSpace(mod.DisplayName) && mod.DisplayName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+            || (!string.IsNullOrWhiteSpace(mod.Author) && mod.Author.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+            || (!string.IsNullOrWhiteSpace(mod.UniqueId) && mod.UniqueId.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+            || (!string.IsNullOrWhiteSpace(mod.FolderName) && mod.FolderName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+            || (!string.IsNullOrWhiteSpace(mod.Description) && mod.Description.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+            || (!string.IsNullOrWhiteSpace(mod.DisplayDescription) && mod.DisplayDescription.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
-    private static bool MatchesSearch(SdVMod mod, string keyword)
+    private static bool MatchesSearch(SdVMod mod, string query)
     {
-        if (MatchesKeyword(mod, keyword))
+        var normalized = (query ?? string.Empty).Replace("(", " ").Replace(")", " ");
+        var orGroups = Regex.Split(normalized, @"\s+OR\s+", RegexOptions.IgnoreCase)
+            .Select(group => group.Trim())
+            .Where(group => !string.IsNullOrWhiteSpace(group))
+            .ToList();
+
+        if (orGroups.Count <= 1)
+            return MatchesSearchGroup(mod, normalized);
+
+        return orGroups.Any(group => MatchesSearchGroup(mod, group));
+    }
+
+    private static bool MatchesSearchGroup(SdVMod mod, string query)
+    {
+        var parsed = ParseAdvancedSearchQuery(query);
+        if (MatchesSearchSingle(mod, parsed))
             return true;
 
-        return mod.ChildMods.Any(child => MatchesKeyword(child, keyword));
+        return mod.ChildMods.Any(child => MatchesSearchSingle(child, parsed));
+    }
+
+    private static bool MatchesSearchSingle(SdVMod mod, (Dictionary<string, List<string>> Clauses, List<string> Keywords, List<string> ExcludedKeywords) parsed)
+    {
+        foreach (var clause in parsed.Clauses)
+        {
+            foreach (var value in clause.Value)
+            {
+                var matched = clause.Key switch
+                {
+                    "tag" => mod.AllTags.Any(tag => tag.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0),
+                    "author" => !string.IsNullOrWhiteSpace(mod.Author) && mod.Author.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0,
+                    "description" => (!string.IsNullOrWhiteSpace(mod.Description) && mod.Description.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0)
+                                     || (!string.IsNullOrWhiteSpace(mod.DisplayDescription) && mod.DisplayDescription.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0),
+                    "name" => (!string.IsNullOrWhiteSpace(mod.Name) && mod.Name.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0)
+                              || (!string.IsNullOrWhiteSpace(mod.DisplayName) && mod.DisplayName.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0)
+                              || (!string.IsNullOrWhiteSpace(mod.FolderName) && mod.FolderName.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0),
+                    "uid" => !string.IsNullOrWhiteSpace(mod.UniqueId) && mod.UniqueId.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0,
+                    "folder" => !string.IsNullOrWhiteSpace(mod.FolderName) && mod.FolderName.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0,
+                    "enabled" => mod.IsEnabled,
+                    "disabled" => !mod.IsEnabled,
+                    "updatable" => mod.HasUpdate,
+                    _ => MatchesKeyword(mod, value)
+                };
+
+                if (!matched)
+                    return false;
+            }
+        }
+
+        if (!parsed.Keywords.All(keyword => MatchesKeyword(mod, keyword)))
+            return false;
+
+        if (parsed.ExcludedKeywords.Any(keyword => MatchesKeyword(mod, keyword)))
+            return false;
+
+        return true;
+    }
+
+    private static (Dictionary<string, List<string>> Clauses, List<string> Keywords, List<string> ExcludedKeywords) ParseAdvancedSearchQuery(string query)
+    {
+        var clauses = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var keywords = new List<string>();
+        var excludedKeywords = new List<string>();
+
+        var raw = (query ?? string.Empty).Trim();
+        if (raw.Length == 0)
+            return (clauses, keywords, excludedKeywords);
+
+        var regex = new Regex(@"(?<key>tag|author|description|name|uid|folder|enabled|disabled|updatable):(?<value>""[^""]+""|\S+)", RegexOptions.IgnoreCase);
+        var consumed = new List<(int Start, int Length)>();
+
+        foreach (Match match in regex.Matches(raw))
+        {
+            var key = match.Groups["key"].Value.Trim().ToLowerInvariant();
+            var value = match.Groups["value"].Value.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            if (!clauses.TryGetValue(key, out var list))
+            {
+                list = [];
+                clauses[key] = list;
+            }
+
+            list.Add(value);
+            consumed.Add((match.Index, match.Length));
+        }
+
+        var remainder = raw;
+        foreach (var piece in consumed.OrderByDescending(p => p.Start))
+        {
+            remainder = remainder.Remove(piece.Start, piece.Length);
+        }
+
+        foreach (var token in remainder.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var normalized = token.Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            if (normalized.StartsWith("-", StringComparison.Ordinal) && normalized.Length > 1)
+            {
+                excludedKeywords.Add(normalized.Substring(1));
+                continue;
+            }
+
+            keywords.Add(normalized);
+        }
+
+        return (clauses, keywords, excludedKeywords);
     }
 
     private bool MatchesCurrentFilter(SdVMod mod)
@@ -1099,6 +1292,32 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             ModFilterCategory.Updatable => mod.HasUpdate || mod.ChildMods.Any(child => child.HasUpdate),
             _ => true
         };
+    }
+
+    private bool MatchesTagFilter(SdVMod mod)
+    {
+        var selectedPanelItems = TagPanelItems.Where(item => item.IsSelected).Select(item => item.Option).ToList();
+        if (selectedPanelItems.Count > 0)
+        {
+            return selectedPanelItems.Any(option => MatchesTagFilterSingle(mod, option))
+                   || mod.ChildMods.Any(child => selectedPanelItems.Any(option => MatchesTagFilterSingle(child, option)));
+        }
+
+        if (SelectedTagFilter == null || SelectedTagFilter.IsAllOption)
+            return true;
+
+        return MatchesTagFilterSingle(mod, SelectedTagFilter)
+               || mod.ChildMods.Any(child => MatchesTagFilterSingle(child, SelectedTagFilter));
+    }
+
+    private static bool MatchesTagFilterSingle(SdVMod mod, ModTagFilterOption option)
+    {
+        if (option.IsFolderTag)
+        {
+            return (mod.Tags ?? []).Any(tag => string.Equals(tag, option.Name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return (mod.CustomTags ?? []).Any(tag => string.Equals(tag, option.Name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -1609,6 +1828,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         if (CurrentFilterCategory != ModFilterCategory.Backup)
         {
             filtered = filtered.Where(MatchesCurrentFilter);
+            filtered = filtered.Where(MatchesTagFilter);
         }
 
         _filteredSource.Clear();
@@ -1629,6 +1849,746 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         OnPropertyChanged(nameof(CanGoPreviousPage));
         OnPropertyChanged(nameof(CanGoNextPage));
         OnPropertyChanged(nameof(PageInfo));
+    }
+
+    private void LoadAndApplyTags(string modsPath)
+    {
+        _currentModsPathForTagConfig = modsPath;
+        _modTagConfig = ModTagConfigService.Load(modsPath);
+
+        var customTagNameById = _modTagConfig.CustomTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag.Id) && !string.IsNullOrWhiteSpace(tag.Name))
+            .ToDictionary(tag => tag.Id, tag => tag.Name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mod in Mods)
+        {
+            ApplyCustomTagsToMod(mod, customTagNameById);
+            foreach (var child in mod.ChildMods)
+            {
+                ApplyCustomTagsToMod(child, customTagNameById);
+            }
+        }
+
+        RefreshTagFilters();
+    }
+
+    private void RefreshTagFilters()
+    {
+        var selectedChipKeys = TagPanelItems
+            .Where(item => item.IsSelected)
+            .Select(item => item.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var previousKey = SelectedTagFilter?.Key;
+
+        var folderTagNameIndex = Mods
+            .SelectMany(mod => mod.Tags ?? [])
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(tag =>
+            {
+                var index = _modTagConfig.FolderTagOrder.FindIndex(name => string.Equals(name, tag, StringComparison.OrdinalIgnoreCase));
+                return index >= 0 ? index : int.MaxValue;
+            })
+            .ThenBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+            .Select(tag => new ModTagFilterOption
+            {
+                Key = $"folder:{tag}",
+                Name = tag,
+                IsFolderTag = true
+            })
+            .ToList();
+
+        var customTagsById = _modTagConfig.CustomTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag.Id) && !string.IsNullOrWhiteSpace(tag.Name))
+            .ToDictionary(tag => tag.Id, tag => tag, StringComparer.OrdinalIgnoreCase);
+
+        var customTags = _modTagConfig.CustomTagOrder
+            .Where(id => customTagsById.ContainsKey(id))
+            .Select(id => customTagsById[id])
+            .Concat(_modTagConfig.CustomTags.Where(tag => !string.IsNullOrWhiteSpace(tag.Id)
+                                                           && !string.IsNullOrWhiteSpace(tag.Name)
+                                                           && !_modTagConfig.CustomTagOrder.Any(id => string.Equals(id, tag.Id, StringComparison.OrdinalIgnoreCase))))
+            .Where(tag => !string.IsNullOrWhiteSpace(tag.Id) && !string.IsNullOrWhiteSpace(tag.Name))
+            .Select(tag => new ModTagFilterOption
+            {
+                Key = $"custom:{tag.Id}",
+                TagId = tag.Id,
+                Name = tag.Name,
+                IsFolderTag = false
+            })
+            .ToList();
+
+        TagFilters.Clear();
+        TagFilters.Add(new ModTagFilterOption
+        {
+            Key = "all",
+            Name = "全部标签",
+            IsAllOption = true
+        });
+
+        foreach (var tag in folderTagNameIndex)
+            TagFilters.Add(tag);
+
+        foreach (var tag in customTags)
+            TagFilters.Add(tag);
+
+        CustomTagDefinitions.Clear();
+        foreach (var tag in customTags)
+            CustomTagDefinitions.Add(tag);
+
+        TagPanelItems.Clear();
+        foreach (var tag in folderTagNameIndex)
+        {
+            TagPanelItems.Add(new ModTagPanelItem(tag)
+            {
+                IsSelected = selectedChipKeys.Contains(tag.Key)
+            });
+        }
+
+        foreach (var tag in customTags)
+        {
+            TagPanelItems.Add(new ModTagPanelItem(tag)
+            {
+                IsSelected = selectedChipKeys.Contains(tag.Key)
+            });
+        }
+
+        SelectedTagFilter = TagFilters.FirstOrDefault(tag => tag.Key == previousKey)
+            ?? TagFilters.FirstOrDefault();
+        OnPropertyChanged(nameof(HasSelectedTagPanelItems));
+        OnPropertyChanged(nameof(CanBatchAddSelectedTags));
+        OnPropertyChanged(nameof(CanBatchRemoveSelectedTags));
+    }
+
+    private void ApplyCustomTagsToMod(SdVMod mod, IReadOnlyDictionary<string, string> customTagNameById)
+    {
+        mod.CustomTags.Clear();
+
+        var modKey = GetModTagKey(mod);
+        if (string.IsNullOrWhiteSpace(modKey))
+            return;
+
+        if (!_modTagConfig.Assignments.TryGetValue(modKey, out var assignedTagIds) || assignedTagIds == null)
+            return;
+
+        foreach (var tagId in assignedTagIds)
+        {
+            if (!string.IsNullOrWhiteSpace(tagId)
+                && customTagNameById.TryGetValue(tagId, out var tagName)
+                && !string.IsNullOrWhiteSpace(tagName))
+            {
+                mod.CustomTags.Add(tagName);
+            }
+        }
+
+        mod.NotifyTagChanged();
+    }
+
+    private static string GetModTagKey(SdVMod mod)
+    {
+        if (!string.IsNullOrWhiteSpace(mod.UniqueId))
+            return $"uid:{mod.UniqueId.Trim().ToLowerInvariant()}";
+
+        if (!string.IsNullOrWhiteSpace(mod.FolderName))
+            return $"folder:{mod.FolderName.Trim().ToLowerInvariant()}";
+
+        return string.IsNullOrWhiteSpace(mod.Id)
+            ? string.Empty
+            : $"id:{mod.Id.Trim().ToLowerInvariant()}";
+    }
+
+    [RelayCommand]
+    private void AddCustomTag()
+    {
+        var name = (NewCustomTagName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            SvlMessageBox.Warning("请输入要创建的标签名称。", "标签管理");
+            return;
+        }
+
+        if (_modTagConfig.CustomTags.Any(tag => string.Equals(tag.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            SvlMessageBox.Warning("标签已存在。", "标签管理");
+            return;
+        }
+
+        var newTagId = Guid.NewGuid().ToString("N");
+        _modTagConfig.CustomTags.Add(new ModCustomTagDefinition
+        {
+            Id = newTagId,
+            Name = name
+        });
+        _modTagConfig.CustomTagOrder.Add(newTagId);
+
+        if (!ModTagConfigService.Save(_currentModsPathForTagConfig, _modTagConfig))
+        {
+            SvlMessageBox.Error("保存标签失败。", "标签管理");
+            return;
+        }
+
+        NewCustomTagName = string.Empty;
+        LoadAndApplyTags(_currentModsPathForTagConfig);
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void RenameCustomTag()
+    {
+        if (SelectedCustomTag == null || string.IsNullOrWhiteSpace(SelectedCustomTag.TagId))
+        {
+            SvlMessageBox.Warning("请先选择一个自定义标签。", "标签管理");
+            return;
+        }
+
+        var newName = (RenameCustomTagName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            SvlMessageBox.Warning("请输入新的标签名称。", "标签管理");
+            return;
+        }
+
+        if (_modTagConfig.CustomTags.Any(tag => !string.Equals(tag.Id, SelectedCustomTag.TagId, StringComparison.OrdinalIgnoreCase)
+                                                && string.Equals(tag.Name, newName, StringComparison.OrdinalIgnoreCase)))
+        {
+            SvlMessageBox.Warning("目标标签名称已存在。", "标签管理");
+            return;
+        }
+
+        var target = _modTagConfig.CustomTags.FirstOrDefault(tag => string.Equals(tag.Id, SelectedCustomTag.TagId, StringComparison.OrdinalIgnoreCase));
+        if (target == null)
+            return;
+
+        target.Name = newName;
+        if (!ModTagConfigService.Save(_currentModsPathForTagConfig, _modTagConfig))
+        {
+            SvlMessageBox.Error("保存标签失败。", "标签管理");
+            return;
+        }
+
+        LoadAndApplyTags(_currentModsPathForTagConfig);
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void DeleteCustomTag()
+    {
+        if (SelectedCustomTag == null || string.IsNullOrWhiteSpace(SelectedCustomTag.TagId))
+        {
+            SvlMessageBox.Warning("请先选择一个自定义标签。", "标签管理");
+            return;
+        }
+
+        if (!SvlMessageBox.Confirm($"确定删除标签“{SelectedCustomTag.Name}”吗？", "删除标签"))
+            return;
+
+        _modTagConfig.CustomTags.RemoveAll(tag => string.Equals(tag.Id, SelectedCustomTag.TagId, StringComparison.OrdinalIgnoreCase));
+        _modTagConfig.CustomTagOrder.RemoveAll(id => string.Equals(id, SelectedCustomTag.TagId, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var key in _modTagConfig.Assignments.Keys.ToList())
+        {
+            var list = _modTagConfig.Assignments[key];
+            list.RemoveAll(id => string.Equals(id, SelectedCustomTag.TagId, StringComparison.OrdinalIgnoreCase));
+            if (list.Count == 0)
+            {
+                _modTagConfig.Assignments.Remove(key);
+            }
+        }
+
+        if (!ModTagConfigService.Save(_currentModsPathForTagConfig, _modTagConfig))
+        {
+            SvlMessageBox.Error("保存标签失败。", "标签管理");
+            return;
+        }
+
+        LoadAndApplyTags(_currentModsPathForTagConfig);
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void ToggleSelectedCustomTagForSelectedMods()
+    {
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            SvlMessageBox.Warning("备份列表不支持标签编辑。", "标签管理");
+            return;
+        }
+
+        if (SelectedCustomTag == null || string.IsNullOrWhiteSpace(SelectedCustomTag.TagId))
+        {
+            SvlMessageBox.Warning("请先选择一个自定义标签。", "标签管理");
+            return;
+        }
+
+        var selectedMods = GetEffectiveSelectedMods();
+        if (selectedMods.Count == 0)
+        {
+            SvlMessageBox.Warning("请先选择至少一个 Mod。", "标签管理");
+            return;
+        }
+
+        var tagId = SelectedCustomTag.TagId;
+        var affected = 0;
+        foreach (var mod in selectedMods)
+        {
+            var key = GetModTagKey(mod);
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            if (!_modTagConfig.Assignments.TryGetValue(key, out var assigned))
+            {
+                assigned = [];
+                _modTagConfig.Assignments[key] = assigned;
+            }
+
+            if (assigned.Any(id => string.Equals(id, tagId, StringComparison.OrdinalIgnoreCase)))
+            {
+                assigned.RemoveAll(id => string.Equals(id, tagId, StringComparison.OrdinalIgnoreCase));
+                if (assigned.Count == 0)
+                {
+                    _modTagConfig.Assignments.Remove(key);
+                }
+            }
+            else
+            {
+                assigned.Add(tagId);
+            }
+
+            affected++;
+        }
+
+        if (!ModTagConfigService.Save(_currentModsPathForTagConfig, _modTagConfig))
+        {
+            SvlMessageBox.Error("保存标签失败。", "标签管理");
+            return;
+        }
+
+        LoadAndApplyTags(_currentModsPathForTagConfig);
+        ApplyFilter();
+        SvlMessageBox.Success($"已更新 {affected} 个 Mod 的标签。", "标签管理");
+    }
+
+    [RelayCommand]
+    private void ToggleTagChipSelection(ModTagPanelItem item)
+    {
+        if (item == null)
+            return;
+
+        item.IsSelected = !item.IsSelected;
+        OnPropertyChanged(nameof(HasSelectedTagPanelItems));
+        OnPropertyChanged(nameof(CanBatchAddSelectedTags));
+        OnPropertyChanged(nameof(CanBatchRemoveSelectedTags));
+    }
+
+    [RelayCommand]
+    private void ClearSelectedTagChips()
+    {
+        foreach (var item in TagPanelItems)
+        {
+            item.IsSelected = false;
+        }
+
+        SearchKeyword = string.Empty;
+
+        OnPropertyChanged(nameof(HasSelectedTagPanelItems));
+        OnPropertyChanged(nameof(CanBatchAddSelectedTags));
+        OnPropertyChanged(nameof(CanBatchRemoveSelectedTags));
+    }
+
+    [RelayCommand]
+    private void BatchBindSelectedTagsToSelectedMods()
+    {
+        BatchApplySelectedTagChips(bind: true);
+    }
+
+    [RelayCommand]
+    private void BatchUnbindSelectedTagsFromSelectedMods()
+    {
+        BatchApplySelectedTagChips(bind: false);
+    }
+
+    private void BatchApplySelectedTagChips(bool bind)
+    {
+        if (CurrentFilterCategory == ModFilterCategory.Backup)
+        {
+            SvlMessageBox.Warning("备份列表不支持标签编辑。", "标签管理");
+            return;
+        }
+
+        var selectedChips = TagPanelItems.Where(item => item.IsSelected && item.IsCustomTag && !string.IsNullOrWhiteSpace(item.TagId)).ToList();
+        if (selectedChips.Count == 0)
+        {
+            SvlMessageBox.Warning("请先在标签面板中选择至少一个自定义标签。", "标签管理");
+            return;
+        }
+
+        var selectedMods = GetEffectiveSelectedMods();
+        if (selectedMods.Count == 0)
+        {
+            SvlMessageBox.Warning("请先选择至少一个 Mod。", "标签管理");
+            return;
+        }
+
+        var changed = 0;
+        foreach (var mod in selectedMods)
+        {
+            var key = GetModTagKey(mod);
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            if (!_modTagConfig.Assignments.TryGetValue(key, out var assigned))
+            {
+                assigned = [];
+                _modTagConfig.Assignments[key] = assigned;
+            }
+
+            var modChanged = false;
+            foreach (var chip in selectedChips)
+            {
+                if (bind)
+                {
+                    if (!assigned.Any(id => string.Equals(id, chip.TagId, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        assigned.Add(chip.TagId);
+                        modChanged = true;
+                    }
+                }
+                else
+                {
+                    var removed = assigned.RemoveAll(id => string.Equals(id, chip.TagId, StringComparison.OrdinalIgnoreCase));
+                    modChanged = modChanged || removed > 0;
+                }
+            }
+
+            if (assigned.Count == 0)
+            {
+                _modTagConfig.Assignments.Remove(key);
+            }
+
+            if (modChanged)
+                changed++;
+        }
+
+        if (!ModTagConfigService.Save(_currentModsPathForTagConfig, _modTagConfig))
+        {
+            SvlMessageBox.Error("保存标签失败。", "标签管理");
+            return;
+        }
+
+        LoadAndApplyTags(_currentModsPathForTagConfig);
+        ApplyFilter();
+        InlineTagHint = bind ? $"已批量绑定到 {changed} 个 Mod。" : $"已批量解绑 {changed} 个 Mod。";
+    }
+
+    [RelayCommand]
+    private void AddSelectedCustomTagToMod(SdVMod mod)
+    {
+        if (mod == null)
+            return;
+
+        var quickTagId = GetSingleSelectedCustomTagId();
+        if (string.IsNullOrWhiteSpace(quickTagId))
+        {
+            InlineTagHint = "请先在标签面板中仅选中 1 个自定义标签，再进行单个 Mod 快捷操作。";
+            return;
+        }
+
+        SetCustomTagOnMod(mod, quickTagId, bind: true);
+    }
+
+    [RelayCommand]
+    private void RemoveSelectedCustomTagFromMod(SdVMod mod)
+    {
+        if (mod == null)
+            return;
+
+        var quickTagId = GetSingleSelectedCustomTagId();
+        if (string.IsNullOrWhiteSpace(quickTagId))
+        {
+            InlineTagHint = "请先在标签面板中仅选中 1 个自定义标签，再进行单个 Mod 快捷操作。";
+            return;
+        }
+
+        SetCustomTagOnMod(mod, quickTagId, bind: false);
+    }
+
+    private string GetSingleSelectedCustomTagId()
+    {
+        var selected = TagPanelItems
+            .Where(item => item.IsSelected && item.IsCustomTag && !string.IsNullOrWhiteSpace(item.TagId))
+            .Select(item => item.TagId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return selected.Count == 1 ? selected[0] : string.Empty;
+    }
+
+    [RelayCommand]
+    private void RemoveCustomTagFromModByPair(string parameter)
+    {
+        if (string.IsNullOrWhiteSpace(parameter))
+            return;
+
+        var split = parameter.Split(new[] { "||" }, StringSplitOptions.None);
+        if (split.Length != 2)
+            return;
+
+        var modId = split[0];
+        var tagName = split[1];
+        if (string.IsNullOrWhiteSpace(modId) || string.IsNullOrWhiteSpace(tagName))
+            return;
+
+        var targetMod = Mods.FirstOrDefault(m => string.Equals(m.Id, modId, StringComparison.OrdinalIgnoreCase))
+            ?? Mods.SelectMany(m => m.ChildMods).FirstOrDefault(m => string.Equals(m.Id, modId, StringComparison.OrdinalIgnoreCase));
+        if (targetMod == null)
+            return;
+
+        var tag = _modTagConfig.CustomTags.FirstOrDefault(t => string.Equals(t.Name, tagName, StringComparison.OrdinalIgnoreCase));
+        if (tag == null || string.IsNullOrWhiteSpace(tag.Id))
+            return;
+
+        SetCustomTagOnMod(targetMod, tag.Id, bind: false);
+    }
+
+    [RelayCommand]
+    private void FilterByTagChip(ModTagPanelItem item)
+    {
+        if (item == null)
+            return;
+
+        var target = TagFilters.FirstOrDefault(tag => string.Equals(tag.Key, item.Key, StringComparison.OrdinalIgnoreCase));
+        if (target != null)
+        {
+            SelectedTagFilter = target;
+            CurrentPageIndex = 1;
+            ApplyFilter();
+        }
+    }
+
+    [RelayCommand]
+    private void RenameCustomTagFromChip(ModTagPanelItem item)
+    {
+        if (item == null || item.IsFolderTag || string.IsNullOrWhiteSpace(item.TagId))
+            return;
+
+        var mainWindow = System.Windows.Application.Current?.MainWindow;
+        if (mainWindow == null)
+            return;
+
+        var target = CustomTagDefinitions.FirstOrDefault(tag => string.Equals(tag.TagId, item.TagId, StringComparison.OrdinalIgnoreCase));
+        if (target != null)
+        {
+            var inputName = InputDialog.Show(mainWindow, "请输入新的标签名称：", target.Name)?.Trim();
+            if (string.IsNullOrWhiteSpace(inputName))
+                return;
+
+            SelectedCustomTag = target;
+            RenameCustomTagName = inputName;
+            RenameCustomTag();
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteCustomTagFromChip(ModTagPanelItem item)
+    {
+        if (item == null || item.IsFolderTag || string.IsNullOrWhiteSpace(item.TagId))
+            return;
+
+        var target = CustomTagDefinitions.FirstOrDefault(tag => string.Equals(tag.TagId, item.TagId, StringComparison.OrdinalIgnoreCase));
+        if (target == null)
+            return;
+
+        SelectedCustomTag = target;
+        DeleteCustomTag();
+    }
+
+    public void MoveTagPanelItem(string sourceKey, string targetKey)
+    {
+        if (string.IsNullOrWhiteSpace(sourceKey) || string.IsNullOrWhiteSpace(targetKey)
+            || string.Equals(sourceKey, targetKey, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var sourceItem = TagPanelItems.FirstOrDefault(item => string.Equals(item.Key, sourceKey, StringComparison.OrdinalIgnoreCase));
+        var targetItem = TagPanelItems.FirstOrDefault(item => string.Equals(item.Key, targetKey, StringComparison.OrdinalIgnoreCase));
+        if (sourceItem == null || targetItem == null)
+            return;
+
+        // 固定分组：文件夹标签与自定义标签分别排序，不跨组拖拽。
+        if (sourceItem.IsFolderTag != targetItem.IsFolderTag)
+            return;
+
+        if (sourceItem.IsFolderTag)
+        {
+            var ordered = TagPanelItems.Where(item => item.IsFolderTag).Select(item => item.Name).ToList();
+            ReorderList(ordered, sourceItem.Name, targetItem.Name);
+            _modTagConfig.FolderTagOrder = ordered;
+        }
+        else
+        {
+            var ordered = _modTagConfig.CustomTagOrder
+                .Where(id => CustomTagDefinitions.Any(tag => string.Equals(tag.TagId, id, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+            if (!ordered.Any(id => string.Equals(id, sourceItem.TagId, StringComparison.OrdinalIgnoreCase)))
+                ordered.Add(sourceItem.TagId);
+            if (!ordered.Any(id => string.Equals(id, targetItem.TagId, StringComparison.OrdinalIgnoreCase)))
+                ordered.Add(targetItem.TagId);
+
+            ReorderList(ordered, sourceItem.TagId, targetItem.TagId);
+            _modTagConfig.CustomTagOrder = ordered;
+        }
+
+        if (!ModTagConfigService.Save(_currentModsPathForTagConfig, _modTagConfig))
+            return;
+
+        RefreshTagFilters();
+    }
+
+    private static void ReorderList(List<string> values, string source, string target)
+    {
+        var sourceIndex = values.FindIndex(value => string.Equals(value, source, StringComparison.OrdinalIgnoreCase));
+        var targetIndex = values.FindIndex(value => string.Equals(value, target, StringComparison.OrdinalIgnoreCase));
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex)
+            return;
+
+        var item = values[sourceIndex];
+        values.RemoveAt(sourceIndex);
+        var insertIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
+        values.Insert(insertIndex, item);
+    }
+
+    private void SetCustomTagOnMod(SdVMod mod, string tagId, bool bind)
+    {
+        var key = GetModTagKey(mod);
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+
+        if (!_modTagConfig.Assignments.TryGetValue(key, out var assigned))
+        {
+            assigned = [];
+            _modTagConfig.Assignments[key] = assigned;
+        }
+
+        var changed = false;
+        if (bind)
+        {
+            if (!assigned.Any(id => string.Equals(id, tagId, StringComparison.OrdinalIgnoreCase)))
+            {
+                assigned.Add(tagId);
+                changed = true;
+            }
+        }
+        else
+        {
+            changed = assigned.RemoveAll(id => string.Equals(id, tagId, StringComparison.OrdinalIgnoreCase)) > 0;
+            if (assigned.Count == 0)
+            {
+                _modTagConfig.Assignments.Remove(key);
+            }
+        }
+
+        if (!changed)
+            return;
+
+        if (!ModTagConfigService.Save(_currentModsPathForTagConfig, _modTagConfig))
+            return;
+
+        LoadAndApplyTags(_currentModsPathForTagConfig);
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void ShowAdvancedSearchHelp()
+    {
+        SvlMessageBox.Info(
+            "高级搜索参数：\n\n" +
+            "tag:\n" +
+            "author:\n" +
+            "description:\n" +
+            "name:\n" +
+            "uid:\n" +
+            "folder:\n" +
+            "enabled:\n" +
+            "disabled:\n" +
+            "updatable:\n" +
+            "sort:name|author|updated",
+            "高级搜索帮助");
+    }
+
+    [RelayCommand]
+    private void ClearSearchKeyword()
+    {
+        SearchKeyword = string.Empty;
+        CurrentPageIndex = 1;
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void SearchBySelectedTags()
+    {
+        var selectedTags = TagPanelItems
+            .Where(item => item.IsSelected)
+            .Select(item => item.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (selectedTags.Count == 0)
+        {
+            SvlMessageBox.Warning("请先点击选择至少一个 Tag。", "Tag 搜索");
+            return;
+        }
+
+        SearchKeyword = string.Join(" OR ", selectedTags.Select(tag => $"tag:\"{tag}\""));
+        CurrentPageIndex = 1;
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void FilterByModTag(string? displayTag)
+    {
+        var parsed = ParseDisplayTag(displayTag);
+        if (string.IsNullOrWhiteSpace(parsed.Name))
+            return;
+
+        var target = TagPanelItems.FirstOrDefault(item =>
+            string.Equals(item.Name, parsed.Name, StringComparison.OrdinalIgnoreCase)
+            && (!parsed.IsFolder.HasValue || item.IsFolderTag == parsed.IsFolder.Value));
+
+        target ??= TagPanelItems.FirstOrDefault(item => string.Equals(item.Name, parsed.Name, StringComparison.OrdinalIgnoreCase));
+        if (target == null)
+            return;
+
+        foreach (var item in TagPanelItems)
+        {
+            item.IsSelected = false;
+        }
+
+        target.IsSelected = true;
+
+        SearchKeyword = $"tag:\"{target.Name}\"";
+        CurrentFilterCategory = ModFilterCategory.All;
+        CurrentPageIndex = 1;
+        OnPropertyChanged(nameof(HasSelectedTagPanelItems));
+        OnPropertyChanged(nameof(CanBatchAddSelectedTags));
+        OnPropertyChanged(nameof(CanBatchRemoveSelectedTags));
+        ApplyFilter();
+    }
+
+    private static (string Name, bool? IsFolder) ParseDisplayTag(string? displayTag)
+    {
+        var raw = (displayTag ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+            return (string.Empty, null);
+
+        if (raw.StartsWith("📁 ", StringComparison.Ordinal))
+            return (raw.Substring(2).Trim(), true);
+
+        if (raw.StartsWith("🏷 ", StringComparison.Ordinal))
+            return (raw.Substring(2).Trim(), false);
+
+        return (raw, null);
     }
 
     private void RefreshPagedMods()
@@ -1747,6 +2707,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSelectedUpdatable));
         OnPropertyChanged(nameof(HasSelectedLocalizableMods));
         OnPropertyChanged(nameof(IsCurrentPageAllSelected));
+        OnPropertyChanged(nameof(CanBatchAddSelectedTags));
+        OnPropertyChanged(nameof(CanBatchRemoveSelectedTags));
     }
 
     partial void OnSelectedUpdatableCountChanged(int value)

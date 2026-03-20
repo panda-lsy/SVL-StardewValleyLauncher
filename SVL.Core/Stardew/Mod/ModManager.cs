@@ -29,6 +29,8 @@ public class ModManager : IModManager
             return _loadedMods;
         }
 
+        MigrateLegacyDisabledFolders(modsPath);
+
         var manifestFiles = Directory.GetFiles(modsPath, "manifest.json", SearchOption.AllDirectories);
         var discoveredMods = new List<SdVMod>();
 
@@ -92,7 +94,7 @@ public class ModManager : IModManager
             Description = manifest.Description,
             UniqueId = manifest.UniqueId,
             ModPath = modDir,
-            IsEnabled = !relativeParts.Any(part => part.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)),
+            IsEnabled = !relativeParts.Any(ModFolderNaming.IsDisabledFolderName),
             IsContentPack = manifest.ContentPackFor != null,
             InstalledDate = Directory.GetCreationTime(modDir),
             Manifest = manifest,
@@ -251,8 +253,8 @@ public class ModManager : IModManager
             Description = children.Count > 0 ? $"包含 {children.Count} 个子 Mod" : string.Empty,
             UniqueId = string.Empty,
             ModPath = parentPath,
-            IsEnabled = !Path.GetFileName(parentPath).EndsWith(".disabled", StringComparison.OrdinalIgnoreCase),
             IsContentPack = false,
+            IsEnabled = !ModFolderNaming.IsDisabledFolderName(Path.GetFileName(parentPath)),
             InstalledDate = newestInstalled?.InstalledDate ?? (Directory.Exists(parentPath) ? Directory.GetCreationTime(parentPath) : DateTime.Now),
             Manifest = null,
             Thumbnail = children.Select(item => item.Thumbnail).FirstOrDefault(path => !string.IsNullOrWhiteSpace(path)),
@@ -329,12 +331,44 @@ public class ModManager : IModManager
 
     private static string NormalizeFolderSegment(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return string.Empty;
+        return ModFolderNaming.NormalizeFolderName(value);
+    }
 
-        return value.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
-            ? value.Substring(0, value.Length - ".disabled".Length)
-            : value;
+    private void MigrateLegacyDisabledFolders(string modsPath)
+    {
+        try
+        {
+            var legacyDisabledDirs = Directory.GetDirectories(modsPath, "*", SearchOption.AllDirectories)
+                .Where(path => ModFolderNaming.IsLegacyDisabledFolderName(Path.GetFileName(path)))
+                .OrderByDescending(path => path.Length)
+                .ToList();
+
+            foreach (var legacyDir in legacyDisabledDirs)
+            {
+                var parentDir = Path.GetDirectoryName(legacyDir);
+                if (string.IsNullOrWhiteSpace(parentDir))
+                    continue;
+
+                var migratedName = ModFolderNaming.GetDisabledFolderName(Path.GetFileName(legacyDir));
+                var migratedPath = Path.Combine(parentDir, migratedName);
+
+                if (string.Equals(legacyDir, migratedPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (Directory.Exists(migratedPath))
+                {
+                    Log.Warn($"[ModManager] 禁用目录迁移跳过，目标已存在: {migratedPath}");
+                    continue;
+                }
+
+                Directory.Move(legacyDir, migratedPath);
+                Log.Info($"[ModManager] 已将旧禁用目录迁移为新格式: {legacyDir} -> {migratedPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("[ModManager] 迁移旧禁用目录失败", ex);
+        }
     }
 
     private static string BuildCompositeAuthor(IEnumerable<SdVMod> children)
@@ -552,15 +586,19 @@ public class ModManager : IModManager
             }
 
             var currentPath = mod.ModPath;
-            if (mod.IsEnabled)
+            var newPath = ModFolderNaming.GetEnabledFolderPath(currentPath);
+
+            if (string.Equals(currentPath, newPath, StringComparison.OrdinalIgnoreCase))
             {
-                Log.Warn($"Mod already enabled: {mod.Name}");
+                mod.IsEnabled = true;
                 return true;
             }
 
-            var newPath = currentPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
-                ? currentPath.Substring(0, currentPath.Length - 9)
-                : $"{currentPath}.disabled";
+            if (Directory.Exists(newPath))
+            {
+                Log.Warn($"[ModManager] 启用目标已存在: {newPath}");
+                return false;
+            }
 
             await FileServiceExtensions.MoveAsync(currentPath, newPath);
 
@@ -595,7 +633,19 @@ public class ModManager : IModManager
             }
 
             var currentPath = mod.ModPath;
-            var newPath = $"{currentPath}.disabled";
+            var newPath = ModFolderNaming.GetDisabledFolderPath(currentPath);
+
+            if (string.Equals(currentPath, newPath, StringComparison.OrdinalIgnoreCase))
+            {
+                mod.IsEnabled = false;
+                return true;
+            }
+
+            if (Directory.Exists(newPath))
+            {
+                Log.Warn($"[ModManager] 禁用目标已存在: {newPath}");
+                return false;
+            }
 
             await FileServiceExtensions.MoveAsync(currentPath, newPath);
 
@@ -1258,8 +1308,8 @@ public class ModManager : IModManager
         var subDirs = Directory.GetDirectories(currentDir);
         foreach (var subDir in subDirs)
         {
-            // 跳过 .disabled 目录
-            if (subDir.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase))
+            // 跳过旧的 .disabled 目录和新的点前缀禁用目录
+            if (ModFolderNaming.IsDisabledFolderName(subDir))
                 continue;
 
             var (found, depth) = FindManifestRecursively(subDir, currentDepth + 1, maxDepth);

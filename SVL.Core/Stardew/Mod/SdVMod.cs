@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using SVL.Core.Stardew.Mod;
 
@@ -31,6 +32,7 @@ public class SdVMod : INotifyPropertyChanged
     public List<string> ConflictingMods { get; set; } = [];
     public string Thumbnail { get; set; }
     public List<string> Tags { get; set; } = [];
+    public ObservableCollection<string> CustomTags { get; } = [];
     public string LocalizedNameZhCn { get; set; } = string.Empty;
     public string LocalizedNameSource { get; set; } = string.Empty;
     public string LocalizedDescriptionZhCn { get; set; } = string.Empty;
@@ -46,7 +48,18 @@ public class SdVMod : INotifyPropertyChanged
     public string ParentModId { get; set; } = string.Empty;
     public string ParentModName { get; set; } = string.Empty;
     public ObservableCollection<SdVMod> ChildMods { get; } = [];
-    public string TagsDisplay => Tags == null || Tags.Count == 0 ? string.Empty : string.Join(" / ", Tags);
+    public IEnumerable<string> AllTags => (Tags ?? [])
+        .Concat(CustomTags ?? [])
+        .Where(tag => !string.IsNullOrWhiteSpace(tag))
+        .Distinct(StringComparer.OrdinalIgnoreCase);
+    public IEnumerable<string> DisplayTags => (Tags ?? [])
+        .Where(tag => !string.IsNullOrWhiteSpace(tag))
+        .Select(tag => $"📁 {tag}")
+        .Concat((CustomTags ?? [])
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(tag => $"🏷 {tag}"));
+    public bool HasAnyTag => DisplayTags.Any();
+    public string TagsDisplay => !AllTags.Any() ? string.Empty : string.Join(" / ", AllTags);
     public bool HasChildren => ChildMods.Count > 0;
     public bool CanShowOnlineDetails => !IsChildMod;
     public string GroupToggleText => IsGroupExpanded ? "⌄" : "⌃";
@@ -67,13 +80,7 @@ public class SdVMod : INotifyPropertyChanged
             if (string.IsNullOrWhiteSpace(ModPath))
                 return string.Empty;
 
-            var folderName = Path.GetFileName(ModPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            if (folderName.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase))
-            {
-                folderName = folderName.Substring(0, folderName.Length - ".disabled".Length);
-            }
-
-            return folderName;
+            return ModFolderNaming.NormalizeFolderName(ModPath);
         }
     }
 
@@ -240,6 +247,14 @@ public class SdVMod : INotifyPropertyChanged
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
+
+    public void NotifyTagChanged()
+    {
+        OnPropertyChanged(nameof(AllTags));
+        OnPropertyChanged(nameof(DisplayTags));
+        OnPropertyChanged(nameof(HasAnyTag));
+        OnPropertyChanged(nameof(TagsDisplay));
+    }
 }
 
 public class ModDependencyLink
@@ -266,13 +281,62 @@ public class ModDependencyLink
             if (IsPlaceholder)
                 return DisplayName;
 
-            var prefix = IsRequired ? string.Empty : "[可选] ";
             if (!string.IsNullOrWhiteSpace(MinimumVersion))
             {
-                return $"{prefix}{DisplayName} >= {MinimumVersion}";
+                return $"{DisplayName} >= {MinimumVersion}";
             }
 
-            return $"{prefix}{DisplayName}";
+            return DisplayName;
+        }
+    }
+
+    public string StatusPrefix
+    {
+        get
+        {
+            if (!IsRequired)
+            {
+                if (!IsInstalled)
+                    return "[未安装] ";
+
+                if (IsInstalledButDisabled)
+                    return "[被禁用] ";
+
+                return "[可选] ";
+            }
+
+            if (!IsInstalled)
+                return "[未安装] ";
+
+            if (IsInstalledButDisabled)
+                return "[被禁用] ";
+
+            return string.Empty;
+        }
+    }
+
+    public string StatusPrefixColor
+    {
+        get
+        {
+            if (!IsRequired)
+                return (!IsInstalled || IsInstalledButDisabled) ? "#D8A131" : "#3E8EDE";
+
+            if (!IsInstalled || IsInstalledButDisabled)
+                return "#D45555";
+
+            return "#3E8EDE";
+        }
+    }
+
+    public string StatusSuffix
+    {
+        get
+        {
+            if (!IsRequired && (!IsInstalled || IsInstalledButDisabled))
+                return "[可选] ";
+
+            return string.Empty;
         }
     }
 }

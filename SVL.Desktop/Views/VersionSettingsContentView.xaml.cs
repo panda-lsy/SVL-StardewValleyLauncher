@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -57,5 +58,16 @@ public partial class VersionSettingsContentView : UserControl
             return VisualTreeHelper.GetParent(current);
 
         return LogicalTreeHelper.GetParent(current);
+    }
+
+    private void TagChip_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not FrameworkElement element || element.DataContext is not ModTagPanelItem item)
+            return;
+
+        if (!item.IsCustomTag)
+        {
+            e.Handled = true;
+        }
     }
 }

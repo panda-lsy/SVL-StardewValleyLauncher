@@ -1594,12 +1594,7 @@ public class ModDownloadTask : DownloadTask
 
     private static string NormalizeFolderName(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return string.Empty;
-
-        return value.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
-            ? value.Substring(0, value.Length - ".disabled".Length)
-            : value;
+        return ModFolderNaming.NormalizeFolderName(value);
     }
 
     private static string? TryReadManifestName(string modDir)

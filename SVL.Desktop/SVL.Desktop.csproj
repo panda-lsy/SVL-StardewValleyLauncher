@@ -24,8 +24,8 @@
     <Company>SVL Community</Company>
     <Product>SVL.Desktop</Product>
     <Copyright>Copyright © SVL Community</Copyright>
-    <AssemblyVersion>1.1.8.3</AssemblyVersion>
-    <FileVersion>1.1.8.3</FileVersion>
+    <AssemblyVersion>1.1.8.4</AssemblyVersion>
+    <FileVersion>1.1.8.4</FileVersion>
     <DisplayVersion>v$(AssemblyVersion)</DisplayVersion>
   </PropertyGroup>
 
@@ -33,6 +33,15 @@
     <PropertyGroup>
       <_NamedExe>SVL.Desktop_$(DisplayVersion)_$(Configuration).exe</_NamedExe>
     </PropertyGroup>
+
+    <ItemGroup>
+      <!-- 清理历史命名产物，避免输出目录持续堆积导致打包体积虚高 -->
+      <_OldNamedExes Include="$(TargetDir)SVL.Desktop_v*_$(Configuration).exe"
+                     Exclude="$(TargetDir)$(_NamedExe)" />
+      <_OldNamedExes Include="$(TargetDir)SVL.Desktop-$(Configuration)-*.exe" />
+    </ItemGroup>
+
+    <Delete Files="@(_OldNamedExes)" ContinueOnError="true" />
 
     <Copy SourceFiles="$(TargetPath)"
           DestinationFiles="$(TargetDir)$(_NamedExe)"
