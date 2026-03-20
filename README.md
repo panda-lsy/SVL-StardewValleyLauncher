@@ -37,7 +37,7 @@
 </p>
 
 <p align="center">
-  <img src="https://api.svl.qzz.io/api/stats/charts/users-trend.svg" alt="SVL 匿名用户趋势图" width="760">
+  <img src="https://api.svl.qzz.io/api/stats/charts/users-total-trend.svg" alt="SVL 总用户数量" width="760">
 </p>
 
 ---
