@@ -17,11 +17,11 @@
             </Grid.ColumnDefinitions>
 
             <!-- 右侧内容区域 -->
-            <ScrollViewer Grid.Column="1"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled"
-                          Style="{StaticResource ModernScrollViewerStyle}">
-                <StackPanel Margin="20,32,40,40">
+            <Grid Grid.Column="1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Style="{StaticResource ModernScrollViewerStyle}">
+                    <StackPanel Margin="20,32,40,40">
                     <!-- 失败状态内容 -->
                     <StackPanel Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibilityConverter}}">
                         <!-- 失败原因卡片 -->
@@ -865,8 +865,36 @@
                             </Grid>
                         </Border>
                     </StackPanel>
-                </StackPanel>
-            </ScrollViewer>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Background="{DynamicResource ColorBrushBackground}"
+                        Margin="20,32,40,40"
+                        CornerRadius="12"
+                        Visibility="{Binding IsEmptyState, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Margin="20">
+                        <TextBlock Text="📭"
+                                   FontSize="56"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,12"/>
+                        <TextBlock Text="当前没有任务"
+                                   FontSize="22"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,8"/>
+                        <TextBlock Text="去下载页发起任务后，这里会实时显示进度与失败重试入口。"
+                                   FontSize="14"
+                                   Foreground="{DynamicResource ColorBrushGray3}"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="420"
+                                   LineHeight="22"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
 
             <!-- 左侧边栏 -->
             <Border Grid.Column="0"
@@ -993,11 +1021,12 @@
                     </Border>
 
                     <!-- 帮助信息 -->
-                    <Border Grid.Row="2"
+                        <Border Grid.Row="2"
                             Background="{DynamicResource ColorBrush2}"
                             CornerRadius="8"
                             Padding="16"
-                            VerticalAlignment="Top">
+                            VerticalAlignment="Top"
+                            Visibility="{Binding ShowMainStateContent, Converter={StaticResource BoolToVisibilityConverter}}">
                         <StackPanel>
                             <TextBlock Text="需要帮助？"
                                        FontSize="13"
@@ -1023,7 +1052,7 @@
                             HorizontalAlignment="Center"
                             Margin="0,16,0,0"
                             Cursor="Hand"
-                            Visibility="{Binding ShowActionButton, Converter={StaticResource BoolToVisibilityConverter}}">
+                            Visibility="{Binding ShowSingleActionButton, Converter={StaticResource BoolToVisibilityConverter}}">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -1057,6 +1086,66 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
+                    </Button>
+
+                    <StackPanel Grid.Row="3"
+                            Orientation="Vertical"
+                                HorizontalAlignment="Center"
+                                Margin="0,16,0,0"
+                                Visibility="{Binding ShowRetryCancelButtons, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Button Content="重试"
+                                Command="{Binding ExecuteActionCommand}"
+                            Width="200"
+                                Height="36"
+                                FontSize="13"
+                            Margin="0,0,0,8"
+                                Cursor="Hand"
+                                Background="{DynamicResource ColorBrush2}"
+                                Foreground="White"
+                                BorderThickness="0">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+
+                        <Button Content="取消任务"
+                            Command="{Binding CancelTaskCommand}"
+                            Width="200"
+                                Height="36"
+                                FontSize="13"
+                                Cursor="Hand"
+                                Background="Transparent"
+                                Foreground="{DynamicResource ColorBrushGray3}"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource ColorBrush3}">
+                            <Button.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="6"/>
+                                </Style>
+                            </Button.Resources>
+                        </Button>
+                    </StackPanel>
+
+                    <Button Grid.Row="3"
+                            Content="前往下载"
+                            Command="{Binding GoToDownloadCommand}"
+                            Width="200"
+                            Height="36"
+                            FontSize="13"
+                            HorizontalAlignment="Center"
+                            Margin="0,16,0,0"
+                            Cursor="Hand"
+                            Visibility="{Binding IsEmptyState, Converter={StaticResource BoolToVisibilityConverter}}"
+                            Background="{DynamicResource ColorBrush2}"
+                            Foreground="White"
+                            BorderThickness="0">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
                     </Button>
                 </Grid>
             </Border>

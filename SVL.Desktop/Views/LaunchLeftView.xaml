@@ -163,6 +163,48 @@
                 </Button.Style>
             </Button>
 
+            <!-- Mod管理按钮（仅SMAPI实例显示） -->
+            <Button Content="Mod管理"
+                    Command="{Binding OpenModManageCommand}"
+                    Height="42"
+                    Margin="0,0,0,12"
+                    HorizontalAlignment="Stretch"
+                    FontSize="14"
+                    FontWeight="Medium"
+                    Cursor="Hand"
+                    Visibility="{Binding ShowModManageButton, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="ButtonBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                            CornerRadius="8"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush2}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource ColorBrush1}" TargetName="ButtonBorder"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
             <!-- 版本设置按钮 -->
             <Button Content="版本设置"
                     Command="{Binding OpenVersionSettingsCommand}"

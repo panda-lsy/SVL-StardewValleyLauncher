@@ -15,6 +15,8 @@ namespace SVL.Core.Stardew.ResourceProject.NexusMods;
 public class NexusModsClient
 {
     private static readonly HttpClient _httpClient = new();
+    private static readonly object _tokenExpiredLogLock = new();
+    private static DateTime _lastTokenExpiredLogUtc = DateTime.MinValue;
 
     public const string BaseUrl = "https://api.nexusmods.com/v1";
     public const string GameDomain = "stardewvalley";
@@ -79,7 +81,7 @@ public class NexusModsClient
         // 检查 401 Unauthorized - Token 过期
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            Log.Warn("[NexusMods] Access Token 已过期 (401 Unauthorized)");
+            LogTokenExpiredWarningOnce();
             throw new NexusModsTokenExpiredException();
         }
 
@@ -89,6 +91,19 @@ public class NexusModsClient
         RateLimit.UpdateFromHeaders(response.Headers);
 
         return await response.Content.ReadAsStringAsync();
+    }
+
+    private static void LogTokenExpiredWarningOnce()
+    {
+        lock (_tokenExpiredLogLock)
+        {
+            var now = DateTime.UtcNow;
+            if ((now - _lastTokenExpiredLogUtc).TotalSeconds < 30)
+                return;
+
+            _lastTokenExpiredLogUtc = now;
+            Log.Warn("[NexusMods] Access Token 已过期 (401 Unauthorized)");
+        }
     }
 
     /// <summary>
@@ -395,7 +410,7 @@ public class NexusModsClient
                 var response = await _httpClient.SendAsync(request);
                 if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
-                    Log.Warn("[NexusMods] Access Token 已过期 (401 Unauthorized)");
+                    LogTokenExpiredWarningOnce();
                     throw new NexusModsTokenExpiredException();
                 }
 
@@ -643,7 +658,7 @@ public class NexusModsClient
             var response = await _httpClient.SendAsync(request);
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                Log.Warn("[NexusMods] Access Token 已过期 (401 Unauthorized)");
+                LogTokenExpiredWarningOnce();
                 throw new NexusModsTokenExpiredException();
             }
 

@@ -47,6 +47,7 @@ public partial class LaunchLeftViewModel : ObservableObject
 
             // 更新图标路径
             UpdateIconSource();
+            OnPropertyChanged(nameof(ShowModManageButton));
         }
         else
         {
@@ -57,6 +58,7 @@ public partial class LaunchLeftViewModel : ObservableObject
             IsVersionDetected = false;
             IconSource = "/Images/Junimo2.png";
             VersionStatus = "未找到版本";
+            OnPropertyChanged(nameof(ShowModManageButton));
         }
     }
 
@@ -124,6 +126,7 @@ public partial class LaunchLeftViewModel : ObservableObject
                 IsVersionDetected = !string.IsNullOrEmpty(SelectedGamePath.Version);
             }
             UpdateIconSource();
+            OnPropertyChanged(nameof(ShowModManageButton));
         }
     }
 
@@ -186,6 +189,8 @@ public partial class LaunchLeftViewModel : ObservableObject
 
     [ObservableProperty]
     private string _launchButtonText = "启动游戏";
+
+    public bool ShowModManageButton => SelectedGamePath?.IsSMAPIInstance == true;
 
     [RelayCommand]
     private async void LaunchGame()
@@ -442,6 +447,25 @@ public partial class LaunchLeftViewModel : ObservableObject
         _mainViewModel.SelectedVersionSettingsInstance = SelectedGamePath;
 
         // 导航到版本设置页面
+        _mainViewModel.NavigateToVersionSettingsCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void OpenModManage()
+    {
+        if (SelectedGamePath == null)
+        {
+            SvlMessageBox.Info("请先选择一个游戏实例", "提示");
+            return;
+        }
+
+        if (!SelectedGamePath.IsSMAPIInstance)
+        {
+            return;
+        }
+
+        _mainViewModel.SelectedVersionSettingsInstance = SelectedGamePath;
+        _mainViewModel.OpenVersionSettingsAtModManage = true;
         _mainViewModel.NavigateToVersionSettingsCommand.Execute(null);
     }
 

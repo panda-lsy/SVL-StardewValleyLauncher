@@ -9,17 +9,24 @@
              d:DataContext="{d:DesignInstance Type=viewModel:DownloadManagerViewModel}"
              d:DesignHeight="60"
              d:DesignWidth="60"
-             Visibility="{Binding ActiveTaskCount, Converter={StaticResource IntToVisibilityConverter}}">
+             Visibility="{Binding ShowFloatingButton, Converter={StaticResource BoolToVisibilityConverter}}">
 
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:IntToVisibilityConverter x:Key="IntToVisibilityConverter"/>
     </UserControl.Resources>
 
-    <!-- 圆形按钮 -->
-    <Button Width="56"
+          <Grid x:Name="RootGrid"
+              Width="60"
+              Height="60"
+              MouseEnter="RootGrid_MouseEnter"
+              MouseLeave="RootGrid_MouseLeave">
+        <!-- 圆形按钮 -->
+        <Button Width="56"
             Height="56"
-            Command="{Binding ToggleCommand}"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Click="FloatingButton_Click"
             Cursor="Hand"
             RenderTransformOrigin="0.5,0.5">
         <Button.Resources>
@@ -107,8 +114,8 @@
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Margin="0,-4,-4,0"
-                    Visibility="{Binding ActiveTaskCount, Converter={StaticResource BoolToVisibilityConverter}}">
-                <TextBlock Text="{Binding ActiveTaskCount}"
+                    Visibility="{Binding EntryTaskCount, Converter={StaticResource IntToVisibilityConverter}}">
+                <TextBlock Text="{Binding EntryTaskCount}"
                            FontSize="11"
                            FontWeight="SemiBold"
                            Foreground="White"
@@ -141,4 +148,35 @@
                            ScaleY="1.0"/>
         </Button.RenderTransform>
     </Button>
+
+    <Button x:Name="CloseButton"
+            Width="16"
+            Height="16"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Margin="0,0,0,0"
+            FontSize="10"
+            Content="✕"
+            Click="CloseButton_Click"
+            Cursor="Hand"
+            Background="#AA111111"
+            Foreground="White"
+            BorderThickness="0"
+            Visibility="Collapsed">
+        <Button.Resources>
+            <Style TargetType="Border">
+                <Setter Property="CornerRadius" Value="8"/>
+            </Style>
+        </Button.Resources>
+        <Button.Style>
+            <Style TargetType="Button">
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#CCB71C1C"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </Button.Style>
+    </Button>
+    </Grid>
 </UserControl>

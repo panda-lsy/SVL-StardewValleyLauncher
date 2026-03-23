@@ -180,6 +180,54 @@
                     </RadioButton.Style>
                 </RadioButton>
 
+                <RadioButton
+                             GroupName="Navigation"
+                             IsChecked="{Binding CurrentPage, Converter={StaticResource PageToBoolConverter}, ConverterParameter=DownloadFailure}"
+                             Foreground="White"
+                             FontSize="14"
+                             Padding="12,8"
+                             Cursor="Hand"
+                             Command="{Binding NavigateToTasksCommand}">
+                    <RadioButton.Content>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="任务" VerticalAlignment="Center"/>
+                            <Ellipse Width="7"
+                                     Height="7"
+                                     Fill="#FFEF5350"
+                                     Margin="6,0,0,6"
+                                     VerticalAlignment="Top"
+                                     Stroke="White"
+                                     StrokeThickness="0.8"
+                                     Visibility="{Binding ShowTaskNavNotification, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </StackPanel>
+                    </RadioButton.Content>
+                    <RadioButton.Style>
+                        <Style TargetType="RadioButton">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="RadioButton">
+                                        <Border Background="Transparent"
+                                                Padding="{TemplateBinding Padding}"
+                                                CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#33ffffff" />
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter Property="Background" Value="#33ffffff" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </RadioButton.Style>
+                </RadioButton>
+
                 <RadioButton Content="设置"
                              GroupName="Navigation"
                              IsChecked="{Binding CurrentPage, Converter={StaticResource PageToBoolConverter}, ConverterParameter=Settings}"
@@ -850,7 +898,14 @@
                                            Height="60"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Bottom"
-                                           Margin="0,0,24,24"/>
+                                           Margin="0,0,24,24"
+                                           PreviewMouseLeftButtonDown="DownloadFloatingButton_PreviewMouseLeftButtonDown"
+                                           PreviewMouseMove="DownloadFloatingButton_PreviewMouseMove"
+                                           PreviewMouseLeftButtonUp="DownloadFloatingButton_PreviewMouseLeftButtonUp">
+                <controls:DownloadFloatingButton.RenderTransform>
+                    <TranslateTransform/>
+                </controls:DownloadFloatingButton.RenderTransform>
+            </controls:DownloadFloatingButton>
         </Grid>  <!-- 左右分栏布局结束 -->
 
         <!-- 通知容器（位于所有内容之上） -->

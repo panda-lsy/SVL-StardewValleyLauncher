@@ -27,6 +27,8 @@ public partial class ModSearchViewModel : ObservableObject
     private bool _suppressModTypeReload;
     private string _activeSearchName = string.Empty;
     private readonly Dictionary<long, List<string>> _nexusSupportedGameVersionsCache = new();
+    private bool _nexusGameVersionFetchDisabledByAuth;
+    private bool _hasHandledNexusTokenExpired;
 
     public ModSearchViewModel()
     {
@@ -185,6 +187,11 @@ public partial class ModSearchViewModel : ObservableObject
 
     private void HandleNexusModsTokenExpired(string scene)
     {
+        if (_hasHandledNexusTokenExpired)
+            return;
+
+        _hasHandledNexusTokenExpired = true;
+        _nexusGameVersionFetchDisabledByAuth = true;
         StatusMessage = "NexusMods 登录已过期，请重新登录";
         NexusAuthStateHelper.HandleTokenExpired(scene, "ModSearchViewModel", showNotification: true);
     }
@@ -502,6 +509,9 @@ public partial class ModSearchViewModel : ObservableObject
         if (modId <= 0)
             return new List<string>();
 
+        if (_nexusGameVersionFetchDisabledByAuth)
+            return new List<string>();
+
         if (_nexusSupportedGameVersionsCache.TryGetValue(modId, out var cached))
             return cached;
 
@@ -519,6 +529,14 @@ public partial class ModSearchViewModel : ObservableObject
 
             _nexusSupportedGameVersionsCache[modId] = versions;
             return versions;
+        }
+        catch (SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsTokenExpiredException)
+        {
+            // Token 过期后停止逐条请求版本信息，避免后台日志刷屏。
+            _nexusGameVersionFetchDisabledByAuth = true;
+            _nexusSupportedGameVersionsCache[modId] = new List<string>();
+            HandleNexusModsTokenExpired("GetNexusSupportedGameVersionsAsync");
+            return _nexusSupportedGameVersionsCache[modId];
         }
         catch (Exception ex)
         {

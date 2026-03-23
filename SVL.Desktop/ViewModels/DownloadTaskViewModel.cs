@@ -28,6 +28,7 @@ public partial class DownloadTaskViewModel : ObservableObject
             OnPropertyChanged(nameof(StatusMessage));
             OnPropertyChanged(nameof(IsActive));
             OnPropertyChanged(nameof(IsCompleted));
+            OnPropertyChanged(nameof(IsFailed));
         };
         timer.Start();
     }
@@ -60,6 +61,8 @@ public partial class DownloadTaskViewModel : ObservableObject
     public bool IsCompleted => Status == DownloadTaskStatus.Completed ||
                               Status == DownloadTaskStatus.Failed ||
                               Status == DownloadTaskStatus.Cancelled;
+
+    public bool IsFailed => Status == DownloadTaskStatus.Failed;
 
     /// <summary>
     /// 是否被选中（用于任务切换界面）

@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using SVL.Core.Download;
 using SVL.Core.Download.NexusMods;
 using SVL.Core.Logging;
+using SVL.Desktop.Controls;
 
 namespace SVL.Desktop.ViewModels;
 
@@ -49,6 +50,9 @@ public partial class TaskStatusViewModel : ObservableObject
     private bool _isCancelled = false;  // true=已取消, false=未取消
 
     [ObservableProperty]
+    private bool _isCompleted = false;  // true=已完成, false=未完成
+
+    [ObservableProperty]
     private double _progress = 0;
 
     [ObservableProperty]
@@ -82,6 +86,18 @@ public partial class TaskStatusViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _showActionButton = true;
+
+    [ObservableProperty]
+    private bool _isRetryableFailure;
+
+    [ObservableProperty]
+    private bool _isEmptyState;
+
+    public bool ShowRetryCancelButtons => IsFailed && IsRetryableFailure;
+
+    public bool ShowSingleActionButton => ShowActionButton && !ShowRetryCancelButtons;
+
+    public bool ShowMainStateContent => !IsEmptyState;
 
     [ObservableProperty]
     private string _adviceTitle = "建议操作";
@@ -1211,16 +1227,21 @@ public partial class TaskStatusViewModel : ObservableObject
         return $"{len:0.##} {sizes[order]}";
     }
 
-    public string StatusIcon => IsFailed ? "⚠" : (IsCancelled ? "ⓘ" : "⏳");
+    public string StatusIcon => IsEmptyState ? "📭" : (IsFailed ? "⚠" : (IsCancelled ? "ⓘ" : (IsCompleted ? "✓" : "⏳")));
 
     public string StatusTitle
     {
         get
         {
+            if (IsEmptyState)
+                return "空任务";
+
             if (IsFailed)
                 return "失败";
             if (IsCancelled)
                 return "已取消";
+            if (IsCompleted)
+                return "已完成";
 
             var status = StatusMessage ?? string.Empty;
             if (status.IndexOf("下载", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -1232,11 +1253,15 @@ public partial class TaskStatusViewModel : ObservableObject
         }
     }
 
-    public Brush StatusColor => IsFailed
-        ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF6B6B"))
-        : (IsCancelled
-            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F57C00"))
-            : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4CAF50")));
+    public Brush StatusColor => IsEmptyState
+        ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#607D8B"))
+        : (IsFailed
+            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF6B6B"))
+            : (IsCancelled
+                ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F57C00"))
+                : (IsCompleted
+                    ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2E7D32"))
+                    : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4CAF50")))));
 
     public TaskStatusViewModel(MainWindowViewModel mainViewModel)
     {
@@ -1249,6 +1274,36 @@ public partial class TaskStatusViewModel : ObservableObject
         };
         _refreshTimer.Tick += RefreshProgress;
         _refreshTimer.Start();
+
+        InitializeDefaultTaskState();
+    }
+
+    private void InitializeDefaultTaskState()
+    {
+        var activeTask = DownloadManager.Instance.GetActiveTasks().FirstOrDefault();
+        if (activeTask != null)
+        {
+            SetProgressInfo(activeTask, forceUpdate: true);
+            return;
+        }
+
+        var retryableFailedTask = DownloadManager.Instance.GetCompletedTasks()
+            .FirstOrDefault(t => t.Status == DownloadTaskStatus.Failed &&
+                                 !string.IsNullOrWhiteSpace(t.Name) &&
+                                 t.Name.StartsWith("未匹配 NXM Mod", StringComparison.OrdinalIgnoreCase));
+
+        if (retryableFailedTask != null)
+        {
+            SetFailureInfo(
+                retryableFailedTask.Name,
+                retryableFailedTask.StatusMessage,
+                retryableFailedTask.StatusMessage,
+                null,
+                retryableFailedTask.Id);
+            return;
+        }
+
+        SetEmptyState();
     }
 
     /// <summary>
@@ -1547,6 +1602,7 @@ public partial class TaskStatusViewModel : ObservableObject
         }
         else if (task.Status == DownloadTaskStatus.Completed)
         {
+            SetCompletedInfo(task.Name, task.StatusMessage, task.Id);
             _refreshTimer.Stop();
         }
     }
@@ -1556,6 +1612,8 @@ public partial class TaskStatusViewModel : ObservableObject
         OnPropertyChanged(nameof(StatusIcon));
         OnPropertyChanged(nameof(StatusTitle));
         OnPropertyChanged(nameof(StatusColor));
+        OnPropertyChanged(nameof(ShowRetryCancelButtons));
+        OnPropertyChanged(nameof(ShowSingleActionButton));
     }
 
     partial void OnIsCancelledChanged(bool value)
@@ -1563,6 +1621,33 @@ public partial class TaskStatusViewModel : ObservableObject
         OnPropertyChanged(nameof(StatusIcon));
         OnPropertyChanged(nameof(StatusTitle));
         OnPropertyChanged(nameof(StatusColor));
+        OnPropertyChanged(nameof(ShowRetryCancelButtons));
+        OnPropertyChanged(nameof(ShowSingleActionButton));
+    }
+
+    partial void OnIsCompletedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StatusIcon));
+        OnPropertyChanged(nameof(StatusTitle));
+        OnPropertyChanged(nameof(StatusColor));
+        OnPropertyChanged(nameof(ShowRetryCancelButtons));
+        OnPropertyChanged(nameof(ShowSingleActionButton));
+    }
+
+    partial void OnIsRetryableFailureChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowRetryCancelButtons));
+        OnPropertyChanged(nameof(ShowSingleActionButton));
+    }
+
+    partial void OnIsEmptyStateChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StatusIcon));
+        OnPropertyChanged(nameof(StatusTitle));
+        OnPropertyChanged(nameof(StatusColor));
+        OnPropertyChanged(nameof(ShowMainStateContent));
+        OnPropertyChanged(nameof(ShowRetryCancelButtons));
+        OnPropertyChanged(nameof(ShowSingleActionButton));
     }
 
     partial void OnStatusMessageChanged(string value)
@@ -1665,6 +1750,8 @@ public partial class TaskStatusViewModel : ObservableObject
         DetailMessage = detailMessage;
         IsFailed = true;
         IsCancelled = false;
+        IsCompleted = false;
+        IsEmptyState = false;
         ProgressDetail = "";
 
         if (exception?.InnerException != null)
@@ -1678,16 +1765,30 @@ public partial class TaskStatusViewModel : ObservableObject
             InnerErrorMessage = "";
         }
 
-        // 失败状态：显示"关闭页面"按钮
-        ActionButtonText = "关闭页面";
+        IsRetryableFailure = !string.IsNullOrWhiteSpace(taskName) &&
+                             taskName.StartsWith("未匹配 NXM Mod", StringComparison.OrdinalIgnoreCase);
+
+        // 未匹配 NXM 失败可直接重试，其余失败显示关闭页面。
+        ActionButtonText = IsRetryableFailure ? "重试任务" : "关闭页面";
         ShowActionButton = true;
         AdviceTitle = "建议操作";
-        SetSuggestedActions(
-            "检查网络连接是否正常",
-            "尝试重新下载或切换到其他来源",
-            "查看日志文件获取更多信息",
-            "检查磁盘空间是否充足"
-        );
+        if (IsRetryableFailure)
+        {
+            SetSuggestedActions(
+                "完成 NexusMods 重新登录后，可直接点击“重试任务”",
+                "若仍失败，请检查 NXM 回调是否完整",
+                "可在下载管理中查看任务详情"
+            );
+        }
+        else
+        {
+            SetSuggestedActions(
+                "检查网络连接是否正常",
+                "尝试重新下载或切换到其他来源",
+                "查看日志文件获取更多信息",
+                "检查磁盘空间是否充足"
+            );
+        }
     }
 
     /// <summary>
@@ -1730,10 +1831,18 @@ public partial class TaskStatusViewModel : ObservableObject
             return;
         }
 
+        if (task.Status == DownloadTaskStatus.Completed)
+        {
+            SetCompletedInfo(task.Name, task.StatusMessage, task.Id);
+            return;
+        }
+
         TaskName = task.Name;
         Progress = task.Progress;
         IsFailed = false;
         IsCancelled = false;
+        IsCompleted = false;
+        IsEmptyState = false;
         HasInnerError = false;
 
         // 解析 StatusMessage：格式为 "模组下载中\nXX.XX% XXMB/XXMB"
@@ -1897,6 +2006,9 @@ public partial class TaskStatusViewModel : ObservableObject
         StatusMessage = "已取消";
         IsFailed = false;
         IsCancelled = true;
+        IsCompleted = false;
+        IsEmptyState = false;
+        IsRetryableFailure = false;
         HasInnerError = false;
 
         // 取消状态：显示"关闭页面"按钮
@@ -1910,6 +2022,33 @@ public partial class TaskStatusViewModel : ObservableObject
         );
     }
 
+    /// <summary>
+    /// 设置完成信息
+    /// </summary>
+    public void SetCompletedInfo(string taskName, string statusMessage, string taskId = "")
+    {
+        if (!string.IsNullOrWhiteSpace(taskId))
+            _trackedTaskId = taskId;
+
+        TaskName = taskName;
+        StatusMessage = string.IsNullOrWhiteSpace(statusMessage) ? "任务已完成" : statusMessage;
+        Progress = 100;
+        IsFailed = false;
+        IsCancelled = false;
+        IsCompleted = true;
+        IsEmptyState = false;
+        IsRetryableFailure = false;
+        HasInnerError = false;
+
+        ActionButtonText = "关闭页面";
+        ShowActionButton = true;
+        AdviceTitle = "提示";
+        SetSuggestedActions(
+            "任务已完成，可继续执行下一步操作",
+            "如需查看历史任务，请前往下载管理页面"
+        );
+    }
+
     private void SetSuggestedActions(params string[] actions)
     {
         SuggestedActions.Clear();
@@ -1918,6 +2057,34 @@ public partial class TaskStatusViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(action))
                 SuggestedActions.Add(action);
         }
+    }
+
+    public void SetEmptyState()
+    {
+        _trackedTaskId = string.Empty;
+        TaskName = "当前没有进行中的任务";
+        StatusMessage = "暂无可展示的任务状态";
+        ErrorMessage = string.Empty;
+        DetailMessage = string.Empty;
+        InnerErrorMessage = string.Empty;
+        Progress = 0;
+        ProgressDetail = string.Empty;
+        HasInnerError = false;
+        IsFailed = false;
+        IsCancelled = false;
+        IsCompleted = false;
+        IsRetryableFailure = false;
+        IsEmptyState = true;
+        ShowActionButton = false;
+        ActionButtonText = string.Empty;
+        AdviceTitle = "建议操作";
+        SetSuggestedActions(
+            "前往下载页发起新任务",
+            "下载过程中可通过顶部“任务”或右下角按钮查看进度"
+        );
+
+        RefreshActiveTasks();
+        _refreshTimer.Stop();
     }
 
     /// <summary>
@@ -1934,6 +2101,15 @@ public partial class TaskStatusViewModel : ObservableObject
             {
                 currentTask = DownloadManager.Instance.GetAllTasks()
                     .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+
+                if (currentTask != null &&
+                    currentTask.Status != DownloadTaskStatus.Pending &&
+                    currentTask.Status != DownloadTaskStatus.Downloading &&
+                    currentTask.Status != DownloadTaskStatus.Installing &&
+                    currentTask.Status != DownloadTaskStatus.WaitingConfirmation)
+                {
+                    currentTask = null;
+                }
             }
 
             if (currentTask == null)
@@ -1941,7 +2117,8 @@ public partial class TaskStatusViewModel : ObservableObject
                 currentTask = DownloadManager.Instance.GetAllTasks()
                     .FirstOrDefault(t => t.Status == DownloadTaskStatus.Downloading ||
                                        t.Status == DownloadTaskStatus.Installing ||
-                                       t.Status == DownloadTaskStatus.Pending);
+                                       t.Status == DownloadTaskStatus.Pending ||
+                                       t.Status == DownloadTaskStatus.WaitingConfirmation);
             }
 
             if (currentTask != null)
@@ -1985,17 +2162,83 @@ public partial class TaskStatusViewModel : ObservableObject
     /// 操作按钮命令（根据状态执行不同操作）
     /// </summary>
     [RelayCommand]
-    private void ExecuteAction()
+    private async System.Threading.Tasks.Task ExecuteAction()
     {
+        if (IsFailed && IsRetryableFailure)
+        {
+            var retried = await DownloadRightViewModel.RetryUnmatchedNxmTaskAsync(_trackedTaskId);
+            if (!retried)
+            {
+                SvlMessageBox.Warning("该任务无法重试，可能上下文已失效。", "无法重试");
+                return;
+            }
+
+            // 先切回“进行中可取消”状态，避免重试瞬间仍停留在失败态导致无法取消。
+            IsFailed = false;
+            IsRetryableFailure = false;
+            IsCancelled = false;
+            IsCompleted = false;
+            IsEmptyState = false;
+            ShowActionButton = true;
+            ActionButtonText = "取消任务";
+            StatusMessage = "重试任务已启动";
+            ProgressDetail = "正在准备下载...";
+            AdviceTitle = "提示";
+            SetSuggestedActions(
+                "任务正在重试，可随时点击“取消任务”中止",
+                "若长时间无进度，请检查网络与登录状态"
+            );
+
+            _trackedTaskId = string.Empty;
+
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    await TryBindRetryActiveTaskAsync();
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("[TaskStatusViewModel] 重试后绑定活动任务失败", ex);
+                }
+            });
+            return;
+        }
+
         if (IsFailed || IsCancelled)
         {
             // 失败或取消状态：关闭页面
             GoBack();
         }
+        else if (IsCompleted)
+        {
+            // 完成状态：关闭页面
+            GoBack();
+        }
         else
         {
             // 进行中状态：取消任务
-            CancelTask();
+            await CancelTask();
+        }
+    }
+
+    private async System.Threading.Tasks.Task TryBindRetryActiveTaskAsync()
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            var activeTask = DownloadManager.Instance.GetActiveTasks()
+                .FirstOrDefault(t => !string.IsNullOrWhiteSpace(t.Name) &&
+                                     t.Name.StartsWith("未匹配 NXM Mod", StringComparison.OrdinalIgnoreCase))
+                ?? DownloadManager.Instance.GetActiveTasks().FirstOrDefault();
+
+            if (activeTask != null)
+            {
+                SetProgressInfo(activeTask, forceUpdate: true);
+                _refreshTimer.Start();
+                return;
+            }
+
+            await System.Threading.Tasks.Task.Delay(120);
         }
     }
 
@@ -2003,6 +2246,12 @@ public partial class TaskStatusViewModel : ObservableObject
     private void GoBack()
     {
         _mainViewModel.CurrentPage = PageType.Launch;
+    }
+
+    [RelayCommand]
+    private void GoToDownload()
+    {
+        _mainViewModel.CurrentPage = PageType.Download;
     }
 
     /// <summary>

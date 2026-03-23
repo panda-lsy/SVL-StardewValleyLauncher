@@ -224,6 +224,12 @@ public partial class SettingsViewModel : ObservableObject
     private bool _enableDownloadCache = true;
 
     /// <summary>
+    /// 是否启用右下角任务浮动按钮
+    /// </summary>
+    [ObservableProperty]
+    private bool _enableDownloadFloatingTaskButton = true;
+
+    /// <summary>
     /// 是否正在清除 NexusMods 搜索缓存
     /// </summary>
     [ObservableProperty]
@@ -584,6 +590,7 @@ public partial class SettingsViewModel : ObservableObject
                 // NexusMods
                 EnableNexusModsSearchCache = EnableNexusModsSearchCache,
                 EnableDownloadCache = EnableDownloadCache,
+                EnableDownloadFloatingTaskButton = EnableDownloadFloatingTaskButton,
 
                 // 缓存
                 CacheRetentionMinutes = CacheRetentionMinutes,
@@ -1592,6 +1599,7 @@ public partial class SettingsViewModel : ObservableObject
             // NexusMods
             EnableNexusModsSearchCache = settings.EnableNexusModsSearchCache;
             EnableDownloadCache = settings.EnableDownloadCache;
+            EnableDownloadFloatingTaskButton = settings.EnableDownloadFloatingTaskButton;
 
             // 缓存时长
             CacheRetentionMinutes = settings.CacheRetentionMinutes <= 0 ? 60 : settings.CacheRetentionMinutes;
@@ -1670,6 +1678,12 @@ public partial class SettingsViewModel : ObservableObject
 
     partial void OnEnableDownloadCacheChanged(bool value)
     {
+        AutoSave();
+    }
+
+    partial void OnEnableDownloadFloatingTaskButtonChanged(bool value)
+    {
+        DownloadManagerViewModel.Instance.SetFloatingButtonEnabled(value, showNotification: false);
         AutoSave();
     }
 

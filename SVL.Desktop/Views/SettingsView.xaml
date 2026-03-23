@@ -651,6 +651,10 @@
                                                       IsChecked="{Binding EnableDownloadCache}"
                                                       Style="{StaticResource SettingCheckBoxStyle}"
                                                       Margin="0,4,0,0"/>
+                                            <CheckBox Content="显示任务管理器（右下角下载）按钮"
+                                                      IsChecked="{Binding EnableDownloadFloatingTaskButton}"
+                                                      Style="{StaticResource SettingCheckBoxStyle}"
+                                                      Margin="0,4,0,0"/>
 
                                             <!-- 打开缓存文件夹按钮 -->
                                             <Button Content="打开缓存文件夹"
@@ -784,6 +788,11 @@
                                           IsChecked="{Binding ShowModTypeFilterDisabledNotice}"
                                           Foreground="{DynamicResource ColorBrush1}"
                                           Margin="0,4,0,0"/>
+
+                                <CheckBox Content="显示任务管理器（右下角下载）按钮"
+                                          IsChecked="{Binding EnableDownloadFloatingTaskButton}"
+                                          Style="{StaticResource SettingCheckBoxStyle}"
+                                          Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
 

@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using SVL.Core.Stardew.Mod;
 
 namespace SVL.Core.Stardew.Mod;
@@ -52,12 +53,25 @@ public class SdVMod : INotifyPropertyChanged
         .Concat(CustomTags ?? [])
         .Where(tag => !string.IsNullOrWhiteSpace(tag))
         .Distinct(StringComparer.OrdinalIgnoreCase);
-    public IEnumerable<string> DisplayTags => (Tags ?? [])
-        .Where(tag => !string.IsNullOrWhiteSpace(tag))
-        .Select(tag => $"📁 {tag}")
-        .Concat((CustomTags ?? [])
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Select(tag => $"🏷 {tag}"));
+    public IEnumerable<string> DisplayTags
+    {
+        get
+        {
+            var prefixTag = TryExtractPrefixCategory(FolderName);
+
+            var folderDisplay = (Tags ?? [])
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => string.Equals(tag, prefixTag, StringComparison.OrdinalIgnoreCase)
+                    ? $"🧩 {tag}"
+                    : $"📂 {tag}");
+
+            var customDisplay = (CustomTags ?? [])
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => $"🏷 {tag}");
+
+            return folderDisplay.Concat(customDisplay);
+        }
+    }
     public bool HasAnyTag => DisplayTags.Any();
     public string TagsDisplay => !AllTags.Any() ? string.Empty : string.Join(" / ", AllTags);
     public bool HasChildren => ChildMods.Count > 0;
@@ -254,6 +268,24 @@ public class SdVMod : INotifyPropertyChanged
         OnPropertyChanged(nameof(DisplayTags));
         OnPropertyChanged(nameof(HasAnyTag));
         OnPropertyChanged(nameof(TagsDisplay));
+    }
+
+    private static string TryExtractPrefixCategory(string? folderName)
+    {
+        if (string.IsNullOrWhiteSpace(folderName))
+            return string.Empty;
+
+        var trimmed = folderName.Trim();
+
+        var squareMatch = Regex.Match(trimmed, @"^\[(?<name>[^\]]{1,64})\]");
+        if (squareMatch.Success)
+            return squareMatch.Groups["name"].Value.Trim();
+
+        var cnSquareMatch = Regex.Match(trimmed, @"^【(?<name>[^】]{1,64})】");
+        if (cnSquareMatch.Success)
+            return cnSquareMatch.Groups["name"].Value.Trim();
+
+        return string.Empty;
     }
 }
 

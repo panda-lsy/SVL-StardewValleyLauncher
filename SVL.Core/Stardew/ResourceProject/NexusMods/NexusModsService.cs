@@ -758,6 +758,11 @@ public class NexusModsService
             Log.Info($"[NexusMods] 下载已取消: modId={modId}, fileId={fileId}");
             return false;
         }
+        catch (NexusModsTokenExpiredException)
+        {
+            // 401 Token 过期应由上层统一处理登录态与 UI 提示
+            throw;
+        }
         catch (Exception ex)
         {
             Log.Error(ex, $"[NexusMods] 下载 Mod 失败: modId={modId}, fileId={fileId}");
@@ -859,6 +864,11 @@ public class NexusModsService
         {
             Log.Info($"[NexusMods] 下载已取消: modId={modId}, fileId={fileId}");
             return false;
+        }
+        catch (NexusModsTokenExpiredException)
+        {
+            // 401 Token 过期应由上层统一处理登录态与 UI 提示
+            throw;
         }
         catch (Exception ex)
         {

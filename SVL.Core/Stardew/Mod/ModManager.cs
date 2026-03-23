@@ -100,9 +100,7 @@ public class ModManager : IModManager
             Manifest = manifest,
             Dependencies = manifest.Dependencies?.Select(d => d.UniqueId).ToList() ?? [],
             Thumbnail = Path.Combine(modDir, "icon.png"),
-            Tags = relativeParts.Length > 1
-                ? relativeParts.Take(relativeParts.Length - 1).Select(NormalizeFolderSegment).ToList()
-                : []
+            Tags = BuildModTags(relativeParts)
         };
 
         ApplySourceCredential(sdvMod, TryLoadSourceCredential(modDir));
@@ -332,6 +330,45 @@ public class ModManager : IModManager
     private static string NormalizeFolderSegment(string? value)
     {
         return ModFolderNaming.NormalizeFolderName(value);
+    }
+
+    private static List<string> BuildModTags(string[] relativeParts)
+    {
+        var tags = relativeParts.Length > 1
+            ? relativeParts.Take(relativeParts.Length - 1).Select(NormalizeFolderSegment).ToList()
+            : [];
+
+        if (relativeParts.Length == 0)
+            return tags;
+
+        var modFolderName = ModFolderNaming.NormalizeFolderName(relativeParts[relativeParts.Length - 1]);
+        var prefixCategory = TryExtractPrefixCategory(modFolderName);
+        if (!string.IsNullOrWhiteSpace(prefixCategory) &&
+            !tags.Any(t => string.Equals(t, prefixCategory, StringComparison.OrdinalIgnoreCase)))
+        {
+            tags.Add(prefixCategory);
+        }
+
+        return tags;
+    }
+
+    private static string TryExtractPrefixCategory(string? folderName)
+    {
+        if (string.IsNullOrWhiteSpace(folderName))
+            return string.Empty;
+
+        var trimmed = folderName.Trim();
+
+        // 兼容 [分类] 和 【分类】 两种前缀风格
+        var squareMatch = Regex.Match(trimmed, @"^\[(?<name>[^\]]{1,64})\]");
+        if (squareMatch.Success)
+            return squareMatch.Groups["name"].Value.Trim();
+
+        var cnSquareMatch = Regex.Match(trimmed, @"^【(?<name>[^】]{1,64})】");
+        if (cnSquareMatch.Success)
+            return cnSquareMatch.Groups["name"].Value.Trim();
+
+        return string.Empty;
     }
 
     private void MigrateLegacyDisabledFolders(string modsPath)

@@ -34,12 +34,19 @@ public enum VersionSettingsPage
 
 public sealed class ModTagFilterOption
 {
+    private const string FolderPrefix = "📂 ";
+    private const string PrefixFolderPrefix = "🧩 ";
+    private const string CustomTagPrefix = "🏷 ";
+
     public string Key { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string TagId { get; set; } = string.Empty;
     public bool IsFolderTag { get; set; }
+    public bool IsPrefixFolderTag { get; set; }
     public bool IsAllOption { get; set; }
-    public string DisplayText => IsAllOption ? Name : $"{(IsFolderTag ? "📁" : "🏷")} {Name}";
+    public string DisplayText => IsAllOption
+        ? Name
+        : $"{(IsFolderTag ? (IsPrefixFolderTag ? PrefixFolderPrefix : FolderPrefix) : CustomTagPrefix)}{Name}";
 }
 
 public sealed partial class ModTagPanelItem : ObservableObject
@@ -1881,10 +1888,18 @@ public partial class VersionSettingsRightViewModel : ObservableObject
 
         var previousKey = SelectedTagFilter?.Key;
 
-        var folderTagNameIndex = Mods
-            .SelectMany(mod => mod.Tags ?? [])
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var folderTagSourceFlags = Mods
+            .SelectMany(mod => (mod.Tags ?? [])
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Select(tag => new
+                {
+                    Name = tag,
+                    IsPrefix = string.Equals(tag, TryExtractPrefixCategory(mod.FolderName), StringComparison.OrdinalIgnoreCase)
+                }))
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Any(item => item.IsPrefix), StringComparer.OrdinalIgnoreCase);
+
+        var folderTagNameIndex = folderTagSourceFlags.Keys
             .OrderBy(tag =>
             {
                 var index = _modTagConfig.FolderTagOrder.FindIndex(name => string.Equals(name, tag, StringComparison.OrdinalIgnoreCase));
@@ -1895,7 +1910,8 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             {
                 Key = $"folder:{tag}",
                 Name = tag,
-                IsFolderTag = true
+                IsFolderTag = true,
+                IsPrefixFolderTag = folderTagSourceFlags.TryGetValue(tag, out var isPrefix) && isPrefix
             })
             .ToList();
 
@@ -2582,13 +2598,59 @@ public partial class VersionSettingsRightViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(raw))
             return (string.Empty, null);
 
-        if (raw.StartsWith("📁 ", StringComparison.Ordinal))
+        if (raw.StartsWith("🧩 ", StringComparison.Ordinal))
+            return (raw.Substring(2).Trim(), true);
+
+        if (raw.StartsWith("📂 ", StringComparison.Ordinal))
             return (raw.Substring(2).Trim(), true);
 
         if (raw.StartsWith("🏷 ", StringComparison.Ordinal))
             return (raw.Substring(2).Trim(), false);
 
+        // 兼容历史显示格式
+        if (raw.StartsWith("📁 ", StringComparison.Ordinal))
+            return (raw.Substring(2).Trim(), true);
+
+        if (raw.StartsWith("分类: ", StringComparison.OrdinalIgnoreCase))
+            return (raw.Substring(4).Trim(), true);
+
+        if (raw.StartsWith("标签: ", StringComparison.OrdinalIgnoreCase))
+            return (raw.Substring(4).Trim(), false);
+
+        // 兼容通过 [] / 【】 约定表达的分类标签
+        if (raw.StartsWith("[", StringComparison.Ordinal) && raw.Contains(']'))
+        {
+            var end = raw.IndexOf(']');
+            if (end > 1)
+                return (raw.Substring(1, end - 1).Trim(), true);
+        }
+
+        if (raw.StartsWith("【", StringComparison.Ordinal) && raw.Contains('】'))
+        {
+            var end = raw.IndexOf('】');
+            if (end > 1)
+                return (raw.Substring(1, end - 1).Trim(), true);
+        }
+
         return (raw, null);
+    }
+
+    private static string TryExtractPrefixCategory(string? folderName)
+    {
+        if (string.IsNullOrWhiteSpace(folderName))
+            return string.Empty;
+
+        var trimmed = folderName.Trim();
+
+        var squareMatch = Regex.Match(trimmed, @"^\[(?<name>[^\]]{1,64})\]");
+        if (squareMatch.Success)
+            return squareMatch.Groups["name"].Value.Trim();
+
+        var cnSquareMatch = Regex.Match(trimmed, @"^【(?<name>[^】]{1,64})】");
+        if (cnSquareMatch.Success)
+            return cnSquareMatch.Groups["name"].Value.Trim();
+
+        return string.Empty;
     }
 
     private void RefreshPagedMods()

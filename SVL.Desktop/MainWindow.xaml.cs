@@ -13,6 +13,7 @@ using System.Windows.Shapes;
 using SVL.Core.Config;
 using SVL.Core.Modpack;
 using SVL.Core.Stardew.Mod;
+using SVL.Desktop.Controls;
 using SVL.Desktop.ViewModels;
 using SVL.Desktop.Views;
 
@@ -26,6 +27,13 @@ public partial class MainWindow : Window
     private double _restoreWidth;
     private double _restoreHeight;
     private DownloadManagerWindow? _downloadWindow;
+    private bool _isFloatingButtonPointerDown;
+    private bool _isDraggingFloatingButton;
+    private bool _didDragFloatingButton;
+    private Point _floatingDragStartPoint;
+    private Point _floatingDragStartOffset;
+    private const double FloatingButtonPadding = 24;
+    private const double FloatingButtonDragThreshold = 3;
 
     // Windows API 用于拖放支持
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
@@ -73,6 +81,7 @@ public partial class MainWindow : Window
         this.Loaded += MainWindow_Loaded;
         this.Closing += MainWindow_Closing;
         this.SourceInitialized += MainWindow_SourceInitialized;
+        this.SizeChanged += MainWindow_SizeChanged;
 
         // 订阅启动器配置更新事件
         LauncherConfigService.LauncherAppNameChanged += OnLauncherAppNameChanged;
@@ -146,8 +155,129 @@ public partial class MainWindow : Window
         if (DownloadFloatingButton != null)
         {
             DownloadFloatingButton.DataContext = DownloadManagerViewModel.Instance;
+            ClampFloatingButtonOffset();
             SVL.Core.Logging.Log.Info("[MainWindow] DownloadFloatingButton DataContext set to DownloadManagerViewModel");
         }
+    }
+
+    private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        ClampFloatingButtonOffset();
+    }
+
+    private void DownloadFloatingButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var transform = GetFloatingButtonTransform();
+        if (DownloadFloatingButton == null || transform == null)
+            return;
+
+        if (e.OriginalSource is DependencyObject source)
+        {
+            var button = FindParent<Button>(source);
+            if (button != null && string.Equals(button.Name, "CloseButton", StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        _isFloatingButtonPointerDown = true;
+        _isDraggingFloatingButton = false;
+        _didDragFloatingButton = false;
+        _floatingDragStartPoint = e.GetPosition(this);
+        _floatingDragStartOffset = new Point(transform.X, transform.Y);
+    }
+
+    private void DownloadFloatingButton_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        var transform = GetFloatingButtonTransform();
+        if ((!_isFloatingButtonPointerDown && !_isDraggingFloatingButton) || transform == null)
+            return;
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            ReleaseFloatingButtonDrag();
+            return;
+        }
+
+        var currentPoint = e.GetPosition(this);
+        var deltaX = currentPoint.X - _floatingDragStartPoint.X;
+        var deltaY = currentPoint.Y - _floatingDragStartPoint.Y;
+
+        if (!_didDragFloatingButton &&
+            (Math.Abs(deltaX) > FloatingButtonDragThreshold || Math.Abs(deltaY) > FloatingButtonDragThreshold))
+        {
+            _didDragFloatingButton = true;
+            _isDraggingFloatingButton = true;
+            if (DownloadFloatingButton?.IsMouseCaptured != true)
+            {
+                DownloadFloatingButton?.CaptureMouse();
+            }
+        }
+
+        if (!_isDraggingFloatingButton)
+            return;
+
+        transform.X = _floatingDragStartOffset.X + deltaX;
+        transform.Y = _floatingDragStartOffset.Y + deltaY;
+        ClampFloatingButtonOffset();
+    }
+
+    private void DownloadFloatingButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_didDragFloatingButton && DownloadFloatingButton is DownloadFloatingButton floatingButton)
+        {
+            floatingButton.SuppressNextClick = true;
+        }
+
+        ReleaseFloatingButtonDrag();
+    }
+
+    private void ReleaseFloatingButtonDrag()
+    {
+        _isFloatingButtonPointerDown = false;
+
+        _isDraggingFloatingButton = false;
+        if (DownloadFloatingButton?.IsMouseCaptured == true)
+        {
+            DownloadFloatingButton.ReleaseMouseCapture();
+        }
+    }
+
+    private void ClampFloatingButtonOffset()
+    {
+        var transform = GetFloatingButtonTransform();
+        if (DownloadFloatingButton == null || transform == null)
+            return;
+
+        var parent = DownloadFloatingButton.Parent as FrameworkElement;
+        if (parent == null)
+            return;
+
+        var containerWidth = parent.ActualWidth;
+        var containerHeight = parent.ActualHeight;
+        var buttonWidth = DownloadFloatingButton.ActualWidth > 0 ? DownloadFloatingButton.ActualWidth : DownloadFloatingButton.Width;
+        var buttonHeight = DownloadFloatingButton.ActualHeight > 0 ? DownloadFloatingButton.ActualHeight : DownloadFloatingButton.Height;
+
+        if (containerWidth <= 0 || containerHeight <= 0 || buttonWidth <= 0 || buttonHeight <= 0)
+            return;
+
+        var minX = -Math.Max(0, containerWidth - buttonWidth - (FloatingButtonPadding * 2));
+        var minY = -Math.Max(0, containerHeight - buttonHeight - (FloatingButtonPadding * 2));
+
+        transform.X = Clamp(transform.X, minX, 0);
+        transform.Y = Clamp(transform.Y, minY, 0);
+    }
+
+    private TranslateTransform? GetFloatingButtonTransform()
+    {
+        return DownloadFloatingButton?.RenderTransform as TranslateTransform;
+    }
+
+    private static double Clamp(double value, double min, double max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
     }
 
     /// <summary>

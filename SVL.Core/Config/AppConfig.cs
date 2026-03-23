@@ -94,6 +94,7 @@ public static class AppConfig
                 // NexusMods
                 EnableNexusModsSearchCache = settings.EnableNexusModsSearchCache,
                 EnableDownloadCache = settings.EnableDownloadCache,
+                EnableDownloadFloatingTaskButton = settings.EnableDownloadFloatingTaskButton,
 
                 // 缓存
                 CacheRetentionMinutes = settings.CacheRetentionMinutes,
@@ -388,6 +389,11 @@ public class AppSettings
     /// 启用下载文件缓存
     /// </summary>
     public bool EnableDownloadCache { get; set; } = true;
+
+    /// <summary>
+    /// 启用右下角下载任务浮动按钮
+    /// </summary>
+    public bool EnableDownloadFloatingTaskButton { get; set; } = true;
 
     /// <summary>
     /// 缓存时长（分钟），用于搜索缓存/下载缓存等 TTL 控制。

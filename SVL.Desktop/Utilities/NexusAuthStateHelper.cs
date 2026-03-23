@@ -48,6 +48,13 @@ internal static class NexusAuthStateHelper
 
             _ = dispatcher.BeginInvoke(new Action(() =>
             {
+                if (System.Windows.Application.Current?.MainWindow is MainWindow mainWindow &&
+                    mainWindow.DataContext is MainWindowViewModel mainViewModel &&
+                    mainViewModel.LeftPanelContent is SettingsViewModel settingsViewModel)
+                {
+                    settingsViewModel.RefreshNexusLoginStatus();
+                }
+
                 if (showNotification)
                 {
                     FloatingNotificationControl.Show(

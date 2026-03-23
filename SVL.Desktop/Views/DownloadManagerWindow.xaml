@@ -322,25 +322,46 @@
                                                            Margin="0,4,0,0"/>
                                             </StackPanel>
 
-                                            <!-- 移除按钮 -->
-                                            <Button Grid.Column="2"
-                                                    Content="移除"
-                                                    Width="60"
-                                                    Height="32"
-                                                    FontSize="12"
-                                                    Command="{Binding DataContext.RemoveTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding Id}"
-                                                    Background="Transparent"
-                                                    Foreground="{DynamicResource ColorBrushGray3}"
-                                                    BorderThickness="1"
-                                                    BorderBrush="{DynamicResource ColorBrush3}"
-                                                    Cursor="Hand">
-                                                <Button.Resources>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="CornerRadius" Value="4"/>
-                                                    </Style>
-                                                </Button.Resources>
-                                            </Button>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                <!-- 重试按钮（仅失败任务显示） -->
+                                                <Button Content="重试"
+                                                        Width="60"
+                                                        Height="32"
+                                                        FontSize="12"
+                                                        Margin="0,0,8,0"
+                                                        Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        Command="{Binding DataContext.RetryTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}"
+                                                        Background="{DynamicResource ColorBrush3}"
+                                                        Foreground="{DynamicResource ColorBrush1}"
+                                                        BorderThickness="0"
+                                                        Cursor="Hand">
+                                                    <Button.Resources>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="CornerRadius" Value="4"/>
+                                                        </Style>
+                                                    </Button.Resources>
+                                                </Button>
+
+                                                <!-- 移除按钮 -->
+                                                <Button Content="移除"
+                                                        Width="60"
+                                                        Height="32"
+                                                        FontSize="12"
+                                                        Command="{Binding DataContext.RemoveTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}"
+                                                        Background="Transparent"
+                                                        Foreground="{DynamicResource ColorBrushGray3}"
+                                                        BorderThickness="1"
+                                                        BorderBrush="{DynamicResource ColorBrush3}"
+                                                        Cursor="Hand">
+                                                    <Button.Resources>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="CornerRadius" Value="4"/>
+                                                        </Style>
+                                                    </Button.Resources>
+                                                </Button>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

@@ -121,6 +121,8 @@ public partial class DownloadItem : ObservableObject
 /// </summary>
 public partial class DownloadRightViewModel : ObservableObject
 {
+    private const long NexusSmapiModId = 2400;
+
     private enum BrowserDownloadKind
     {
         SmapiInstall,
@@ -134,6 +136,9 @@ public partial class DownloadRightViewModel : ObservableObject
 
     // 静态：跟踪等待 NXM 回调的 Collection 下载任务
     private static readonly Dictionary<(string Slug, int RevisionNumber), PendingBrowserDownload> _pendingCollectionDownloads = new();
+
+    // 静态：跟踪未匹配 NXM 兜底任务的重试上下文
+    private static readonly Dictionary<string, SVL.Core.Download.NexusMods.NxmUrl> _unmatchedNxmRetryMap = new();
 
     private MainWindowViewModel _mainViewModel;
     private DownloadCategory _currentCategory;
@@ -314,6 +319,7 @@ public partial class DownloadRightViewModel : ObservableObject
                 // 获取占位任务的取消令牌
                 var placeholderTask = SVL.Core.Download.DownloadManager.Instance.GetTask(pendingDownload.PlaceholderTaskId);
                 var cancellationToken = (placeholderTask as PlaceholderDownloadTask)?.CancellationToken ?? default;
+                var preExistingZipFiles = GetZipFileSnapshot(pendingDownload.TempDir);
 
                 var success = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.DownloadModAsync(
                     nxmUrl.ModId,
@@ -329,29 +335,48 @@ public partial class DownloadRightViewModel : ObservableObject
                 {
                     Log.Info($"[DownloadRightViewModel] NXM 回调下载成功");
 
-                    // 查找下载的文件
-                    var expectedZipPath = System.IO.Path.Combine(pendingDownload.TempDir, $"mod_{nxmUrl.ModId}_{nxmUrl.FileId}.zip");
-                    string? downloadedZipPath = null;
-
-                    if (System.IO.File.Exists(expectedZipPath))
-                    {
-                        downloadedZipPath = expectedZipPath;
-                        Log.Info($"[DownloadRightViewModel] 找到预期文件: {downloadedZipPath}");
-                    }
-                    else
-                    {
-                        var zipFiles = System.IO.Directory.GetFiles(pendingDownload.TempDir, "*.zip");
-                        if (zipFiles.Length > 0)
-                        {
-                            downloadedZipPath = zipFiles[0];
-                            Log.Info($"[DownloadRightViewModel] 找到 ZIP 文件: {downloadedZipPath}");
-                        }
-                    }
+                    var downloadedZipPath = ResolveDownloadedZipPath(
+                        pendingDownload.TempDir,
+                        nxmUrl.ModId,
+                        nxmUrl.FileId,
+                        preExistingZipFiles);
 
                     if (!string.IsNullOrEmpty(downloadedZipPath))
                     {
                         // *** 保存到缓存 ***
                         await NexusModsCacheService.SaveAsync(downloadedZipPath, nxmUrl.ModId, nxmUrl.FileId);
+
+                        // SMAPI (Nexus 2400) 的安装必须走实例安装流程，不能走普通 Mod 安装。
+                        if (pendingDownload.Kind == BrowserDownloadKind.ModInstall &&
+                            IsSmapiNexusDownload(nxmUrl.ModId, downloadedZipPath))
+                        {
+                            MainWindowViewModel? mainViewModel = null;
+                            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                var mainWindow = System.Windows.Application.Current?.MainWindow;
+                                mainViewModel = mainWindow?.DataContext as MainWindowViewModel;
+                            });
+
+                            if (mainViewModel != null)
+                            {
+                                SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                                    pendingDownload.PlaceholderTaskId,
+                                    status: SVL.Core.Download.DownloadTaskStatus.Completed,
+                                    statusMessage: "下载完成，已进入 SMAPI 安装流程。",
+                                    progress: 100);
+
+                                SVL.Core.Download.DownloadManager.Instance.RemoveTask(pendingDownload.PlaceholderTaskId);
+
+                                await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+                                {
+                                    await mainViewModel.CreateSmapiInstanceFromLocalZipAsync(downloadedZipPath);
+                                }).Task.Unwrap();
+
+                                return;
+                            }
+
+                            Log.Warn("[NxmDispatch] 识别为 SMAPI 安装包，但未找到 MainWindowViewModel，回退普通 Mod 流程");
+                        }
 
                         // 创建真正的安装任务（根据待处理类型）
                         SVL.Core.Download.DownloadTask installTask;
@@ -443,6 +468,418 @@ public partial class DownloadRightViewModel : ObservableObject
         else
         {
             Log.Warn($"[NxmDispatch] 收到未匹配的 NXM 回调，无任何任务处理此 URL: ModId={nxmUrl.ModId}, FileId={nxmUrl.FileId}");
+            await HandleUnmatchedNxmModCallbackAsync(nxmUrl);
+        }
+    }
+
+    /// <summary>
+    /// 处理未匹配的 NXM Mod 回调：下载到临时目录后复用“拖入 Mod 安装”流程（含实例选择）。
+    /// </summary>
+    private static async Task HandleUnmatchedNxmModCallbackAsync(SVL.Core.Download.NexusMods.NxmUrl nxmUrl)
+    {
+        string placeholderTaskId = string.Empty;
+        try
+        {
+            MainWindowViewModel? mainViewModel = null;
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var mainWindow = System.Windows.Application.Current?.MainWindow;
+                mainViewModel = mainWindow?.DataContext as MainWindowViewModel;
+            });
+
+            if (mainViewModel == null)
+            {
+                Log.Warn("[NxmDispatch] 未匹配回调兜底失败：未找到 MainWindowViewModel");
+                return;
+            }
+
+            var tempDir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SVL",
+                "temp",
+                "nxm-unmatched",
+                $"{nxmUrl.ModId}_{nxmUrl.FileId}_{Guid.NewGuid():N}");
+
+            System.IO.Directory.CreateDirectory(tempDir);
+
+            var placeholderTask = new SVL.Core.Download.PlaceholderDownloadTask(
+                $"未匹配 NXM Mod ({nxmUrl.ModId}/{nxmUrl.FileId})",
+                SVL.Core.Download.DownloadTaskType.Mod,
+                "正在下载临时安装包..."
+            );
+
+            await SVL.Core.Download.DownloadManager.Instance.AddTaskAsync(placeholderTask);
+            placeholderTaskId = placeholderTask.Id;
+            _unmatchedNxmRetryMap[placeholderTask.Id] = nxmUrl;
+
+            // 避免在 Splash/主窗口未可见阶段显示通知导致位置异常，等待窗口可见后再触发任务管理入口。
+            await WaitForMainWindowVisibleAsync();
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // 与用户点击右下角下载按钮行为一致：打开任务状态页查看下载进度。
+                if (DownloadManagerViewModel.Instance.ToggleCommand.CanExecute(null))
+                {
+                    DownloadManagerViewModel.Instance.ToggleCommand.Execute(null);
+                }
+            }));
+
+            SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.DownloadProgressCallback progressCallback =
+                (progress, statusMessage, bytesRead, totalBytes) =>
+                {
+                    System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        var normalizedStatus = string.IsNullOrWhiteSpace(statusMessage)
+                            ? "正在下载临时安装包..."
+                            : statusMessage;
+                        var isCompletedMessage = normalizedStatus.IndexOf("下载完成", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                        SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                            placeholderTask.Id,
+                            status: isCompletedMessage ? SVL.Core.Download.DownloadTaskStatus.Completed : SVL.Core.Download.DownloadTaskStatus.Downloading,
+                            statusMessage: normalizedStatus,
+                            progress: isCompletedMessage ? 100 : progress
+                        );
+                    }));
+                };
+
+            var cancellationToken = (placeholderTask as PlaceholderDownloadTask)?.CancellationToken ?? default;
+            var preExistingZipFiles = GetZipFileSnapshot(tempDir);
+
+            var success = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.DownloadModAsync(
+                nxmUrl.ModId,
+                nxmUrl.FileId,
+                tempDir,
+                nxmUrl.Key ?? string.Empty,
+                nxmUrl.Expires?.ToString() ?? string.Empty,
+                progressCallback,
+                cancellationToken);
+
+            if (!success)
+            {
+                var task = SVL.Core.Download.DownloadManager.Instance.GetTask(placeholderTask.Id);
+                var isCancelled = cancellationToken.IsCancellationRequested ||
+                                  (task != null && task.Status == SVL.Core.Download.DownloadTaskStatus.Cancelled);
+
+                if (isCancelled)
+                {
+                    SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                        placeholderTask.Id,
+                        status: SVL.Core.Download.DownloadTaskStatus.Cancelled,
+                        statusMessage: "用户已取消",
+                        progress: 0);
+                    _unmatchedNxmRetryMap.Remove(placeholderTask.Id);
+                    Log.Info("[NxmDispatch] 未匹配 NXM 回调下载已取消");
+                    return;
+                }
+
+                SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                    placeholderTask.Id,
+                    status: SVL.Core.Download.DownloadTaskStatus.Failed,
+                    statusMessage: "未匹配 NXM 回调的下载失败，请重试。",
+                    progress: 0);
+                FailUnmatchedNxmFallback("未匹配 NXM 回调的下载失败，请重试。", null);
+                return;
+            }
+
+            var downloadedZipPath = ResolveDownloadedZipPath(
+                tempDir,
+                nxmUrl.ModId,
+                nxmUrl.FileId,
+                preExistingZipFiles);
+
+            if (string.IsNullOrWhiteSpace(downloadedZipPath) || !System.IO.File.Exists(downloadedZipPath))
+            {
+                SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                    placeholderTask.Id,
+                    status: SVL.Core.Download.DownloadTaskStatus.Failed,
+                    statusMessage: "下载完成但未找到安装包，请稍后重试。",
+                    progress: 0);
+                FailUnmatchedNxmFallback("下载完成但未找到安装包，请稍后重试。", null);
+                return;
+            }
+
+            SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                placeholderTask.Id,
+                status: SVL.Core.Download.DownloadTaskStatus.Completed,
+                statusMessage: "下载完成，正在准备安装流程。",
+                progress: 100);
+
+            RemoveUnmatchedNxmPlaceholderTaskLater(placeholderTask.Id, TimeSpan.FromSeconds(8));
+
+            var isSmapiArchive = IsSmapiNexusDownload(nxmUrl.ModId, downloadedZipPath);
+
+            // 安装流程统一切回 UI 线程，避免跨线程访问 WPF 对象。
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                if (isSmapiArchive)
+                {
+                    SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                        placeholderTask.Id,
+                        status: SVL.Core.Download.DownloadTaskStatus.Completed,
+                        statusMessage: "下载完成，已进入 SMAPI 安装流程。",
+                        progress: 100);
+
+                    await mainViewModel.CreateSmapiInstanceFromLocalZipAsync(downloadedZipPath);
+                }
+                else
+                {
+                    SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                        placeholderTask.Id,
+                        status: SVL.Core.Download.DownloadTaskStatus.Completed,
+                        statusMessage: "下载完成，已进入安装实例选择。",
+                        progress: 100);
+
+                    // 复用拖入 Mod 的安装流程：若无活动实例会弹出“选择实例”对话框。
+                    await mainViewModel.HandleModInstallDropAsync(new[] { downloadedZipPath });
+                }
+            }).Task.Unwrap();
+
+            _unmatchedNxmRetryMap.Remove(placeholderTask.Id);
+        }
+        catch (SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsTokenExpiredException)
+        {
+            Log.Warn("[NxmDispatch] 未匹配 NXM 回调下载失败：NexusMods 登录已过期");
+
+            if (!string.IsNullOrWhiteSpace(placeholderTaskId))
+            {
+                SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                    placeholderTaskId,
+                    status: SVL.Core.Download.DownloadTaskStatus.Failed,
+                    statusMessage: "NexusMods 登录已过期，请登录后点击重试。",
+                    progress: 0);
+            }
+
+            NexusAuthStateHelper.HandleTokenExpired(
+                scene: "UnmatchedNxmCallback",
+                caller: "DownloadRightViewModel",
+                showNotification: true,
+                navigateToSettings: false);
+
+            FailUnmatchedNxmFallback("NexusMods 登录已过期，请前往设置页面重新登录后重试。", null);
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Info("[NxmDispatch] 未匹配 NXM 回调下载被取消");
+            if (!string.IsNullOrWhiteSpace(placeholderTaskId))
+            {
+                SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                    placeholderTaskId,
+                    status: SVL.Core.Download.DownloadTaskStatus.Cancelled,
+                    statusMessage: "用户已取消",
+                    progress: 0);
+                _unmatchedNxmRetryMap.Remove(placeholderTaskId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[NxmDispatch] 处理未匹配 NXM 回调失败");
+
+            if (!string.IsNullOrWhiteSpace(placeholderTaskId))
+            {
+                SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                    placeholderTaskId,
+                    status: SVL.Core.Download.DownloadTaskStatus.Failed,
+                    statusMessage: $"处理失败：{ex.Message}",
+                    progress: 0);
+            }
+
+            FailUnmatchedNxmFallback($"处理未匹配 NXM 回调失败：{ex.Message}", ex);
+        }
+    }
+
+    public static async Task<bool> RetryUnmatchedNxmTaskAsync(string taskId)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+            return false;
+
+        if (!_unmatchedNxmRetryMap.TryGetValue(taskId, out var nxmUrl))
+            return false;
+
+        try
+        {
+            var task = SVL.Core.Download.DownloadManager.Instance.GetTask(taskId);
+            if (task != null)
+            {
+                SVL.Core.Download.DownloadManager.Instance.RemoveTask(taskId);
+            }
+
+            _unmatchedNxmRetryMap.Remove(taskId);
+
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try
+                {
+                    await HandleUnmatchedNxmModCallbackAsync(nxmUrl);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, $"[NxmDispatch] 后台重试未匹配 NXM 任务失败: {taskId}");
+                }
+            });
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"[NxmDispatch] 重试未匹配 NXM 任务失败: {taskId}");
+            return false;
+        }
+    }
+
+    private static bool IsSmapiNexusDownload(long modId, string archivePath)
+    {
+        if (modId == NexusSmapiModId)
+        {
+            return true;
+        }
+
+        return ModArchiveDetector.LooksLikeSmapiInstallerSource(archivePath);
+    }
+
+    private static HashSet<string> GetZipFileSnapshot(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !System.IO.Directory.Exists(directory))
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return System.IO.Directory
+            .GetFiles(directory, "*.zip", System.IO.SearchOption.TopDirectoryOnly)
+            .Select(path => path)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string? ResolveDownloadedZipPath(
+        string directory,
+        long modId,
+        long fileId,
+        HashSet<string>? preExistingZipFiles = null)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !System.IO.Directory.Exists(directory))
+        {
+            return null;
+        }
+
+        var expected = System.IO.Path.Combine(directory, $"mod_{modId}_{fileId}.zip");
+        if (System.IO.File.Exists(expected))
+        {
+            Log.Info($"[NxmDispatch] 命中预期下载文件: {expected}");
+            return expected;
+        }
+
+        var zipFiles = System.IO.Directory.GetFiles(directory, "*.zip", System.IO.SearchOption.TopDirectoryOnly);
+        if (zipFiles.Length == 0)
+        {
+            return null;
+        }
+
+        if (preExistingZipFiles != null && preExistingZipFiles.Count > 0)
+        {
+            var newFiles = zipFiles
+                .Where(path => !preExistingZipFiles.Contains(path))
+                .OrderByDescending(path => System.IO.File.GetLastWriteTimeUtc(path))
+                .ToList();
+
+            if (newFiles.Count > 0)
+            {
+                Log.Info($"[NxmDispatch] 命中本次下载新文件: {newFiles[0]}");
+                return newFiles[0];
+            }
+        }
+
+        var latest = zipFiles
+            .OrderByDescending(path => System.IO.File.GetLastWriteTimeUtc(path))
+            .FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(latest))
+        {
+            Log.Warn($"[NxmDispatch] 未识别到新文件，回退使用最近 ZIP: {latest}");
+        }
+
+        return latest;
+    }
+
+    private static async Task WaitForMainWindowVisibleAsync()
+    {
+        for (var i = 0; i < 40; i++)
+        {
+            var ready = false;
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                var win = System.Windows.Application.Current.MainWindow;
+                ready = win != null && win.IsLoaded && win.IsVisible;
+            });
+
+            if (ready)
+                return;
+
+            await Task.Delay(100);
+        }
+    }
+
+    private static void FailUnmatchedNxmFallback(string message, Exception? ex)
+    {
+        if (ex != null)
+        {
+            Log.Error(ex, $"[NxmDispatch] {message}");
+        }
+        else
+        {
+            Log.Warn($"[NxmDispatch] {message}");
+        }
+
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            FloatingNotificationControl.Show(
+                title: "NXM 回调处理失败",
+                message: message,
+                autoCloseDelay: 5000,
+                notificationType: NotificationType.Error);
+        }));
+    }
+
+    private static async void RemoveUnmatchedNxmPlaceholderTaskLater(string taskId, TimeSpan delay)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+            return;
+
+        try
+        {
+            await Task.Delay(delay);
+
+            for (var i = 0; i < 5; i++)
+            {
+                var task = SVL.Core.Download.DownloadManager.Instance.GetTask(taskId);
+                if (task == null)
+                    return;
+
+                if (task.Status == SVL.Core.Download.DownloadTaskStatus.Completed)
+                {
+                    SVL.Core.Download.DownloadManager.Instance.RemoveTask(taskId);
+                    Log.Info($"[NxmDispatch] 已自动清理未匹配 NXM 临时任务: {taskId}");
+                    return;
+                }
+
+                // 缓存命中有时会先写入“下载完成”文案但状态还未切换，兜底矫正后再清理。
+                if ((task.StatusMessage ?? string.Empty).IndexOf("下载完成", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
+                        taskId,
+                        status: SVL.Core.Download.DownloadTaskStatus.Completed,
+                        statusMessage: task.StatusMessage,
+                        progress: 100);
+
+                    SVL.Core.Download.DownloadManager.Instance.RemoveTask(taskId);
+                    Log.Info($"[NxmDispatch] 已矫正状态并清理未匹配 NXM 临时任务: {taskId}");
+                    return;
+                }
+
+                await Task.Delay(1000);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[NxmDispatch] 自动清理未匹配 NXM 临时任务失败: {taskId}", ex);
         }
     }
 

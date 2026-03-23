@@ -89,6 +89,11 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private bool _openVersionSettingsAtModManage;
 
+    [ObservableProperty]
+    private bool _showTaskNavNotification;
+
+    private bool _taskNavNotificationDismissed;
+
     private TaskCompletionSource<bool> _loadComplete = new TaskCompletionSource<bool>();
 
     public MainWindowViewModel()
@@ -154,6 +159,18 @@ public partial class MainWindowViewModel : ObservableObject
 
     partial void OnCurrentPageChanged(PageType value)
     {
+        if (value == PageType.DownloadFailure)
+        {
+            _taskNavNotificationDismissed = true;
+            ShowTaskNavNotification = false;
+        }
+        else if (!_taskNavNotificationDismissed && ShouldShowTaskNavNotification())
+        {
+            ShowTaskNavNotification = true;
+        }
+
+        OnPropertyChanged(nameof(ShowTaskNavNotification));
+
         if (value != PageType.ModDetails)
         {
             _modDetailsHistory.Clear();
@@ -296,6 +313,52 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void NavigateToTasks()
+    {
+        NavigateToTasksPage();
+    }
+
+    public void NavigateToTasksPage()
+    {
+        ShowTaskNavNotification = false;
+        CurrentPage = PageType.DownloadFailure;
+
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (LeftPanelContent is not TaskStatusViewModel statusViewModel)
+            {
+                Log.Warn($"[MainWindowViewModel] LeftPanelContent 不是 TaskStatusViewModel: {LeftPanelContent?.GetType().Name}");
+                return;
+            }
+
+            var activeTasks = DownloadManager.Instance.GetActiveTasks();
+            if (activeTasks.Count > 0)
+            {
+                statusViewModel.SetProgressInfo(activeTasks[0], forceUpdate: true);
+                return;
+            }
+
+            var retryableFailedTask = DownloadManager.Instance.GetCompletedTasks()
+                .FirstOrDefault(t => t.Status == DownloadTaskStatus.Failed &&
+                                     !string.IsNullOrWhiteSpace(t.Name) &&
+                                     t.Name.StartsWith("未匹配 NXM Mod", StringComparison.OrdinalIgnoreCase));
+
+            if (retryableFailedTask != null)
+            {
+                statusViewModel.SetFailureInfo(
+                    retryableFailedTask.Name,
+                    retryableFailedTask.StatusMessage,
+                    retryableFailedTask.StatusMessage,
+                    null,
+                    retryableFailedTask.Id);
+                return;
+            }
+
+            statusViewModel.SetEmptyState();
+        }));
+    }
+
+    [RelayCommand]
     private void NavigateToInstances()
     {
         CurrentPage = PageType.Instances;
@@ -367,6 +430,8 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     private void OnDownloadTaskFailed(DownloadTask task, Exception exception)
     {
+        MarkTaskNavNotification();
+
         // 确保在 UI 线程执行
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -399,8 +464,16 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     private void OnDownloadTaskAdded(DownloadTask task)
     {
+        MarkTaskNavNotification();
+
         // 批量更新任务不显示通知（已有专门的批量更新通知）
         if (task.Type == DownloadTaskType.Modpack && task.Name == "MOD 批量更新")
+        {
+            return;
+        }
+
+        // 未匹配 NXM 回调的临时下载任务不显示该提示，避免与后续安装选择流程产生干扰。
+        if (!string.IsNullOrWhiteSpace(task.Name) && task.Name.StartsWith("未匹配 NXM Mod", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -695,17 +768,21 @@ public partial class MainWindowViewModel : ObservableObject
             var targetInstance = GetActiveVersionSettingsInstance(requireModManage: true);
             if (targetInstance == null)
             {
-                var allInstances = SettingsService.LoadInstances();
+                var allInstances = SettingsService.LoadInstances()
+                    .Where(i => i != null && i.IsSMAPIInstance)
+                    .ToList();
+
                 if (allInstances.Count == 0)
                 {
-                    SvlMessageBox.Warning("当前没有可用实例，无法安装 Mod。", "无可用实例");
+                    SvlMessageBox.Warning("当前没有可用的 SMAPI 实例，原版实例不支持安装 Mod。", "无可用实例");
                     return;
                 }
 
                 var dialog = new InstanceSelectionDialog(allInstances, "选择要安装 Mod 的实例", "拖放安装");
-                if (Application.Current.MainWindow != null)
+                var ownerWindow = Application.Current.MainWindow;
+                if (ownerWindow != null && ownerWindow.IsLoaded && ownerWindow.IsVisible)
                 {
-                    dialog.Owner = Application.Current.MainWindow;
+                    dialog.Owner = ownerWindow;
                 }
                 var result = dialog.ShowDialog();
                 if (result != true || dialog.SelectedInstance == null)
@@ -905,6 +982,41 @@ public partial class MainWindowViewModel : ObservableObject
                 statusViewModel.SetProgressInfo(task);
             }
         });
+    }
+
+    private void MarkTaskNavNotification()
+    {
+        if (Application.Current.Dispatcher.CheckAccess())
+        {
+            _taskNavNotificationDismissed = false;
+            if (CurrentPage != PageType.DownloadFailure)
+            {
+                ShowTaskNavNotification = true;
+            }
+            return;
+        }
+
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _taskNavNotificationDismissed = false;
+            if (CurrentPage != PageType.DownloadFailure)
+            {
+                ShowTaskNavNotification = true;
+            }
+        }));
+    }
+
+    private static bool ShouldShowTaskNavNotification()
+    {
+        if (DownloadManager.Instance.GetActiveTasks().Count > 0)
+        {
+            return true;
+        }
+
+        return DownloadManager.Instance.GetCompletedTasks().Any(t =>
+            t.Status == DownloadTaskStatus.Failed &&
+            !string.IsNullOrWhiteSpace(t.Name) &&
+            t.Name.StartsWith("未匹配 NXM Mod", StringComparison.OrdinalIgnoreCase));
     }
 
     #region 整合包拖放导入

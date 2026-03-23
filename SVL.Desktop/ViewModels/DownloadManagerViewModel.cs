@@ -4,9 +4,11 @@ using System.Linq;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SVL.Core.Config;
 using SVL.Core.Download;
 using SVL.Core.Download.NexusMods;
 using SVL.Core.Logging;
+using SVL.Desktop.Controls;
 
 namespace SVL.Desktop.ViewModels;
 
@@ -24,6 +26,7 @@ public partial class DownloadManagerViewModel : ObservableObject
 
     private DownloadManagerViewModel()
     {
+        IsFloatingButtonEnabled = AppConfig.GetSettings().EnableDownloadFloatingTaskButton;
         LoadTasks();
 
         // 订阅管理器事件
@@ -52,6 +55,15 @@ public partial class DownloadManagerViewModel : ObservableObject
     private int _activeTaskCount;
 
     [ObservableProperty]
+    private int _entryTaskCount;
+
+    [ObservableProperty]
+    private bool _isFloatingButtonEnabled = true;
+
+    [ObservableProperty]
+    private bool _showFloatingButton;
+
+    [ObservableProperty]
     private bool _isVisible;
 
     /// <summary>
@@ -59,6 +71,16 @@ public partial class DownloadManagerViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private DownloadTaskViewModel? _selectedTask;
+
+    partial void OnEntryTaskCountChanged(int value)
+    {
+        RefreshFloatingButtonVisibility();
+    }
+
+    partial void OnIsFloatingButtonEnabledChanged(bool value)
+    {
+        RefreshFloatingButtonVisibility();
+    }
 
     /// <summary>
     /// 显示下载窗口（公共方法）
@@ -107,32 +129,30 @@ public partial class DownloadManagerViewModel : ObservableObject
             return;
         }
 
-        // 获取当前活动的任务
-        var activeTasks = _manager.GetActiveTasks();
-        if (activeTasks.Count > 0)
-        {
-            Log.Info($"[DownloadManagerViewModel] 导航到任务状态页面，活动任务数: {activeTasks.Count}");
+        _mainViewModel.NavigateToTasksPage();
+    }
 
-            // 导航到任务状态页面并显示第一个任务的进度
-            _mainViewModel.CurrentPage = PageType.DownloadFailure;
+    [RelayCommand]
+    private void HideFloatingButton()
+    {
+        SetFloatingButtonEnabled(false, showNotification: true);
+    }
 
-            // 使用 Dispatcher 确保 UI 更新后再设置数据
-            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (_mainViewModel.LeftPanelContent is TaskStatusViewModel statusViewModel)
-                {
-                    statusViewModel.SetProgressInfo(activeTasks[0]);
-                    Log.Info($"[DownloadManagerViewModel] 已设置任务进度信息: {activeTasks[0].Name}");
-                }
-                else
-                {
-                    Log.Warn($"[DownloadManagerViewModel] LeftPanelContent 类型不匹配: {_mainViewModel.LeftPanelContent?.GetType().Name}");
-                }
-            }));
-        }
-        else
+    public void SetFloatingButtonEnabled(bool enabled, bool showNotification)
+    {
+        IsFloatingButtonEnabled = enabled;
+
+        var settings = AppConfig.GetSettings();
+        settings.EnableDownloadFloatingTaskButton = enabled;
+        AppConfig.SaveSettings(settings);
+
+        if (showNotification)
         {
-            Log.Info("[DownloadManagerViewModel] No active tasks to show");
+            FloatingNotificationControl.Show(
+                title: "任务按钮已关闭",
+                message: "可在 设置-下载 中重新启用右下角任务按钮。",
+                autoCloseDelay: 3000,
+                notificationType: NotificationType.Info);
         }
     }
 
@@ -208,6 +228,22 @@ public partial class DownloadManagerViewModel : ObservableObject
         LoadTasks();
     }
 
+    [RelayCommand]
+    private async System.Threading.Tasks.Task RetryTask(string taskId)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+            return;
+
+        var success = await DownloadRightViewModel.RetryUnmatchedNxmTaskAsync(taskId);
+        if (!success)
+        {
+            SvlMessageBox.Warning("该任务暂不支持重试，或重试上下文已失效。", "无法重试");
+            return;
+        }
+
+        LoadTasks();
+    }
+
     /// <summary>
     /// 清空已完成任务
     /// </summary>
@@ -265,6 +301,10 @@ public partial class DownloadManagerViewModel : ObservableObject
         }
 
         ActiveTaskCount = active.Count;
+        EntryTaskCount = active.Count + completed.Count(t => t.Status == DownloadTaskStatus.Failed &&
+                                                          !string.IsNullOrWhiteSpace(t.Name) &&
+                                                          t.Name.StartsWith("未匹配 NXM Mod", StringComparison.OrdinalIgnoreCase));
+        RefreshFloatingButtonVisibility();
 
         // 降低日志级别：每次刷新不需要记录日志
         // Log.Info($"[DownloadManagerViewModel] LoadTasksInternal: ActiveTaskCount={ActiveTaskCount}, Active tasks={active.Count}, Completed tasks={completed.Count}");
@@ -387,5 +427,10 @@ public partial class DownloadManagerViewModel : ObservableObject
         {
             Application.Current.Dispatcher.Invoke(action);
         }
+    }
+
+    private void RefreshFloatingButtonVisibility()
+    {
+        ShowFloatingButton = IsFloatingButtonEnabled && EntryTaskCount > 0;
     }
 }

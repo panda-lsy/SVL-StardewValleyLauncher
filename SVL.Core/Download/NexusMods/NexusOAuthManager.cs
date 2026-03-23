@@ -79,6 +79,7 @@ public class NexusOAuthManager : IDisposable
                 $"scope={Uri.EscapeDataString(Scope)}&" +
                 $"code_challenge_method=S256&" +
                 $"client_id={ClientId}&" +
+                $"application={Uri.EscapeDataString("Stardew Valley Launcher")}&" +
                 $"redirect_uri={Uri.EscapeDataString($"http://127.0.0.1:{port}")}&" +
                 $"state={state}&" +
                 $"code_challenge={challenge}";

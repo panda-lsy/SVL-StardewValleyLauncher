@@ -168,7 +168,7 @@
                     </Border>
 
                     <!-- 登录按钮 -->
-                    <Button Content="🔑 登录 Nexus Mods"
+                        <Button Content="{Binding LoginButtonText}"
                             Command="{Binding LoginCommand}"
                             HorizontalAlignment="Center"
                             Width="280"
@@ -207,7 +207,51 @@
                                     <Trigger Property="IsEnabled" Value="False">
                                         <Setter Property="Opacity" Value="0.6"/>
                                     </Trigger>
+                                    <DataTrigger Binding="{Binding ShowReopenBrowserButton}" Value="True">
+                                        <Setter Property="IsEnabled" Value="False"/>
+                                    </DataTrigger>
                                 </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <Button Content="重新打开浏览器页面"
+                            Command="{Binding ReopenBrowserPageCommand}"
+                            HorizontalAlignment="Center"
+                            Width="280"
+                            Height="36"
+                            Margin="0,8,0,0"
+                            Padding="16,0"
+                            FontSize="13"
+                            Cursor="Hand"
+                            Visibility="{Binding ShowReopenBrowserButton, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{DynamicResource ColorBrush5}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushGray3}"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="ButtonBorder"
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}"
+                                                    Cursor="Hand">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="{DynamicResource ColorBrushGray8}" TargetName="ButtonBorder"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
                             </Style>
                         </Button.Style>
                     </Button>

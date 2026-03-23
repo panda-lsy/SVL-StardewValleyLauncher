@@ -16,6 +16,9 @@ namespace SVL.Desktop.ViewModels;
 /// </summary>
 public partial class NexusLoginDialogViewModel : ObservableObject
 {
+    private static string _sharedLastAuthUrl = string.Empty;
+    private string _lastAuthUrl = string.Empty;
+
     [ObservableProperty]
     private bool _isLoggedIn;
 
@@ -31,6 +34,11 @@ public partial class NexusLoginDialogViewModel : ObservableObject
     [ObservableProperty]
     private bool _isBusy;
 
+    [ObservableProperty]
+    private string _loginButtonText = "🔑 登录 Nexus Mods";
+
+    public bool ShowReopenBrowserButton => !string.IsNullOrWhiteSpace(_lastAuthUrl);
+
     /// <summary>
     /// 请求关闭事件
     /// </summary>
@@ -38,9 +46,25 @@ public partial class NexusLoginDialogViewModel : ObservableObject
 
     public NexusLoginDialogViewModel()
     {
+        _lastAuthUrl = _sharedLastAuthUrl;
+
         // 不要在构造函数中调用异步方法，避免死锁
         // 登录状态将在对话框显示后异步加载
         StatusMessage = "加载中...";
+    }
+
+    [RelayCommand]
+    private void ReopenBrowserPage()
+    {
+        if (string.IsNullOrWhiteSpace(_lastAuthUrl))
+        {
+            StatusMessage = "暂无可重新打开的授权页面，请先点击登录。";
+            return;
+        }
+
+        ProcessEx.OpenUrl(_lastAuthUrl);
+        StatusMessage = "已重新打开浏览器授权页，请在浏览器完成授权后返回。";
+        Log.Info($"[NexusLogin] 通过独立按钮重新打开浏览器授权页: {_lastAuthUrl}");
     }
 
     /// <summary>
@@ -176,6 +200,12 @@ public partial class NexusLoginDialogViewModel : ObservableObject
         NexusOAuthManager oauthManager = null;
         try
         {
+            if (IsBusy)
+            {
+                Log.Info("[NexusLogin] 已在登录流程中，忽略重复点击");
+                return;
+            }
+
             IsBusy = true;
             StatusMessage = "正在连接到 Nexus...";
 
@@ -187,9 +217,28 @@ public partial class NexusLoginDialogViewModel : ObservableObject
             // 使用 OAuth 2.0 PKCE 认证
             var tokenResponse = await oauthManager.AuthenticateAsync(url =>
             {
+                _lastAuthUrl = url;
+                _sharedLastAuthUrl = url;
+                OnPropertyChanged(nameof(ShowReopenBrowserButton));
                 // 打开浏览器
                 ProcessEx.OpenUrl(url);
                 Log.Info($"[NexusLogin] 已打开浏览器: {url}");
+
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000);
+                    var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                    if (dispatcher == null)
+                        return;
+
+                    dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (IsBusy && !string.IsNullOrWhiteSpace(_lastAuthUrl))
+                        {
+                            StatusMessage = "正在等待浏览器授权，如页面被关闭可点击“重新打开浏览器页面”。";
+                        }
+                    }));
+                });
             });
 
             if (tokenResponse != null)
@@ -229,6 +278,9 @@ public partial class NexusLoginDialogViewModel : ObservableObject
                 MembershipType = userInfo.IsPremium ? "Premium" : "Free";
                 IsLoggedIn = true;
                 StatusMessage = $"已登录: {UserName}";
+                _lastAuthUrl = string.Empty;
+                _sharedLastAuthUrl = string.Empty;
+                OnPropertyChanged(nameof(ShowReopenBrowserButton));
 
                 Log.Info("[NexusLogin] ✓ 登录成功");
 
@@ -246,12 +298,27 @@ public partial class NexusLoginDialogViewModel : ObservableObject
             Log.Error("[NexusLogin] OAuth 登录超时");
             IsLoggedIn = false;
             StatusMessage = "登录超时，请重试";
+            if (!string.IsNullOrWhiteSpace(_lastAuthUrl))
+            {
+                OnPropertyChanged(nameof(ShowReopenBrowserButton));
+            }
+        }
+        catch (ObjectDisposedException ex)
+        {
+            Log.Error(ex, "[NexusLogin] OAuth 监听器已释放");
+            IsLoggedIn = false;
+            StatusMessage = "登录失败：本地回调监听已关闭。请点击“重新打开浏览器页面”继续授权。";
+            OnPropertyChanged(nameof(ShowReopenBrowserButton));
         }
         catch (Exception ex)
         {
             Log.Error(ex, "[NexusLogin] OAuth 登录失败");
             IsLoggedIn = false;
             StatusMessage = $"登录失败: {ex.Message}";
+            if (!string.IsNullOrWhiteSpace(_lastAuthUrl))
+            {
+                OnPropertyChanged(nameof(ShowReopenBrowserButton));
+            }
         }
         finally
         {
