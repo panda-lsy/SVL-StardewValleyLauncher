@@ -784,9 +784,88 @@
                                                Style="{StaticResource SettingDescStyle}"/>
                                 </StackPanel>
 
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock Text="下载线程数"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource ColorBrush1}"
+                                               Margin="0,0,0,4"/>
+
+                                    <Grid Width="360" HorizontalAlignment="Left">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Slider Grid.Column="0"
+                                                Minimum="1"
+                                                Maximum="16"
+                                                TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding DownloadSegmentThreads, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0,0,12,0"
+                                                VerticalAlignment="Center"/>
+
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource ColorBrush5}"
+                                                BorderBrush="{DynamicResource ColorBrushSemiTransparent}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="10,4"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DownloadSegmentThreads}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource ColorBrush1}"/>
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock Text="用于 URL 接管下载和分片下载任务，数值越高通常下载越快，但也更占网络与磁盘资源。"
+                                               Style="{StaticResource SettingDescStyle}"/>
+                                </StackPanel>
+
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock Text="接管下载"
+                                               FontSize="13"
+                                               Foreground="{DynamicResource ColorBrush1}"
+                                               Margin="0,0,0,4"/>
+
+                                    <Grid Width="460" HorizontalAlignment="Left">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding TakeoverDownloadUrl, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource SettingTextBoxStyle}"
+                                                 Margin="0,0,8,0"
+                                                 ToolTip="输入文件直链（http/https），点击另存为后由 SVL 多线程下载引擎接管"/>
+
+                                        <Button Grid.Column="1"
+                                                Content="另存为"
+                                                Width="84"
+                                                Height="34"
+                                                FontSize="12"
+                                                Command="{Binding SaveTakeoverDownloadAsCommand}"
+                                                Background="{DynamicResource ColorBrush2}"
+                                                Foreground="White"
+                                                BorderThickness="0"
+                                                Cursor="Hand">
+                                            <Button.Resources>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="CornerRadius" Value="4"/>
+                                                </Style>
+                                            </Button.Resources>
+                                        </Button>
+                                    </Grid>
+
+                                    <TextBlock Text="输入下载地址并选择保存位置后，SVL 将创建多线程下载任务。"
+                                               Style="{StaticResource SettingDescStyle}"/>
+                                </StackPanel>
+
                                 <CheckBox Content="来源为“全部”时弹出“类型筛选不可用”提示"
                                           IsChecked="{Binding ShowModTypeFilterDisabledNotice}"
-                                          Foreground="{DynamicResource ColorBrush1}"
+                                          Style="{StaticResource SettingCheckBoxStyle}"
                                           Margin="0,4,0,0"/>
 
                                 <CheckBox Content="显示任务管理器（右下角下载）按钮"

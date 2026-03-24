@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -1025,6 +1026,24 @@ public partial class DownloadRightViewModel : ObservableObject
         public int RevisionNumber { get; set; }
     }
 
+    private static async Task<SVL.Core.Download.PlaceholderDownloadTask> CreatePendingBrowserPlaceholderTaskAsync(
+        string displayName,
+        SVL.Core.Download.DownloadTaskType taskType,
+        string browserOpenUrl)
+    {
+        var placeholderTask = new SVL.Core.Download.PlaceholderDownloadTask(
+            displayName,
+            taskType,
+            DownloadTaskBrowserHelper.WaitingBrowserDownloadStatusMessage
+        )
+        {
+            BrowserOpenUrl = browserOpenUrl
+        };
+
+        await SVL.Core.Download.DownloadManager.Instance.AddTaskAsync(placeholderTask);
+        return placeholderTask;
+    }
+
     public static async Task RegisterPendingNexusSmapiDownloadAsync(
         long modId,
         long fileId,
@@ -1039,13 +1058,10 @@ public partial class DownloadRightViewModel : ObservableObject
             "temp"
         );
 
-        var placeholderTask = new SVL.Core.Download.PlaceholderDownloadTask(
+        var placeholderTask = await CreatePendingBrowserPlaceholderTaskAsync(
             $"SMAPI {version} - {instanceName}",
             SVL.Core.Download.DownloadTaskType.SMAPI,
-            "等待浏览器下载（请点击下载按钮）..."
-        );
-
-        await SVL.Core.Download.DownloadManager.Instance.AddTaskAsync(placeholderTask);
+            DownloadTaskBrowserHelper.BuildNexusModFilePageUrl(modId, fileId));
 
         _pendingBrowserDownloads[(modId, fileId)] = new PendingBrowserDownload
         {
@@ -1079,13 +1095,10 @@ public partial class DownloadRightViewModel : ObservableObject
             ? $"{modName} ({fileName}) [另存为]"
             : $"{modName} ({fileName})";
 
-        var placeholderTask = new SVL.Core.Download.PlaceholderDownloadTask(
+        var placeholderTask = await CreatePendingBrowserPlaceholderTaskAsync(
             displayName,
             SVL.Core.Download.DownloadTaskType.Mod,
-            "等待浏览器下载（请点击下载按钮）..."
-        );
-
-        await SVL.Core.Download.DownloadManager.Instance.AddTaskAsync(placeholderTask);
+            DownloadTaskBrowserHelper.BuildNexusModFilePageUrl(modId, fileId));
 
         _pendingBrowserDownloads[(modId, fileId)] = new PendingBrowserDownload
         {
@@ -1119,13 +1132,10 @@ public partial class DownloadRightViewModel : ObservableObject
 
         var displayName = $"Collection: {collectionName} (r{revisionNumber})";
 
-        var placeholderTask = new SVL.Core.Download.PlaceholderDownloadTask(
+        var placeholderTask = await CreatePendingBrowserPlaceholderTaskAsync(
             displayName,
             SVL.Core.Download.DownloadTaskType.Modpack,
-            "等待浏览器下载（请点击下载按钮）..."
-        );
-
-        await SVL.Core.Download.DownloadManager.Instance.AddTaskAsync(placeholderTask);
+            DownloadTaskBrowserHelper.BuildNexusCollectionRevisionPageUrl(collectionSlug, revisionNumber));
 
         var key = (collectionSlug, revisionNumber);
         _pendingCollectionDownloads[key] = new PendingBrowserDownload
@@ -1555,7 +1565,7 @@ public partial class DownloadRightViewModel : ObservableObject
                 Url = source switch
                 {
                     "Curseforge" => "https://www.curseforge.com/stardewvalley/mods/smapi",
-                    "NexusMods" => $"https://www.nexusmods.com/stardewvalley/mods/{smapiNexusModId}",
+                    "NexusMods" => DownloadTaskBrowserHelper.BuildNexusModPageUrl(smapiNexusModId),
                     _ => "https://smapi.io/"
                 }
             };
@@ -1726,13 +1736,15 @@ public partial class DownloadRightViewModel : ObservableObject
         try
         {
             Status = "正在加载 SMAPI...";
+            const string localSmapiFallbackIcon = "pack://application:,,,/Images/Modded.png";
 
             const int smapiCurseforgeProjectId = 898372;
             const long smapiNexusModId = 2400;
 
             var settings = AppConfig.GetSettings();
             var enableSearchCache = settings.EnableNexusModsSearchCache;
-            var cacheKey = $"list|source={SmapiSelectedSource}";
+            var hasNexusAuth = !string.IsNullOrWhiteSpace(settings.NexusModsOAuthToken);
+            var cacheKey = $"list-v4|source={SmapiSelectedSource}|nexusAuth={(hasNexusAuth ? 1 : 0)}";
 
             if (enableSearchCache && SVL.Core.IO.SearchCacheService.TryGet<List<ModSearchItem>>("smapi", cacheKey, out var cachedList) && cachedList != null && cachedList.Count > 0)
             {
@@ -1762,10 +1774,7 @@ public partial class DownloadRightViewModel : ObservableObject
 
             foreach (var source in sources)
             {
-                // 无法获取某个来源的信息，则不显示该来源
-                
-
-                
+                Log.Info($"[DownloadRightViewModel] 开始构建 SMAPI 来源卡片: source={source}");
 
                 var item = new ModSearchItem
                 {
@@ -1774,6 +1783,7 @@ public partial class DownloadRightViewModel : ObservableObject
                     Description = "Stardew Valley 的模组加载 API，安装后可以加载和使用 Mod。这是游戏的 Mod 框架，必须首先安装。",
                     Author = "Pathoschild",
                     Source = source,
+                    LocalIconPath = localSmapiFallbackIcon,
                     DownloadCount = 0,
                     LastUpdateTime = "-",
                     SupportedGameVersions = new List<string>()
@@ -1789,9 +1799,11 @@ public partial class DownloadRightViewModel : ObservableObject
                 item.Url = source switch
                 {
                     "Curseforge" => "https://www.curseforge.com/stardewvalley/mods/smapi",
-                    "NexusMods" => $"https://www.nexusmods.com/stardewvalley/mods/{smapiNexusModId}",
+                    "NexusMods" => DownloadTaskBrowserHelper.BuildNexusModPageUrl(smapiNexusModId),
                     _ => "https://github.com/Pathoschild/SMAPI/releases"
                 };
+
+                item.IconUrl = string.Empty;
 
                 try
                 {
@@ -1800,10 +1812,9 @@ public partial class DownloadRightViewModel : ObservableObject
                     {
                         var modInfo = await SVL.Core.Download.CurseforgeApiService.GetModInfoAsync(smapiCurseforgeProjectId);
                         var logoUrl = modInfo?.Logo?.ThumbnailUrl ?? modInfo?.Logo?.Url;
-                        if (string.IsNullOrWhiteSpace(logoUrl))
-                            continue;
-
-                        item.IconUrl = logoUrl;
+                        item.IconUrl = string.IsNullOrWhiteSpace(logoUrl)
+                            ? string.Empty
+                            : logoUrl;
 
                         // 贴近 ModSearch：下载量 / 描述 / 更新时间
                         if (!string.IsNullOrWhiteSpace(modInfo?.Summary))
@@ -1835,12 +1846,30 @@ public partial class DownloadRightViewModel : ObservableObject
                         // 列表页只获取基本信息，不加载版本列表（版本列表在Detail页加载）
                         // SMAPI 是固定 Mod ID，直接使用 REST API 获取详情
                         var modInfo = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService
-                            .GetModDetailsAsync(smapiNexusModId);
+                            .GetModDetailsAsync(smapiNexusModId, useCache: false);
 
-                        if (string.IsNullOrWhiteSpace(modInfo?.PictureUrl))
-                            continue;
+                        var pictureUrl = modInfo?.PictureUrl;
+                        if (string.IsNullOrWhiteSpace(pictureUrl))
+                        {
+                            pictureUrl = modInfo?.PictureUrlLegacy;
+                        }
+                        if (string.IsNullOrWhiteSpace(pictureUrl))
+                        {
+                            pictureUrl = modInfo?.ThumbnailUrl;
+                        }
+                        if (string.IsNullOrWhiteSpace(pictureUrl))
+                        {
+                            pictureUrl = modInfo?.ThumbnailLargeUrl;
+                        }
 
-                        item.IconUrl = modInfo.PictureUrl;
+                        item.IconUrl = string.IsNullOrWhiteSpace(pictureUrl)
+                            ? string.Empty
+                            : pictureUrl;
+
+                        if (modInfo == null)
+                        {
+                            Log.Warn("[DownloadRightViewModel] SMAPI Nexus 详情为空，使用保底卡片信息显示来源");
+                        }
 
                         // 贴近 ModSearch：下载量 / 描述 / 更新时间
                         if (!string.IsNullOrWhiteSpace(modInfo?.Summary))
@@ -1849,17 +1878,92 @@ public partial class DownloadRightViewModel : ObservableObject
                             item.Description = modInfo.Summary;
                         }
 
-                        if (modInfo != null && modInfo.Downloads > 0)
-                            item.DownloadCount = modInfo.Downloads;
+                        if (modInfo != null)
+                        {
+                            var downloadCount = modInfo.Downloads > 0
+                                ? modInfo.Downloads
+                                : modInfo.ModDownloadsLegacy;
+
+                            if (downloadCount > 0)
+                            {
+                                item.DownloadCount = downloadCount;
+                            }
+                        }
 
                         if (modInfo != null && modInfo.UpdatedAt != default)
                             item.LastUpdateTime = modInfo.UpdatedAt.ToString("yyyy-MM-dd");
+
+                        if (modInfo != null && item.LastUpdateTime == "-" && modInfo.UploadedTime > 0)
+                        {
+                            try
+                            {
+                                item.LastUpdateTime = DateTimeOffset.FromUnixTimeSeconds(modInfo.UploadedTime).LocalDateTime.ToString("yyyy-MM-dd");
+                            }
+                            catch
+                            {
+                                // ignore
+                            }
+                        }
+
+                        if (modInfo != null && item.LastUpdateTime == "-" && modInfo.UpdatedTime != null)
+                        {
+                            if (modInfo.UpdatedTime is string updatedText && DateTime.TryParse(updatedText, out var updatedDate))
+                            {
+                                item.LastUpdateTime = updatedDate.ToString("yyyy-MM-dd");
+                            }
+                            else if (modInfo.UpdatedTime is long updatedUnix)
+                            {
+                                try
+                                {
+                                    item.LastUpdateTime = DateTimeOffset.FromUnixTimeSeconds(updatedUnix).LocalDateTime.ToString("yyyy-MM-dd");
+                                }
+                                catch
+                                {
+                                    // ignore
+                                }
+                            }
+                        }
+
+                        if (item.DownloadCount <= 0 || item.LastUpdateTime == "-")
+                        {
+                            var files = await SVL.Core.Stardew.ResourceProject.NexusMods.NexusModsService.GetModFilesAsync(smapiNexusModId);
+                            if (files != null && files.Count > 0)
+                            {
+                                if (item.DownloadCount <= 0)
+                                {
+                                    item.DownloadCount = files.Max(f => f.GetEffectiveDownloadCount());
+                                }
+
+                                if (item.LastUpdateTime == "-")
+                                {
+                                    var latestFile = files
+                                        .Where(f => !string.IsNullOrWhiteSpace(f.UploadedTime))
+                                        .OrderByDescending(f =>
+                                        {
+                                            if (DateTime.TryParse(f.UploadedTime, out var parsedDate))
+                                            {
+                                                return parsedDate;
+                                            }
+
+                                            return DateTime.MinValue;
+                                        })
+                                        .FirstOrDefault();
+
+                                    if (latestFile != null && DateTime.TryParse(latestFile.UploadedTime, out var latestDate))
+                                    {
+                                        item.LastUpdateTime = latestDate.ToString("yyyy-MM-dd");
+                                    }
+                                }
+                            }
+                        }
+
+                        Log.Info($"[DownloadRightViewModel] SMAPI Nexus 来源数据: icon={(string.IsNullOrWhiteSpace(item.IconUrl) ? "(empty)" : "ok")}, downloads={item.DownloadCount}, updated={item.LastUpdateTime}");
 
                         // 注意：版本列表不在列表页加载，用户点击进入Detail页时才会加载
                     }
                     else
                     {
-                        // 避免使用 smapi.io（存在 404），改用 GitHub 稳定图片源
+                        // GitHub 来源优先显示仓库卡片图，失败时由 LocalIconPath 自动兜底。
                         item.IconUrl = "https://opengraph.githubassets.com/1/Pathoschild/SMAPI";
                         try
                         {
@@ -1879,16 +1983,10 @@ public partial class DownloadRightViewModel : ObservableObject
                             // GitHub 版本拉取失败时仍展示基础信息
                         }
                     }
-
-                    _ = item.LoadIconAsync();
-                    result.Add(item);
-                    LocalizationDisplayHelper.ApplyLocalizationInBackground(new[] { item });
                 }
                 catch (Exception ex)
                 {
-                    
-
-                    // 无法获取该来源信息 => 不显示，但如果用户明确选择该来源（或当前为“全部”且该来源缺失），提示一次并跳转设置
+                    // 无法完整获取来源信息时，保留来源卡片并使用默认字段。
                     Log.Warn($"[DownloadRightViewModel] SMAPI 来源 {source} 信息获取失败", ex);
 
                     if (!_hasShownSmapiConfigWarning && (SmapiSelectedSource == source || SmapiSelectedSource == "全部"))
@@ -1900,6 +1998,11 @@ public partial class DownloadRightViewModel : ObservableObject
                         );
                     }
                 }
+
+                _ = item.LoadIconAsync();
+                result.Add(item);
+                LocalizationDisplayHelper.ApplyLocalizationInBackground(new[] { item });
+                Log.Info($"[DownloadRightViewModel] SMAPI 来源卡片已加入列表: source={source}, downloads={item.DownloadCount}, updated={item.LastUpdateTime}, icon={(string.IsNullOrWhiteSpace(item.IconUrl) ? "(empty)" : item.IconUrl)}");
             }
 
             SmapiModList = result;
@@ -3373,7 +3476,7 @@ public partial class DownloadRightViewModel : ObservableObject
                         Version = version  // 保存版本号
                     };
 
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    var guideResult = await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
                         var guideDialog = new SVL.Desktop.Controls.BrowserDownloadGuideDialog(
                             SMAPI_MOD_ID,
@@ -3381,14 +3484,21 @@ public partial class DownloadRightViewModel : ObservableObject
                             "stardewvalley"
                         );
                         guideDialog.Owner = System.Windows.Application.Current.MainWindow;
-                        guideDialog.ShowWithBlur(System.Windows.Application.Current.MainWindow);
+                        return guideDialog.ShowWithBlur(System.Windows.Application.Current.MainWindow);
                     });
+
+                    var browserPageUrl = DownloadTaskBrowserHelper.BuildNexusModFilePageUrl(SMAPI_MOD_ID, fileId);
+                    placeholderTask.BrowserOpenUrl = browserPageUrl;
 
                     // 标记任务为等待 NXM 协议回调
                     SVL.Core.Download.DownloadManager.Instance.UpdateTaskStatus(
                         placeholderTask.Id,
-                        status: SVL.Core.Download.DownloadTaskStatus.Pending,
-                        statusMessage: "等待浏览器下载（请点击下载按钮）...",
+                        status: guideResult == true
+                            ? SVL.Core.Download.DownloadTaskStatus.Pending
+                            : SVL.Core.Download.DownloadTaskStatus.WaitingConfirmation,
+                        statusMessage: guideResult == true
+                            ? DownloadTaskBrowserHelper.WaitingBrowserDownloadStatusMessage
+                            : "已稍后下载，可在任务管理器点击“打开页面”继续。",
                         progress: 5
                     );
 

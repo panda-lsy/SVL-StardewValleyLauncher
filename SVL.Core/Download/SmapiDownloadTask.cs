@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using SVL.Core.Config;
 using SVL.Core.Stardew.Instance;
 using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Core.Logging;
@@ -35,6 +36,11 @@ public class SmapiDownloadTask : DownloadTask
     // 用于等待 NXM 回调
     private TaskCompletionSource<string>? _nxmDownloadCompletionSource;
     private string? _pendingDownloadTempDir;
+
+    /// <summary>
+    /// 可选：用于任务管理器“重新打开页面”按钮。
+    /// </summary>
+    public string? BrowserOpenUrl { get; private set; }
 
     /// <summary>
     /// 是否为更新模式（更新现有实例而不是创建新实例）
@@ -776,56 +782,29 @@ public class SmapiDownloadTask : DownloadTask
                 }
             }
 
-            using (var httpClient = new System.Net.Http.HttpClient())
-            {
-                httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
+            var settings = AppConfig.GetSettings();
+            var threadCount = Math.Max(1, Math.Min(16, settings.DownloadSegmentThreads <= 0 ? 4 : settings.DownloadSegmentThreads));
 
-                Log.Info($"[DownloadManager] 开始下载: {downloadUrl}");
-                var response = await httpClient.GetAsync(downloadUrl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, _cts.Token);
-
-                response.EnsureSuccessStatusCode();
-                var totalBytes = response.Content.Headers.ContentLength ?? 0;
-
-                // 设置总字节数
-                FileDownloadTotalBytes = totalBytes;
-                FileDownloadBytes = 0;
-                FileDownloadProgress = 0;
-
-                using (var fs = new FileStream(zipFilePath, FileMode.Create))
-                using (var stream = await response.Content.ReadAsStreamAsync())
+            await HttpMultiThreadDownloader.DownloadAsync(
+                downloadUrl,
+                zipFilePath,
+                threadCount,
+                (percent, bytesRead, totalBytes, speed) =>
                 {
-                    var buffer = new byte[8192];
-                    int bytesRead;
-                    long totalRead = 0;
-                    double lastProgress = 0;
+                    var normalizedTotal = totalBytes > 0 ? totalBytes : Math.Max(bytesRead, 1);
+                    FileDownloadProgress = percent;
+                    FileDownloadBytes = bytesRead;
+                    FileDownloadTotalBytes = normalizedTotal;
 
-                    while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                    {
-                        await fs.WriteAsync(buffer, 0, bytesRead, _cts.Token);
-                        totalRead += bytesRead;
+                    progressCallback(Math.Max(0, Math.Min(1, percent / 100.0)));
+                },
+                _cts.Token);
 
-                        if (totalBytes > 0)
-                        {
-                            // 更新文件下载进度（从 0% 开始）
-                            FileDownloadBytes = totalRead;
-                            FileDownloadProgress = totalRead * 100.0 / totalBytes;
-
-                            var currentProgress = (double)totalRead / totalBytes;
-                            // 每隔 5% 更新一次进度，避免频繁更新
-                            if (currentProgress - lastProgress >= 0.05)
-                            {
-                                progressCallback(currentProgress);
-                                lastProgress = currentProgress;
-                            }
-                        }
-                    }
-                }
-
-                // 确保进度达到 100%
-                FileDownloadProgress = 100;
-                FileDownloadBytes = totalBytes;
-                progressCallback(1.0);
-            }
+            var finalInfo = new FileInfo(zipFilePath);
+            FileDownloadProgress = 100;
+            FileDownloadBytes = finalInfo.Length;
+            FileDownloadTotalBytes = finalInfo.Length;
+            progressCallback(1.0);
 
             Log.Info($"[DownloadManager] 下载完成: {zipFilePath}");
             return zipFilePath;
@@ -854,6 +833,7 @@ public class SmapiDownloadTask : DownloadTask
         {
             urlWithNmm = downloadPageUrl + (downloadPageUrl.Contains("?") ? "&" : "?") + "nmm=1";
         }
+        BrowserOpenUrl = urlWithNmm;
 
         try
         {

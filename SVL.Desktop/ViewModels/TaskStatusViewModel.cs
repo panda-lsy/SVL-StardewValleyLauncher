@@ -9,6 +9,7 @@ using SVL.Core.Download;
 using SVL.Core.Download.NexusMods;
 using SVL.Core.Logging;
 using SVL.Desktop.Controls;
+using SVL.Desktop.Utilities;
 
 namespace SVL.Desktop.ViewModels;
 
@@ -105,6 +106,12 @@ public partial class TaskStatusViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _suggestedActions = new();
 
+    private DownloadTask? GetTrackedTask()
+    {
+        return DownloadManager.Instance.GetAllTasks()
+            .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+    }
+
     /// <summary>
     /// 是否为 Collection Wizard 任务
     /// </summary>
@@ -112,8 +119,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
             return task is NexusCollectionWizardTask;
         }
     }
@@ -125,8 +131,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
             return task is ModBatchUpdateTask;
         }
     }
@@ -138,8 +143,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
             return task is LocalCurseforgeModpackInstallTask or CurseforgeModpackDownloadTask;
         }
     }
@@ -151,8 +155,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
             return task is SvlModpackInstallTask;
         }
     }
@@ -164,16 +167,45 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
             return task is NexusModsBrowserDownloadTask;
+        }
+    }
+
+    /// <summary>
+    /// 是否为 SMAPI 任务（含浏览器待下载占位任务）
+    /// </summary>
+    public bool IsSmapiTask
+    {
+        get
+        {
+            var task = GetTrackedTask();
+
+            if (task is SmapiDownloadTask)
+                return true;
+
+            return !string.IsNullOrWhiteSpace(task?.Name)
+                   && task.Name.IndexOf("SMAPI", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+    }
+
+    /// <summary>
+    /// 当前任务是否支持重新打开浏览器
+    /// </summary>
+    public bool CanReopenBrowserPage
+    {
+        get
+        {
+            var task = GetTrackedTask();
+
+            return DownloadTaskBrowserHelper.HasBrowserOpenUrl(task);
         }
     }
 
     /// <summary>
     /// 是否为显示 Mod 列表的任务（Collection Wizard、批量更新、Curseforge整合包、SVL整合包或浏览器下载）
     /// </summary>
-    public bool IsShowModListTask => IsCollectionWizardTask || IsBatchUpdateTask || IsCurseforgeModpackTask || IsSvlModpackTask || IsBrowserDownloadTask;
+    public bool IsShowModListTask => IsCollectionWizardTask || IsBatchUpdateTask || IsCurseforgeModpackTask || IsSvlModpackTask || IsBrowserDownloadTask || IsSmapiTask;
 
     /// <summary>
     /// 当前 Wizard Mod 名称（支持 Collection Wizard 和浏览器下载）
@@ -182,8 +214,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // 浏览器下载任务
             if (task is NexusModsBrowserDownloadTask browserTask)
@@ -201,6 +232,9 @@ public partial class TaskStatusViewModel : ObservableObject
             if (task is SvlModpackInstallTask svlTask)
                 return svlTask.CurrentMod ?? "";
 
+            if (IsSmapiTask)
+                return task?.Name?.Replace(" (浏览器下载)", "") ?? "SMAPI";
+
             return "";
         }
     }
@@ -212,8 +246,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             if (task is NexusCollectionWizardTask wizardTask)
                 return wizardTask.Status == DownloadTaskStatus.WaitingConfirmation;
@@ -235,8 +268,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // 浏览器下载任务
             if (task is NexusModsBrowserDownloadTask browserTask)
@@ -264,6 +296,11 @@ public partial class TaskStatusViewModel : ObservableObject
                 return svlTask.StatusMessage ?? "";
             }
 
+            if (IsSmapiTask && CanReopenBrowserPage)
+            {
+                return "请在浏览器中完成下载后，SVL 将自动接收并继续安装。";
+            }
+
             return "";
         }
     }
@@ -275,8 +312,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // Collection Wizard 任务
             if (task is NexusCollectionWizardTask wizardTask)
@@ -303,6 +339,10 @@ public partial class TaskStatusViewModel : ObservableObject
             {
                 return browserTask.Status == DownloadTaskStatus.WaitingConfirmation;
             }
+            else if (IsSmapiTask)
+            {
+                return CanReopenBrowserPage;
+            }
             // SVL 整合包导入任务
             else if (task is SvlModpackInstallTask svlTask)
             {
@@ -320,8 +360,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // Collection Wizard 任务
             if (task is NexusCollectionWizardTask wizardTask)
@@ -356,8 +395,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // 只有在正在下载状态时才显示文件下载进度
             if (task?.Status != DownloadTaskStatus.Downloading)
@@ -430,8 +468,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             if (task == null)
                 return "MOD等待下载";
@@ -458,8 +495,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // Collection Wizard 任务
             if (task is NexusCollectionWizardTask wizardTask && wizardTask.ModListResult?.NexusMods != null)
@@ -526,8 +562,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // Collection Wizard 任务
             if (task is NexusCollectionWizardTask wizardTask && wizardTask.ModListResult?.NexusMods != null)
@@ -595,8 +630,7 @@ public partial class TaskStatusViewModel : ObservableObject
         get
         {
             var items = new ObservableCollection<WizardModListItemViewModel>();
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // Collection Wizard 任务
             if (task is NexusCollectionWizardTask wizardTask && wizardTask.ModListResult?.NexusMods != null)
@@ -673,8 +707,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             int totalMods = 0;
 
@@ -773,8 +806,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             int totalMods = 0;
 
@@ -827,8 +859,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
             return task?.CurrentMod?.Name ?? "";
         }
     }
@@ -840,8 +871,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
             return task?.Status == DownloadTaskStatus.WaitingConfirmation;
         }
     }
@@ -850,8 +880,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
 
             return task?.Status == DownloadTaskStatus.WaitingConfirmation
                    && string.Equals(task.CurrentMod?.Platform, "NexusMods", StringComparison.OrdinalIgnoreCase);
@@ -865,8 +894,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
 
             if (task?.CurrentMod == null)
                 return "正在准备批量更新，请稍候...";
@@ -888,8 +916,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
             return task?.CurrentMod != null;
         }
     }
@@ -901,8 +928,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
             return task?.ModList != null && task.ModList.Count > 0;
         }
     }
@@ -915,8 +941,7 @@ public partial class TaskStatusViewModel : ObservableObject
         get
         {
             var items = new ObservableCollection<BatchUpdateModListItemViewModel>();
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
 
             if (task?.ModList != null)
             {
@@ -951,8 +976,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
 
             // 只有在正在下载状态时才显示文件下载进度
             if (task?.Status != DownloadTaskStatus.Downloading)
@@ -985,8 +1009,7 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         get
         {
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+            var task = GetTrackedTask() as ModBatchUpdateTask;
 
             if (task?.ModList == null)
                 return "";
@@ -1010,8 +1033,7 @@ public partial class TaskStatusViewModel : ObservableObject
         get
         {
             var items = new ObservableCollection<ModListItemViewModel>();
-            var task = DownloadManager.Instance.GetAllTasks()
-                .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+            var task = GetTrackedTask();
 
             // Collection Wizard 任务
             if (task is NexusCollectionWizardTask wizardTask && wizardTask.ModListResult?.NexusMods != null)
@@ -1315,8 +1337,7 @@ public partial class TaskStatusViewModel : ObservableObject
             return;
 
         // 查找当前跟踪的任务
-        var task = DownloadManager.Instance.GetAllTasks()
-            .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+        var task = GetTrackedTask();
 
         if (task == null)
             return;
@@ -1358,25 +1379,7 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = baseProgress;
             }
 
-            // 刷新 Wizard 相关属性
-            OnPropertyChanged(nameof(IsCollectionWizardTask));
-            OnPropertyChanged(nameof(CurrentWizardModName));
-            OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
-            OnPropertyChanged(nameof(WizardModListItems));
-            OnPropertyChanged(nameof(WizardStatusDisplayText));
-            OnPropertyChanged(nameof(WizardProgressText));
-            OnPropertyChanged(nameof(WizardProgressPercent));
-            OnPropertyChanged(nameof(WizardHintText));
-            OnPropertyChanged(nameof(WizardCurrentFileProgress));
-            OnPropertyChanged(nameof(ShowCurrentModCard));
-            OnPropertyChanged(nameof(ShowModListCard));
-            OnPropertyChanged(nameof(WizardTotalPages));
-            OnPropertyChanged(nameof(WizardPageInfo));
-            OnPropertyChanged(nameof(WizardCurrentPage));
-            OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
-            OnPropertyChanged(nameof(CanGoToWizardNextPage));
-            OnPropertyChanged(nameof(WizardModListScrollViewerHeight));
-            OnPropertyChanged(nameof(ModListItems));
+            NotifyWizardTaskProperties();
         }
         else if (task is ModBatchUpdateTask batchUpdateTask)
         {
@@ -1388,24 +1391,7 @@ public partial class TaskStatusViewModel : ObservableObject
             var baseProgress = $"{task.Progress:F2}% [{completedMods}/{totalMods}]";
             ProgressDetail = baseProgress;
 
-            // 刷新批量更新相关属性
-            OnPropertyChanged(nameof(IsBatchUpdateTask));
-            OnPropertyChanged(nameof(IsShowModListTask));
-            OnPropertyChanged(nameof(CurrentBatchUpdateModName));
-            OnPropertyChanged(nameof(IsBatchUpdateWaitingConfirmation));
-            OnPropertyChanged(nameof(ShowBatchUpdateBrowserButton));
-            OnPropertyChanged(nameof(BatchUpdateModListItems));
-            OnPropertyChanged(nameof(BatchUpdateProgressText));
-            OnPropertyChanged(nameof(BatchUpdateHintText));
-            OnPropertyChanged(nameof(BatchUpdateCurrentFileProgress));
-            OnPropertyChanged(nameof(ShowBatchUpdateCurrentModCard));
-            OnPropertyChanged(nameof(ShowBatchUpdateModListCard));
-            OnPropertyChanged(nameof(WizardTotalPages));
-            OnPropertyChanged(nameof(WizardPageInfo));
-            OnPropertyChanged(nameof(WizardCurrentPage));
-            OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
-            OnPropertyChanged(nameof(CanGoToWizardNextPage));
-            OnPropertyChanged(nameof(ModListItems));
+            NotifyBatchUpdateTaskProperties();
         }
         else if (task is LocalCurseforgeModpackInstallTask curseforgeTask)
         {
@@ -1433,22 +1419,8 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = baseProgress;
             }
 
-            // 刷新 Curseforge 整合包相关属性
             OnPropertyChanged(nameof(IsCurseforgeModpackTask));
-            OnPropertyChanged(nameof(IsShowModListTask));
-            OnPropertyChanged(nameof(WizardStatusDisplayText));
-            OnPropertyChanged(nameof(WizardProgressText));
-            OnPropertyChanged(nameof(WizardProgressPercent));
-            OnPropertyChanged(nameof(WizardCurrentFileProgress));
-            OnPropertyChanged(nameof(ShowCurrentModCard));
-            OnPropertyChanged(nameof(ShowModListCard));
-            OnPropertyChanged(nameof(WizardTotalPages));
-            OnPropertyChanged(nameof(WizardPageInfo));
-            OnPropertyChanged(nameof(WizardCurrentPage));
-            OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
-            OnPropertyChanged(nameof(CanGoToWizardNextPage));
-            OnPropertyChanged(nameof(WizardModListScrollViewerHeight));
-            OnPropertyChanged(nameof(ModListItems));
+            NotifyGeneralModListTaskProperties();
         }
         else if (task is CurseforgeModpackDownloadTask cfDownloadTask)
         {
@@ -1476,22 +1448,8 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = baseProgress;
             }
 
-            // 刷新 Curseforge 整合包（在线下载）相关属性
             OnPropertyChanged(nameof(IsCurseforgeModpackTask));
-            OnPropertyChanged(nameof(IsShowModListTask));
-            OnPropertyChanged(nameof(WizardStatusDisplayText));
-            OnPropertyChanged(nameof(WizardProgressText));
-            OnPropertyChanged(nameof(WizardProgressPercent));
-            OnPropertyChanged(nameof(WizardCurrentFileProgress));
-            OnPropertyChanged(nameof(ShowCurrentModCard));
-            OnPropertyChanged(nameof(ShowModListCard));
-            OnPropertyChanged(nameof(WizardTotalPages));
-            OnPropertyChanged(nameof(WizardPageInfo));
-            OnPropertyChanged(nameof(WizardCurrentPage));
-            OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
-            OnPropertyChanged(nameof(CanGoToWizardNextPage));
-            OnPropertyChanged(nameof(WizardModListScrollViewerHeight));
-            OnPropertyChanged(nameof(ModListItems));
+            NotifyGeneralModListTaskProperties();
         }
         else if (task is SvlModpackInstallTask svlModpackTask)
         {
@@ -1519,25 +1477,11 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = baseProgress;
             }
 
-            // 刷新 SVL 整合包相关属性
             OnPropertyChanged(nameof(IsSvlModpackTask));
-            OnPropertyChanged(nameof(IsShowModListTask));
-            OnPropertyChanged(nameof(WizardStatusDisplayText));
-            OnPropertyChanged(nameof(WizardProgressText));
-            OnPropertyChanged(nameof(WizardProgressPercent));
-            OnPropertyChanged(nameof(WizardCurrentFileProgress));
-            OnPropertyChanged(nameof(ShowCurrentModCard));
-            OnPropertyChanged(nameof(ShowModListCard));
+            NotifyGeneralModListTaskProperties();
             OnPropertyChanged(nameof(CurrentWizardModName));
             OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
             OnPropertyChanged(nameof(WizardHintText));
-            OnPropertyChanged(nameof(WizardTotalPages));
-            OnPropertyChanged(nameof(WizardPageInfo));
-            OnPropertyChanged(nameof(WizardCurrentPage));
-            OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
-            OnPropertyChanged(nameof(CanGoToWizardNextPage));
-            OnPropertyChanged(nameof(WizardModListScrollViewerHeight));
-            OnPropertyChanged(nameof(ModListItems));
         }
         else if (task is NexusModsBrowserDownloadTask browserDownloadTask)
         {
@@ -1557,13 +1501,7 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = $"{task.Progress:F0}%";
             }
 
-            // 刷新浏览器下载相关属性
-            OnPropertyChanged(nameof(IsBrowserDownloadTask));
-            OnPropertyChanged(nameof(IsShowModListTask));
-            OnPropertyChanged(nameof(CurrentWizardModName));
-            OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
-            OnPropertyChanged(nameof(WizardHintText));
-            OnPropertyChanged(nameof(ShowCurrentModCard));
+            NotifyBrowserDownloadTaskProperties();
         }
         else
         {
@@ -1605,6 +1543,9 @@ public partial class TaskStatusViewModel : ObservableObject
             SetCompletedInfo(task.Name, task.StatusMessage, task.Id);
             _refreshTimer.Stop();
         }
+
+        OnPropertyChanged(nameof(IsSmapiTask));
+        OnPropertyChanged(nameof(CanReopenBrowserPage));
     }
 
     partial void OnIsFailedChanged(bool value)
@@ -1653,6 +1594,65 @@ public partial class TaskStatusViewModel : ObservableObject
     partial void OnStatusMessageChanged(string value)
     {
         OnPropertyChanged(nameof(StatusTitle));
+    }
+
+    private void NotifyWizardTaskProperties()
+    {
+        OnPropertyChanged(nameof(IsCollectionWizardTask));
+        OnPropertyChanged(nameof(CurrentWizardModName));
+        OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
+        OnPropertyChanged(nameof(WizardModListItems));
+        OnPropertyChanged(nameof(WizardHintText));
+        NotifyGeneralModListTaskProperties();
+    }
+
+    private void NotifyBatchUpdateTaskProperties()
+    {
+        OnPropertyChanged(nameof(IsBatchUpdateTask));
+        OnPropertyChanged(nameof(IsShowModListTask));
+        OnPropertyChanged(nameof(CurrentBatchUpdateModName));
+        OnPropertyChanged(nameof(IsBatchUpdateWaitingConfirmation));
+        OnPropertyChanged(nameof(ShowBatchUpdateBrowserButton));
+        OnPropertyChanged(nameof(BatchUpdateModListItems));
+        OnPropertyChanged(nameof(BatchUpdateProgressText));
+        OnPropertyChanged(nameof(BatchUpdateHintText));
+        OnPropertyChanged(nameof(BatchUpdateCurrentFileProgress));
+        OnPropertyChanged(nameof(ShowBatchUpdateCurrentModCard));
+        OnPropertyChanged(nameof(ShowBatchUpdateModListCard));
+        NotifyWizardPagingAndListProperties();
+    }
+
+    private void NotifyBrowserDownloadTaskProperties()
+    {
+        OnPropertyChanged(nameof(IsBrowserDownloadTask));
+        OnPropertyChanged(nameof(IsShowModListTask));
+        OnPropertyChanged(nameof(CurrentWizardModName));
+        OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
+        OnPropertyChanged(nameof(WizardHintText));
+        OnPropertyChanged(nameof(ShowCurrentModCard));
+    }
+
+    private void NotifyGeneralModListTaskProperties()
+    {
+        OnPropertyChanged(nameof(IsShowModListTask));
+        OnPropertyChanged(nameof(WizardStatusDisplayText));
+        OnPropertyChanged(nameof(WizardProgressText));
+        OnPropertyChanged(nameof(WizardProgressPercent));
+        OnPropertyChanged(nameof(WizardCurrentFileProgress));
+        OnPropertyChanged(nameof(ShowCurrentModCard));
+        OnPropertyChanged(nameof(ShowModListCard));
+        NotifyWizardPagingAndListProperties();
+    }
+
+    private void NotifyWizardPagingAndListProperties()
+    {
+        OnPropertyChanged(nameof(WizardTotalPages));
+        OnPropertyChanged(nameof(WizardPageInfo));
+        OnPropertyChanged(nameof(WizardCurrentPage));
+        OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
+        OnPropertyChanged(nameof(CanGoToWizardNextPage));
+        OnPropertyChanged(nameof(WizardModListScrollViewerHeight));
+        OnPropertyChanged(nameof(ModListItems));
     }
 
     /// <summary>
@@ -1880,25 +1880,7 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = baseProgress;
             }
 
-            // 刷新 Wizard 相关属性
-            OnPropertyChanged(nameof(IsCollectionWizardTask));
-            OnPropertyChanged(nameof(CurrentWizardModName));
-            OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
-            OnPropertyChanged(nameof(WizardModListItems));
-            OnPropertyChanged(nameof(WizardStatusDisplayText));
-            OnPropertyChanged(nameof(WizardProgressText));
-            OnPropertyChanged(nameof(WizardProgressPercent));
-            OnPropertyChanged(nameof(WizardHintText));
-            OnPropertyChanged(nameof(WizardCurrentFileProgress));
-            OnPropertyChanged(nameof(ShowCurrentModCard));
-            OnPropertyChanged(nameof(ShowModListCard));
-            OnPropertyChanged(nameof(WizardTotalPages));
-            OnPropertyChanged(nameof(WizardPageInfo));
-            OnPropertyChanged(nameof(WizardCurrentPage));
-            OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
-            OnPropertyChanged(nameof(CanGoToWizardNextPage));
-            OnPropertyChanged(nameof(WizardModListScrollViewerHeight));
-            OnPropertyChanged(nameof(ModListItems));
+            NotifyWizardTaskProperties();
         }
         else if (task is ModBatchUpdateTask batchUpdateTask)
         {
@@ -1927,24 +1909,7 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = baseProgress;
             }
 
-            // 刷新批量更新相关属性
-            OnPropertyChanged(nameof(IsBatchUpdateTask));
-            OnPropertyChanged(nameof(IsShowModListTask));
-            OnPropertyChanged(nameof(CurrentBatchUpdateModName));
-            OnPropertyChanged(nameof(IsBatchUpdateWaitingConfirmation));
-            OnPropertyChanged(nameof(ShowBatchUpdateBrowserButton));
-            OnPropertyChanged(nameof(BatchUpdateModListItems));
-            OnPropertyChanged(nameof(BatchUpdateProgressText));
-            OnPropertyChanged(nameof(BatchUpdateHintText));
-            OnPropertyChanged(nameof(BatchUpdateCurrentFileProgress));
-            OnPropertyChanged(nameof(ShowBatchUpdateCurrentModCard));
-            OnPropertyChanged(nameof(ShowBatchUpdateModListCard));
-            OnPropertyChanged(nameof(WizardTotalPages));
-            OnPropertyChanged(nameof(WizardPageInfo));
-            OnPropertyChanged(nameof(WizardCurrentPage));
-            OnPropertyChanged(nameof(CanGoToWizardPreviousPage));
-            OnPropertyChanged(nameof(CanGoToWizardNextPage));
-            OnPropertyChanged(nameof(ModListItems));
+            NotifyBatchUpdateTaskProperties();
         }
         else
         {
@@ -1969,6 +1934,9 @@ public partial class TaskStatusViewModel : ObservableObject
                 ProgressDetail = $"{task.Progress:F0}%";
             }
         }
+
+        OnPropertyChanged(nameof(IsSmapiTask));
+        OnPropertyChanged(nameof(CanReopenBrowserPage));
 
         // 进行中状态：显示"取消任务"按钮
         ActionButtonText = "取消任务";
@@ -2099,8 +2067,7 @@ public partial class TaskStatusViewModel : ObservableObject
 
             if (!string.IsNullOrWhiteSpace(_trackedTaskId))
             {
-                currentTask = DownloadManager.Instance.GetAllTasks()
-                    .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+                currentTask = GetTrackedTask();
 
                 if (currentTask != null &&
                     currentTask.Status != DownloadTaskStatus.Pending &&
@@ -2300,23 +2267,14 @@ public partial class TaskStatusViewModel : ObservableObject
     [RelayCommand]
     private void OpenBrowserForWizardMod()
     {
-        var task = DownloadManager.Instance.GetAllTasks()
-            .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal));
+        var task = GetTrackedTask();
 
         // NexusMods 浏览器下载任务 — 浏览器已在 ExecuteAsync 中自动打开，
         // 这里只是给用户一个"重新打开浏览器"的入口
         if (task is NexusModsBrowserDownloadTask browserTask)
         {
-            try
-            {
-                var url = $"https://www.nexusmods.com/stardewvalley/mods/{browserTask.PendingModId}?tab=files&file_id={browserTask.PendingFileId}&nmm=1";
-                Log.Info($"[TaskStatusViewModel] 重新打开浏览器下载页: {url}");
-                ProcessEx.OpenUrl(url);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[TaskStatusViewModel] 打开浏览器失败");
-            }
+            var url = DownloadTaskBrowserHelper.BuildNexusModFilePageUrl(browserTask.PendingModId, browserTask.PendingFileId);
+            TryOpenBrowserUrl(url, "重新打开浏览器下载页");
             return;
         }
 
@@ -2324,33 +2282,31 @@ public partial class TaskStatusViewModel : ObservableObject
         if (task is NexusCollectionWizardTask wizardTask)
         {
             if (wizardTask.CurrentMod == null) return;
-            try
-            {
-                var downloadUrl = wizardTask.CurrentMod.FilesPageUrl;
-                Log.Info($"[TaskStatusViewModel] 打开浏览器: {downloadUrl}");
-                ProcessEx.OpenUrl(downloadUrl);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[TaskStatusViewModel] 打开浏览器失败");
-            }
+            var downloadUrl = wizardTask.CurrentMod.FilesPageUrl;
+            TryOpenBrowserUrl(downloadUrl, "打开浏览器");
         }
 
         // SVL 整合包导入任务 — 使用 PendingNexusModId/FileId 打开浏览器
         if (task is SvlModpackInstallTask svlTask)
         {
             if (svlTask.PendingNexusModId <= 0) return;
-            try
-            {
-                var url = $"https://www.nexusmods.com/stardewvalley/mods/{svlTask.PendingNexusModId}?tab=files&file_id={svlTask.PendingNexusFileId}&nmm=1";
-                Log.Info($"[TaskStatusViewModel] SVL整合包: 打开浏览器下载页: {url}");
-                ProcessEx.OpenUrl(url);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[TaskStatusViewModel] 打开浏览器失败");
-            }
+            var url = DownloadTaskBrowserHelper.BuildNexusModFilePageUrl(svlTask.PendingNexusModId, svlTask.PendingNexusFileId);
+            TryOpenBrowserUrl(url, "SVL整合包: 打开浏览器下载页");
         }
+    }
+
+    [RelayCommand]
+    private void ReopenBrowserPage()
+    {
+        var task = GetTrackedTask();
+
+        if (!DownloadTaskBrowserHelper.TryGetBrowserOpenUrl(task, out var url))
+        {
+            Log.Warn("[TaskStatusViewModel] 当前任务没有可重新打开的浏览器 URL");
+            return;
+        }
+
+        TryOpenBrowserUrl(url, "重新打开浏览器", "重新打开浏览器失败");
     }
 
     /// <summary>
@@ -2383,8 +2339,7 @@ public partial class TaskStatusViewModel : ObservableObject
     [RelayCommand]
     private void SkipWizardMod()
     {
-        var task = DownloadManager.Instance.GetAllTasks()
-            .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as NexusCollectionWizardTask;
+        var task = GetTrackedTask() as NexusCollectionWizardTask;
 
         if (task?.CurrentMod == null || !task.CurrentMod.IsOptional)
             return;
@@ -2401,8 +2356,7 @@ public partial class TaskStatusViewModel : ObservableObject
     [RelayCommand]
     private void OpenBrowserForBatchUpdateMod()
     {
-        var task = DownloadManager.Instance.GetAllTasks()
-            .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+        var task = GetTrackedTask() as ModBatchUpdateTask;
 
         var currentMod = task?.CurrentMod;
         if (currentMod == null)
@@ -2414,22 +2368,30 @@ public partial class TaskStatusViewModel : ObservableObject
             return;
         }
 
+        // 从 DownloadUrl 获取下载页面 URL
+        var downloadPageUrl = currentMod.DownloadUrl;
+        if (string.IsNullOrEmpty(downloadPageUrl))
+        {
+            Log.Warn($"[TaskStatusViewModel] 无法获取 {currentMod.Name} 的下载页面 URL");
+            return;
+        }
+
+        TryOpenBrowserUrl(downloadPageUrl, "打开浏览器");
+    }
+
+    private static void TryOpenBrowserUrl(string? url, string logAction, string errorLog = "打开浏览器失败")
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+
         try
         {
-            // 从 DownloadUrl 获取下载页面 URL
-            var downloadPageUrl = currentMod.DownloadUrl;
-            if (string.IsNullOrEmpty(downloadPageUrl))
-            {
-                Log.Warn($"[TaskStatusViewModel] 无法获取 {currentMod.Name} 的下载页面 URL");
-                return;
-            }
-
-            Log.Info($"[TaskStatusViewModel] 打开浏览器: {downloadPageUrl}");
-            ProcessEx.OpenUrl(downloadPageUrl);
+            Log.Info($"[TaskStatusViewModel] {logAction}: {url}");
+            ProcessEx.OpenUrl(url);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "[TaskStatusViewModel] 打开浏览器失败");
+            Log.Error(ex, $"[TaskStatusViewModel] {errorLog}");
         }
     }
 
@@ -2439,8 +2401,7 @@ public partial class TaskStatusViewModel : ObservableObject
     [RelayCommand]
     private async System.Threading.Tasks.Task BatchUpdateSkipModAsync()
     {
-        var task = DownloadManager.Instance.GetAllTasks()
-            .FirstOrDefault(t => string.Equals(t.Id, _trackedTaskId, StringComparison.Ordinal)) as ModBatchUpdateTask;
+        var task = GetTrackedTask() as ModBatchUpdateTask;
 
         if (task == null)
             return;
@@ -2457,26 +2418,13 @@ public partial class TaskStatusViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CanGoToPreviousTask));
         OnPropertyChanged(nameof(CanGoToNextTask));
-        OnPropertyChanged(nameof(IsCollectionWizardTask));
-        OnPropertyChanged(nameof(IsBatchUpdateTask));
-        OnPropertyChanged(nameof(IsShowModListTask));
-        OnPropertyChanged(nameof(CurrentWizardModName));
-        OnPropertyChanged(nameof(CurrentBatchUpdateModName));
-        OnPropertyChanged(nameof(IsWizardWaitingConfirmation));
-        OnPropertyChanged(nameof(IsBatchUpdateWaitingConfirmation));
-        OnPropertyChanged(nameof(ShowBatchUpdateBrowserButton));
-        OnPropertyChanged(nameof(WizardModListItems));
-        OnPropertyChanged(nameof(BatchUpdateModListItems));
-        OnPropertyChanged(nameof(WizardStatusDisplayText));
-        OnPropertyChanged(nameof(WizardProgressText));
-        OnPropertyChanged(nameof(WizardProgressPercent));
-        OnPropertyChanged(nameof(BatchUpdateProgressText));
-        OnPropertyChanged(nameof(WizardHintText));
-        OnPropertyChanged(nameof(BatchUpdateHintText));
-        OnPropertyChanged(nameof(ShowCurrentModCard));
-        OnPropertyChanged(nameof(ShowModListCard));
+        NotifyWizardTaskProperties();
+        NotifyBatchUpdateTaskProperties();
+        NotifyBrowserDownloadTaskProperties();
+        OnPropertyChanged(nameof(IsSmapiTask));
         OnPropertyChanged(nameof(ShowBatchUpdateCurrentModCard));
         OnPropertyChanged(nameof(ShowBatchUpdateModListCard));
+        OnPropertyChanged(nameof(CanReopenBrowserPage));
     }
 
     /// <summary>

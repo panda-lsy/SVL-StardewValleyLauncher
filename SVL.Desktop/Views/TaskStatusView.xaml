@@ -233,6 +233,9 @@
                                                     <DataTrigger Binding="{Binding IsBrowserDownloadTask}" Value="True">
                                                         <Setter Property="Text" Value="{Binding WizardHintText}"/>
                                                     </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsSmapiTask}" Value="True">
+                                                            <Setter Property="Text" Value="{Binding WizardHintText}"/>
+                                                        </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsSvlModpackTask}" Value="True">
                                                         <Setter Property="Text" Value="{Binding WizardHintText}"/>
                                                     </DataTrigger>
@@ -278,6 +281,9 @@
                                                     <DataTrigger Binding="{Binding IsBrowserDownloadTask}" Value="True">
                                                         <Setter Property="Text" Value="{Binding CurrentWizardModName}"/>
                                                     </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsSmapiTask}" Value="True">
+                                                            <Setter Property="Text" Value="{Binding CurrentWizardModName}"/>
+                                                        </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsSvlModpackTask}" Value="True">
                                                         <Setter Property="Text" Value="{Binding CurrentWizardModName}"/>
                                                     </DataTrigger>
@@ -480,10 +486,10 @@
                                     <!-- NexusMods 浏览器下载的「重新打开浏览器」按钮 -->
                                     <Button Content="🌐 重新打开浏览器"
                                             Padding="12,8"
-                                            Command="{Binding OpenBrowserForWizardModCommand}"
-                                            IsEnabled="{Binding IsWizardWaitingConfirmation}"
+                                            Command="{Binding ReopenBrowserPageCommand}"
+                                            IsEnabled="{Binding CanReopenBrowserPage}"
                                             Cursor="Hand"
-                                            Visibility="{Binding IsBrowserDownloadTask, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            Visibility="{Binding CanReopenBrowserPage, Converter={StaticResource BoolToVisibilityConverter}}">
                                         <Button.Style>
                                             <Style TargetType="Button">
                                                 <Setter Property="Background" Value="{DynamicResource ColorBrush1}" />

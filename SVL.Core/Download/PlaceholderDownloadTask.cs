@@ -14,6 +14,11 @@ public class PlaceholderDownloadTask : DownloadTask
     private readonly string _statusMessage;
     private readonly CancellationTokenSource _cts = new();
 
+    /// <summary>
+    /// 可选：用于任务管理器“打开页面”按钮的浏览器地址。
+    /// </summary>
+    public string? BrowserOpenUrl { get; set; }
+
     public PlaceholderDownloadTask(string name, DownloadTaskType type, string statusMessage = "准备中...")
     {
         Name = name;

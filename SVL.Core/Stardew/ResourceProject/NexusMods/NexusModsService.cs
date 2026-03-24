@@ -1,5 +1,7 @@
 using System;
 using SVL.Core.IO;
+using SVL.Core.Config;
+using SVL.Core.Download;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -246,8 +248,7 @@ public class NexusModsService
         }
 
         var mod = await NexusModsClient.GetModDetailsAsync(modId);
-
-        return mod;
+        return await EnsureModRequirementsAsync(mod, modId);
     }
 
     /// <summary>
@@ -265,14 +266,14 @@ public class NexusModsService
                 var exact = byName?.FirstOrDefault(m => m.ModId == modId)
                     ?? byName?.FirstOrDefault(m => string.Equals(m.Name, nameHint, StringComparison.OrdinalIgnoreCase));
                 if (exact != null)
-                    return exact;
+                    return await EnsureModRequirementsAsync(exact, modId);
             }
 
             // 2) 再用热门列表（GraphQL）按 modId 定位（兜底）
             var popular = await SearchModsAsync(string.Empty, page: 1, pageSize: 100, useCache: false);
             var byPopular = popular?.FirstOrDefault(m => m.ModId == modId);
             if (byPopular != null)
-                return byPopular;
+                return await EnsureModRequirementsAsync(byPopular, modId);
         }
         catch (Exception ex)
         {
@@ -281,6 +282,25 @@ public class NexusModsService
 
         // 3) 最后回退 REST
         return await GetModDetailsAsync(modId, useCache: false);
+    }
+
+    private static async Task<NexusMod?> EnsureModRequirementsAsync(NexusMod? mod, long modId)
+    {
+        if (mod == null)
+            return null;
+
+        var requirements = await NexusModsClient.GetModRequirementsGraphQlAsync(modId);
+        if (requirements != null)
+        {
+            mod.ModRequirements = requirements;
+            Log.Info($"[NexusModsService] 已注入 modRequirements: modId={modId}, total={requirements.NexusRequirements?.TotalCount ?? 0}, nodes={requirements.NexusRequirements?.Nodes?.Count ?? 0}");
+        }
+        else
+        {
+            Log.Warn($"[NexusModsService] 未获取到 modRequirements: modId={modId}");
+        }
+
+        return mod;
     }
 
     public static async Task<List<NexusModFile>> GetModFilesAsync(long modId)
@@ -888,81 +908,50 @@ public class NexusModsService
             Log.Debug($"[NexusMods] 下载 URL: {url}");
 
             progressCallback?.Invoke(15, "连接 CDN...");
-
-            using var client = new System.Net.Http.HttpClient();
-            client.DefaultRequestHeaders.Add("User-Agent", "SVL Launcher");
-
-            Log.Debug($"[NexusMods] 发送 HTTP GET 请求...");
-
             progressCallback?.Invoke(20, "模组下载中");
 
-            // 传递 cancellationToken 以支持取消
-            var response = await client.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            var settings = AppConfig.GetSettings();
+            var threadCount = Math.Max(1, Math.Min(16, settings.DownloadSegmentThreads));
+            var lastLoggedProgress = 0;
 
-            Log.Debug($"[NexusMods] HTTP 响应状态: {response.StatusCode}");
-            response.EnsureSuccessStatusCode();
+            Log.Info($"[NexusMods] 启用多线程下载: threads={threadCount}");
 
-            var totalBytes = response.Content.Headers.ContentLength ?? 0;
-            var totalMB = totalBytes / 1024.0 / 1024.0;
-            Log.Info($"[NexusMods] 文件大小: {totalMB:F2} MB");
-
-            progressCallback?.Invoke(25, "模组下载中");
-
-            Log.Debug($"[NexusMods] 开始读取响应内容...");
-            using var stream = await response.Content.ReadAsStreamAsync();
-            using var fileStream = System.IO.File.Create(destinationPath);
-
-            var buffer = new byte[81920]; // 80KB buffer
-            long bytesRead = 0;
-            int lastLoggedProgress = 0;  // 上次记录日志的进度（每25%记录一次）
-
-            var lastUpdateTime = DateTime.UtcNow;
-
-            int read;
-            while ((read = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
-            {
-                await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
-                bytesRead += read;
-
-                var currentTime = DateTime.UtcNow;
-                var elapsedMs = (currentTime - lastUpdateTime).TotalMilliseconds;
-
-                // 每 1000ms (1秒) 更新一次进度
-                if (elapsedMs >= 1000)
+            await HttpMultiThreadDownloader.DownloadAsync(
+                url,
+                destinationPath,
+                threadCount,
+                (progress, bytesRead, totalBytes, speedBytesPerSec) =>
                 {
-                    lastUpdateTime = currentTime;
+                    var mappedProgress = 25 + progress * 0.70; // 25-95
+                    var totalMb = totalBytes / 1024.0 / 1024.0;
+                    var currentMb = bytesRead / 1024.0 / 1024.0;
+                    var speedMb = speedBytesPerSec / 1024.0 / 1024.0;
 
-                    if (totalBytes > 0)
+                    progressCallback?.Invoke(
+                        mappedProgress,
+                        $"模组下载中\n{mappedProgress:F2}% {currentMb:F2}MB/{totalMb:F2}MB ({speedMb:F1}MB/s)",
+                        bytesRead,
+                        totalBytes);
+
+                    var progressInt = (int)mappedProgress;
+                    if (progressInt >= lastLoggedProgress + 25)
                     {
-                        var progress = 25 + (bytesRead * 70.0 / totalBytes); // 25-95%
-                        var currentMB = bytesRead / 1024.0 / 1024.0;
-
-                        // 格式：模组下载中 + 换行 + 百分比和大小
-                        // 同时传递字节数信息
-                        progressCallback?.Invoke(progress, $"模组下载中\n{progress:F2}% {currentMB:F2}MB/{totalMB:F2}MB", bytesRead, totalBytes);
-
-                        // 每 25% 记录一次日志
-                        var progressInt = (int)progress;
-                        if (progressInt >= lastLoggedProgress + 25)
-                        {
-                            lastLoggedProgress = progressInt;
-                            Log.Info($"[NexusMods] 下载进度: {progress:F2}% ({currentMB:F2}MB / {totalMB:F2}MB)");
-                        }
+                        lastLoggedProgress = progressInt;
+                        Log.Info($"[NexusMods] 下载进度: {mappedProgress:F2}% ({currentMb:F2}MB / {totalMb:F2}MB)");
                     }
-                }
-            }
+                },
+                cancellationToken);
 
-            var finalMB = bytesRead / 1024.0 / 1024.0;
+            var fileInfo = new FileInfo(destinationPath);
+            var finalMB = fileInfo.Exists ? fileInfo.Length / 1024.0 / 1024.0 : 0;
             Log.Info($"[NexusMods] 下载完成: {finalMB:F2}MB");
             Log.Debug($"[NexusMods] 写入文件: {destinationPath}");
 
             progressCallback?.Invoke(95, "保存文件...");
 
-            await fileStream.FlushAsync();
-
             progressCallback?.Invoke(98, "完成");
 
-            Log.Info($"[NexusMods] ✓ 下载成功: {fileName} ({bytesRead} bytes)");
+            Log.Info($"[NexusMods] ✓ 下载成功: {fileName} ({(fileInfo.Exists ? fileInfo.Length : 0)} bytes)");
             return true;
         }
         catch (System.Net.Http.HttpRequestException httpEx)

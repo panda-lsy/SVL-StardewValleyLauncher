@@ -76,6 +76,7 @@ FodyWeavers.xsd
 *.tmp
 *.temp
 *.cache
+*.tmp-build
 nul
 
 # ----- Submodules / external source (not distributed) -----

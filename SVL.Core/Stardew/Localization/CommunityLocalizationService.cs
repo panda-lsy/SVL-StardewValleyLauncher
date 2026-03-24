@@ -38,6 +38,9 @@ public sealed class CommunityLocalizationEntry
     [JsonPropertyName("functionalOverlaps")]
     public CommunityLocalizationRelation[] FunctionalOverlaps { get; set; } = Array.Empty<CommunityLocalizationRelation>();
 
+    [JsonPropertyName("localizedMods")]
+    public CommunityLocalizationRelation[] LocalizedMods { get; set; } = Array.Empty<CommunityLocalizationRelation>();
+
     [JsonPropertyName("meta")]
     public CommunityLocalizationMeta Meta { get; set; } = new();
 }

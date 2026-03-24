@@ -238,11 +238,9 @@ public partial class ModpackSearchViewModel : ObservableObject
             ModpackList.Clear();
             Log.Info("[ModpackSearchViewModel] ModpackList 已清空");
 
-            // 计算分页参数
-            int skip = (CurrentPage - 1) * PageSize;
-
-            // 计算需要获取的数据量（双倍数据量，用于跨来源统一排序）
-            int fetchCount = PageSize * 2;
+            // 全部来源交错展示时，每个来源抓取一半即可；单来源保持整页数量。
+            int fetchCount = SelectedSource == "全部" ? Math.Max(1, PageSize / 2) : PageSize;
+            int skip = (CurrentPage - 1) * fetchCount;
 
             // 并行加载 Curseforge 和 Nexus 的热门整合包
             var curseforgeTask = (SelectedSource == "全部" || SelectedSource == "Curseforge")
@@ -524,7 +522,7 @@ public partial class ModpackSearchViewModel : ObservableObject
 
             // 普通关键词搜索 - 收集所有结果后统一排序
             var allSearchResults = new List<ModSearchItem>();
-            int fetchCount = PageSize * 2;  // 获取双倍数据量
+            int fetchCount = SelectedSource == "全部" ? Math.Max(1, PageSize / 2) : PageSize;
 
             if (SelectedSource == "全部" || SelectedSource == "Curseforge")
             {
@@ -617,7 +615,7 @@ public partial class ModpackSearchViewModel : ObservableObject
             var searchTerm = SearchName ?? "";
             Log.Info($"[ModpackSearchViewModel] [内部] 调用 Curseforge API 搜索整合包: '{searchTerm}'（第{CurrentPage}页，获取{pageSize}个）");
 
-            int skip = (CurrentPage - 1) * PageSize;
+            int skip = (CurrentPage - 1) * pageSize;
 
             var modpacks = await CurseforgeApiService.SearchModpacksAsync(
                 searchQuery: searchTerm,

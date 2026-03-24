@@ -1,6 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SVL.Core.Download;
+using SVL.Core.Download.NexusMods;
+using SVL.Desktop.Utilities;
+using SVL.Core.IO;
 using SVL.Core.Logging;
 using System;
 using System.Collections.ObjectModel;
@@ -140,6 +143,31 @@ public partial class DownloadLeftViewModel : ObservableObject
                 Log.Warn($"[DownloadLeftViewModel] LeftPanelContent 类型不匹配: {_mainViewModel.LeftPanelContent?.GetType().Name}");
             }
         }));
+    }
+
+    [RelayCommand]
+    private void OpenBrowserPage(DownloadTaskViewModel taskViewModel)
+    {
+        if (taskViewModel == null)
+            return;
+
+        var task = DownloadManager.Instance.GetTask(taskViewModel.Id);
+        if (!DownloadTaskBrowserHelper.TryGetBrowserOpenUrl(task, out var browserUrl))
+            return;
+
+        try
+        {
+            ProcessEx.OpenUrl(browserUrl);
+            DownloadManager.Instance.UpdateTaskStatus(
+                taskViewModel.Id,
+                status: task?.Status ?? DownloadTaskStatus.WaitingConfirmation,
+                statusMessage: DownloadTaskBrowserHelper.ReopenBrowserStatusMessage,
+                progress: task?.Progress ?? 0);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "[DownloadLeftViewModel] 重新打开浏览器失败");
+        }
     }
 
     /// <summary>

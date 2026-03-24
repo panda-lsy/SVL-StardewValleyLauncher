@@ -88,6 +88,7 @@ public static class AppConfig
                 ModDefaultSource = settings.ModDefaultSource,
                 LocalizationPreferredSource = settings.LocalizationPreferredSource,
                 MaxConcurrentModDownloads = settings.MaxConcurrentModDownloads,
+                DownloadSegmentThreads = settings.DownloadSegmentThreads,
                 MaxConcurrentModUpdateChecks = settings.MaxConcurrentModUpdateChecks,
                 MaxConcurrentModLocalizationChecks = settings.MaxConcurrentModLocalizationChecks,
 
@@ -369,6 +370,11 @@ public class AppSettings
     /// 整合包安装时的最大并发下载数（1-10）
     /// </summary>
     public int MaxConcurrentModDownloads { get; set; } = 3;
+
+    /// <summary>
+    /// 单个文件下载时的分片线程数（1-16）
+    /// </summary>
+    public int DownloadSegmentThreads { get; set; } = 4;
 
     /// <summary>
     /// Mod 更新检测的最大并发线程数（1-16）

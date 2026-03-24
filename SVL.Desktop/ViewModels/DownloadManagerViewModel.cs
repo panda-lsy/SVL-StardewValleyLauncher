@@ -6,9 +6,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SVL.Core.Config;
 using SVL.Core.Download;
+using SVL.Core.IO;
 using SVL.Core.Download.NexusMods;
 using SVL.Core.Logging;
 using SVL.Desktop.Controls;
+using SVL.Desktop.Utilities;
 
 namespace SVL.Desktop.ViewModels;
 
@@ -163,6 +165,36 @@ public partial class DownloadManagerViewModel : ObservableObject
     private void CancelTask(string taskId)
     {
         _manager.CancelTask(taskId);
+    }
+
+    [RelayCommand]
+    private void OpenBrowserPage(string taskId)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+            return;
+
+        var task = _manager.GetTask(taskId);
+        if (!DownloadTaskBrowserHelper.TryGetBrowserOpenUrl(task, out var browserUrl))
+            return;
+
+        try
+        {
+            ProcessEx.OpenUrl(browserUrl);
+            _manager.UpdateTaskStatus(
+                taskId,
+                status: task.Status,
+                statusMessage: DownloadTaskBrowserHelper.ReopenBrowserStatusMessage,
+                progress: task.Progress);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"[DownloadManagerViewModel] 打开浏览器页面失败: {taskId}");
+            FloatingNotificationControl.Show(
+                title: "打开页面失败",
+                message: $"无法打开浏览器：{ex.Message}",
+                autoCloseDelay: 5000,
+                notificationType: NotificationType.Error);
+        }
     }
 
     /// <summary>

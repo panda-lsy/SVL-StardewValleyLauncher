@@ -139,6 +139,9 @@ public partial class ModDetailsViewModel : ObservableObject
     private ObservableCollection<ModDependencyLink> _requiredMods = new();
 
     [ObservableProperty]
+    private ObservableCollection<ModDependencyLink> _relatedMods = new();
+
+    [ObservableProperty]
     private bool _isRequiredModsExpanded;
 
     [ObservableProperty]
@@ -146,6 +149,9 @@ public partial class ModDetailsViewModel : ObservableObject
 
     [ObservableProperty]
     private ObservableCollection<ModDependencyLink> _functionalOverlapMods = new();
+
+    [ObservableProperty]
+    private ObservableCollection<ModDependencyLink> _localizedMods = new();
 
     [ObservableProperty]
     private ObservableCollection<string> _supportedGameVersions = new();
@@ -265,10 +271,14 @@ public partial class ModDetailsViewModel : ObservableObject
     public bool HasAnyDescription => !string.IsNullOrWhiteSpace(DisplayDescription);
     public bool HasRequiredMods => RequiredMods.Count > 0;
     public int RequiredModsCount => RequiredMods.Count;
+    public bool HasRelatedMods => RelatedMods.Count > 0;
+    public int RelatedModsCount => RelatedMods.Count;
     public bool HasHardConflictMods => HardConflictMods.Count > 0;
     public int HardConflictModsCount => HardConflictMods.Count;
     public bool HasFunctionalOverlapMods => FunctionalOverlapMods.Count > 0;
     public int FunctionalOverlapModsCount => FunctionalOverlapMods.Count;
+    public bool HasLocalizedMods => LocalizedMods.Count > 0;
+    public int LocalizedModsCount => LocalizedMods.Count;
     public bool IsCollectionDetails => !string.IsNullOrWhiteSpace(Mod?.Id) && Mod.Id.StartsWith("nexuscol-", StringComparison.OrdinalIgnoreCase);
     public string CopyIdButtonText => IsCollectionDetails ? "尾链" : "ID";
     public string CopyIdNotificationLabel => IsCollectionDetails ? "尾链" : "ID";
@@ -359,7 +369,7 @@ public partial class ModDetailsViewModel : ObservableObject
             {
                 Mod.Id = $"nexus-{matched.ModId}";
                 if (string.IsNullOrWhiteSpace(Mod.Url))
-                    Mod.Url = $"https://www.nexusmods.com/stardewvalley/mods/{matched.ModId}";
+                    Mod.Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(matched.ModId);
 
                 return matched.ModId;
             }
@@ -558,6 +568,7 @@ public partial class ModDetailsViewModel : ObservableObject
         OnPropertyChanged(nameof(DisplayDescription));
         OnPropertyChanged(nameof(HasAnyDescription));
         OnPropertyChanged(nameof(HasRequiredMods));
+        OnPropertyChanged(nameof(HasRelatedMods));
         OnPropertyChanged(nameof(HasHardConflictMods));
         OnPropertyChanged(nameof(HasFunctionalOverlapMods));
         OnPropertyChanged(nameof(IsCollectionDetails));
@@ -578,6 +589,9 @@ public partial class ModDetailsViewModel : ObservableObject
         RequiredMods.Clear();
         OnPropertyChanged(nameof(HasRequiredMods));
         OnPropertyChanged(nameof(RequiredModsCount));
+        RelatedMods.Clear();
+        OnPropertyChanged(nameof(HasRelatedMods));
+        OnPropertyChanged(nameof(RelatedModsCount));
         ClearCommunityRelationCollections();
         CurseforgeApiService.CurseforgeModInfo? curseforgeModInfo = null;
 
@@ -600,6 +614,7 @@ public partial class ModDetailsViewModel : ObservableObject
                     Mod.LastUpdateTime = string.Empty;
 
                 RestoreOrInitializeRequirements();
+                RestoreOrInitializeRelatedMods();
 
                 Log.Info($"[ModDetailsViewModel] 开始加载 MOD 详情: {Mod.Name}, Source: {Mod.Source}, Id: {Mod.Id}");
 
@@ -1710,70 +1725,53 @@ public partial class ModDetailsViewModel : ObservableObject
     {
         try
         {
-            var fileIds = groups
-                .SelectMany(group => group.Files)
-                .Select(file => file.FileId)
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .Select(TryExtractNumericId)
-                .Where(id => id > 0)
-                .Distinct()
-                .Take(24)
+            var detail = await EnsureNexusDetailsAsync(modId);
+            var modRequirements = detail?.ModRequirements?.NexusRequirements?.Nodes ?? [];
+            var nexusTotalCount = detail?.ModRequirements?.NexusRequirements?.TotalCount ?? 0;
+            Log.Info($"[ModDetailsViewModel] Nexus modRequirements 读取: modId={modId}, totalCount={nexusTotalCount}, nodes={modRequirements.Count}");
+
+            var requirements = modRequirements
+                .Where(node => node != null && !node.ExternalRequirement)
+                .Select(node =>
+                {
+                    var hasModId = long.TryParse(node.ModId, out var parsedModId) && parsedModId > 0;
+                    var displayName = !string.IsNullOrWhiteSpace(node.ModName)
+                        ? node.ModName
+                        : (hasModId ? $"Nexus Mod {parsedModId}" : "未知前置 Mod");
+
+                    return new ModDependencyLink
+                    {
+                        DisplayName = displayName,
+                        ProjectId = hasModId ? parsedModId.ToString() : string.Empty,
+                        Source = "NexusMods",
+                        Url = !string.IsNullOrWhiteSpace(node.Url)
+                            ? node.Url
+                            : (hasModId ? DownloadTaskBrowserHelper.BuildNexusModPageUrl(parsedModId) : string.Empty),
+                        IsRequired = true,
+                        Note = string.IsNullOrWhiteSpace(node.Notes) ? "Nexus 标注前置" : $"Nexus 标注前置：{node.Notes.Trim()}"
+                    };
+                })
+                .Where(item => !string.IsNullOrWhiteSpace(item.DisplayName))
                 .ToList();
 
-            var aggregatedRequirements = new List<ModDependencyLink>();
-            if (fileIds.Count > 0)
-            {
-                var metadataTasks = fileIds.Select(fileId => NexusModsService.GetModFileMetadataAsync(modId, fileId));
-                var metadataList = await Task.WhenAll(metadataTasks);
-                aggregatedRequirements.AddRange(metadataList
-                    .Where(metadata => metadata != null)
-                    .SelectMany(metadata => metadata.Requirements)
-                    .Select(requirement => new ModDependencyLink
-                    {
-                        DisplayName = string.IsNullOrWhiteSpace(requirement.Name) ? $"Nexus Mod {requirement.ModId}" : requirement.Name,
-                        ProjectId = requirement.ModId > 0 ? requirement.ModId.ToString() : string.Empty,
-                        Source = "NexusMods",
-                        Url = requirement.Url ?? string.Empty,
-                        MinimumVersion = requirement.Version ?? string.Empty,
-                        IsRequired = requirement.IsRequired,
-                        Note = "文件前置"
-                    }));
-            }
+            Log.Info($"[ModDetailsViewModel] Nexus 前置解析结果: modId={modId}, parsedRequirements={requirements.Count}");
 
-            var descriptionHints = (await DetectNexusRequirementsFromDescriptionAsync(modId)).ToList();
-            if (descriptionHints.Count > 0)
-            {
-                foreach (var requirement in aggregatedRequirements)
-                {
-                    var optionalHint = descriptionHints.FirstOrDefault(hint =>
-                        !hint.IsRequired &&
-                        (( !string.IsNullOrWhiteSpace(hint.ProjectId) && string.Equals(hint.ProjectId, requirement.ProjectId, StringComparison.OrdinalIgnoreCase)) ||
-                         ( !string.IsNullOrWhiteSpace(hint.Url) && string.Equals(hint.Url, requirement.Url, StringComparison.OrdinalIgnoreCase))));
+            SetRequirements(requirements);
+            await EnrichRequirementMetadataAsync(requirements);
+            CacheRequirements(requirements);
+            SetRequirements(requirements);
 
-                    if (optionalHint != null)
-                    {
-                        requirement.IsRequired = false;
-                        if (string.IsNullOrWhiteSpace(requirement.Note) || requirement.Note.IndexOf("可选", StringComparison.OrdinalIgnoreCase) < 0)
-                            requirement.Note = "描述推断为可选前置";
-                    }
-                }
-            }
-
-            if (aggregatedRequirements.Count == 0)
-            {
-                aggregatedRequirements.AddRange(descriptionHints);
-            }
-
-            SetRequirements(aggregatedRequirements);
-            await EnrichRequirementMetadataAsync(aggregatedRequirements);
-            CacheRequirements(aggregatedRequirements);
-            SetRequirements(aggregatedRequirements);
+            var relatedMods = await BuildLegacyNexusRelatedModsAsync(modId, groups);
+            await EnrichRequirementMetadataAsync(relatedMods);
+            SetRelatedModsCard(relatedMods);
+            Log.Info($"[ModDetailsViewModel] Nexus 相关Mod解析结果: modId={modId}, relatedMods={relatedMods.Count}");
         }
         catch (Exception ex)
         {
             Log.Debug($"[ModDetailsViewModel] 加载 Nexus 前置失败: {ex.Message}");
             CacheRequirements(Array.Empty<ModDependencyLink>());
             SetRequirements(Array.Empty<ModDependencyLink>());
+            SetRelatedModsCard(Array.Empty<ModDependencyLink>());
         }
     }
 
@@ -1838,13 +1836,61 @@ public partial class ModDetailsViewModel : ObservableObject
             await EnrichRequirementMetadataAsync(requirements);
             CacheRequirements(requirements);
             SetRequirements(requirements);
+            SetRelatedModsCard(Array.Empty<ModDependencyLink>());
         }
         catch (Exception ex)
         {
             Log.Debug($"[ModDetailsViewModel] 加载 Curseforge 前置失败: {ex.Message}");
             CacheRequirements(Array.Empty<ModDependencyLink>());
             SetRequirements(Array.Empty<ModDependencyLink>());
+            SetRelatedModsCard(Array.Empty<ModDependencyLink>());
         }
+    }
+
+    private async Task<List<ModDependencyLink>> BuildLegacyNexusRelatedModsAsync(long modId, IEnumerable<GameVersionFilesGroup> groups)
+    {
+        var relatedMods = new List<ModDependencyLink>();
+
+        var fileIds = (groups ?? Enumerable.Empty<GameVersionFilesGroup>())
+            .SelectMany(group => group.Files)
+            .Select(file => file.FileId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(TryExtractNumericId)
+            .Where(id => id > 0)
+            .Distinct()
+            .Take(24)
+            .ToList();
+
+        if (fileIds.Count > 0)
+        {
+            var metadataTasks = fileIds.Select(fileId => NexusModsService.GetModFileMetadataAsync(modId, fileId));
+            var metadataList = await Task.WhenAll(metadataTasks);
+            relatedMods.AddRange(metadataList
+                .Where(metadata => metadata != null)
+                .SelectMany(metadata => metadata.Requirements)
+                .Select(requirement => new ModDependencyLink
+                {
+                    DisplayName = string.IsNullOrWhiteSpace(requirement.Name) ? $"Nexus Mod {requirement.ModId}" : requirement.Name,
+                    ProjectId = requirement.ModId > 0 ? requirement.ModId.ToString() : string.Empty,
+                    Source = "NexusMods",
+                    Url = requirement.Url ?? string.Empty,
+                    MinimumVersion = requirement.Version ?? string.Empty,
+                    IsRequired = requirement.IsRequired,
+                    Note = "文件提取相关"
+                }));
+        }
+
+        var descriptionHints = (await DetectNexusRequirementsFromDescriptionAsync(modId)).ToList();
+        if (descriptionHints.Count > 0)
+        {
+            foreach (var hint in descriptionHints)
+            {
+                hint.Note = hint.IsRequired ? "描述提取相关" : "描述提取相关（可选）";
+                relatedMods.Add(hint);
+            }
+        }
+
+        return relatedMods;
     }
 
     private void SetRequirements(IEnumerable<ModDependencyLink> requirements)
@@ -2010,6 +2056,7 @@ public partial class ModDetailsViewModel : ObservableObject
             _communityLocalizationEntry = await CommunityLocalizationService.GetAsync(entityType, platform, id).ConfigureAwait(false);
             SetHardConflictMods(BuildCommunityRelationLinks(_communityLocalizationEntry?.HardConflicts, "社区标注冲突"));
             SetFunctionalOverlapMods(BuildCommunityRelationLinks(_communityLocalizationEntry?.FunctionalOverlaps, "社区标注功能重复"));
+            SetLocalizedMods(BuildCommunityRelationLinks(_communityLocalizationEntry?.LocalizedMods, "社区标注汉化"));
         }
         catch (Exception ex)
         {
@@ -2067,7 +2114,7 @@ public partial class ModDetailsViewModel : ObservableObject
             return string.Empty;
 
         if (IsNexusSource && long.TryParse(relationId, out _))
-            return $"https://www.nexusmods.com/stardewvalley/mods/{relationId}";
+            return DownloadTaskBrowserHelper.BuildNexusModPageUrl(relationId);
 
         return string.Empty;
     }
@@ -2087,11 +2134,57 @@ public partial class ModDetailsViewModel : ObservableObject
         OnPropertyChanged(nameof(HardConflictModsCount));
     }
 
+    private void SetRelatedModsCard(IEnumerable<ModDependencyLink> items)
+    {
+        var merged = (items ?? Enumerable.Empty<ModDependencyLink>())
+            .Where(item => item != null)
+            .Select(CloneDependencyLink)
+            .ToList();
+
+        if (merged.Any(item => !item.IsPlaceholder))
+        {
+            merged = merged
+                .Where(item => !item.IsPlaceholder)
+                .ToList();
+        }
+
+        SetRelatedMods(RelatedMods, merged);
+        OnPropertyChanged(nameof(HasRelatedMods));
+        OnPropertyChanged(nameof(RelatedModsCount));
+    }
+
+    private void RestoreOrInitializeRelatedMods()
+    {
+        if (string.Equals(Mod?.Source, "NexusMods", StringComparison.OrdinalIgnoreCase))
+        {
+            SetRelatedModsCard(new[]
+            {
+                new ModDependencyLink
+                {
+                    DisplayName = "正在解析相关模组...",
+                    Note = "请稍候",
+                    Source = "placeholder",
+                    IsPlaceholder = true
+                }
+            });
+            return;
+        }
+
+        SetRelatedModsCard(Array.Empty<ModDependencyLink>());
+    }
+
     private void SetFunctionalOverlapMods(IEnumerable<ModDependencyLink> items)
     {
         SetRelatedMods(FunctionalOverlapMods, items);
         OnPropertyChanged(nameof(HasFunctionalOverlapMods));
         OnPropertyChanged(nameof(FunctionalOverlapModsCount));
+    }
+
+    private void SetLocalizedMods(IEnumerable<ModDependencyLink> items)
+    {
+        SetRelatedMods(LocalizedMods, items);
+        OnPropertyChanged(nameof(HasLocalizedMods));
+        OnPropertyChanged(nameof(LocalizedModsCount));
     }
 
     private void SetRelatedMods(ObservableCollection<ModDependencyLink> target, IEnumerable<ModDependencyLink> items)
@@ -2114,6 +2207,7 @@ public partial class ModDetailsViewModel : ObservableObject
     {
         SetHardConflictMods(Array.Empty<ModDependencyLink>());
         SetFunctionalOverlapMods(Array.Empty<ModDependencyLink>());
+        SetLocalizedMods(Array.Empty<ModDependencyLink>());
     }
 
     private async Task<List<ModDependencyLink>> DetectNexusRequirementsFromDescriptionAsync(long modId)
@@ -2165,7 +2259,7 @@ public partial class ModDetailsViewModel : ObservableObject
                     DisplayName = $"Nexus Mod {value}",
                     ProjectId = value,
                     Source = "NexusMods",
-                    Url = $"https://www.nexusmods.com/stardewvalley/mods/{value}",
+                    Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(value),
                     IsRequired = isRequired,
                     Note = isRequired ? "描述推断前置" : "描述推断前置（可选）"
                 };
@@ -2243,7 +2337,7 @@ public partial class ModDetailsViewModel : ObservableObject
                         item.DisplayName = detail.Name;
 
                     if (string.IsNullOrWhiteSpace(item.Url))
-                        item.Url = $"https://www.nexusmods.com/stardewvalley/mods/{nexusId}";
+                        item.Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(nexusId);
                 }
             }
             catch (Exception ex)
@@ -2317,7 +2411,7 @@ public partial class ModDetailsViewModel : ObservableObject
                 IconUrl = !string.IsNullOrWhiteSpace(detail?.PictureUrl) ? detail.PictureUrl : detail?.PictureUrlLegacy ?? string.Empty,
                 DownloadCount = detail?.Downloads ?? 0,
                 LastUpdateTime = detail?.UpdatedAt != default ? detail!.UpdatedAt.ToString("yyyy-MM-dd") : string.Empty,
-                Url = string.IsNullOrWhiteSpace(dependency.Url) ? $"https://www.nexusmods.com/stardewvalley/mods/{nexusId}" : dependency.Url
+                Url = string.IsNullOrWhiteSpace(dependency.Url) ? DownloadTaskBrowserHelper.BuildNexusModPageUrl(nexusId) : dependency.Url
             };
         }
 
@@ -3053,7 +3147,7 @@ public partial class ModDetailsViewModel : ObservableObject
             );
 
             // 构造浏览器下载页面 URL
-            var downloadPageUrl = $"https://www.nexusmods.com/games/stardewvalley/collections/{collectionSlug}/revisions/{revisionNumber}";
+            var downloadPageUrl = DownloadTaskBrowserHelper.BuildNexusCollectionRevisionPageUrl(collectionSlug, revisionNumber);
 
             await ShowNexusCollectionBrowserGuideAsync(collectionSlug, revisionNumber, downloadPageUrl);
         }
@@ -3155,7 +3249,7 @@ public partial class ModDetailsViewModel : ObservableObject
             Log.Info($"[ModDetailsViewModel] Collection 浏览器下载任务已添加: {Mod.Name}");
 
             // 4. 显示浏览器下载引导（包含 URL 和保存位置）
-            var downloadPageUrl = $"https://www.nexusmods.com/games/stardewvalley/collections/{collectionSlug}/revisions/{revisionNumber}";
+            var downloadPageUrl = DownloadTaskBrowserHelper.BuildNexusCollectionRevisionPageUrl(collectionSlug, revisionNumber);
             await ShowNexusCollectionBrowserGuideAsync(collectionSlug, revisionNumber, downloadPageUrl, saveFolder);
         }
         catch (System.OperationCanceledException)

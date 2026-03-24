@@ -20,7 +20,7 @@ public class DownloadManager
     private readonly object _lock = new();
 
     // 并发控制：最多同时下载 3 个任务
-    private readonly SemaphoreSlim _downloadSemaphore = new(3);
+    private SemaphoreSlim _downloadSemaphore = new(3, 3);
     private int _maxConcurrentDownloads = 3;
 
     // 事件
@@ -87,7 +87,7 @@ public class DownloadManager
         _ = Task.Run(async () =>
         {
             // 等待可用下载槽位
-            await _downloadSemaphore.WaitAsync();
+            await GetSemaphore().WaitAsync();
 
             try
             {
@@ -96,14 +96,14 @@ public class DownloadManager
             finally
             {
                 // 释放下载槽位
-                _downloadSemaphore.Release();
+                GetSemaphore().Release();
             }
         });
 
         TaskAdded?.Invoke(task);
         TaskListChanged?.Invoke();
 
-        Log.Info($"[DownloadManager] 已添加任务: {task.Name} (当前队列: {_downloadSemaphore.CurrentCount} 可用)");
+        Log.Info($"[DownloadManager] 已添加任务: {task.Name} (当前队列: {GetSemaphore().CurrentCount} 可用)");
         return task.Id;
     }
 
@@ -117,21 +117,24 @@ public class DownloadManager
         if (max > 10)
             max = 10;
 
-        _maxConcurrentDownloads = max;
-
-        // 更新信号量
-        var currentCount = _maxConcurrentDownloads - _downloadSemaphore.CurrentCount;
-        var newSemaphore = new SemaphoreSlim(_maxConcurrentDownloads, _maxConcurrentDownloads);
-
-        // 释放旧信号量的所有槽位
-        for (int i = 0; i < currentCount; i++)
+        lock (_lock)
         {
-            newSemaphore.Release();
-        }
+            if (_maxConcurrentDownloads == max)
+            {
+                return;
+            }
 
-        _downloadSemaphore.Dispose();
-        // 注意：这里无法直接替换 _downloadSemaphore，因为它是 readonly
-        // 实际应用中应该使用其他方式
+            var oldSemaphore = _downloadSemaphore;
+            var oldMax = _maxConcurrentDownloads;
+            var inFlight = Math.Max(0, oldMax - oldSemaphore.CurrentCount);
+
+            _maxConcurrentDownloads = max;
+
+            var initialCount = Math.Max(0, _maxConcurrentDownloads - inFlight);
+            _downloadSemaphore = new SemaphoreSlim(initialCount, _maxConcurrentDownloads);
+
+            // 旧信号量可能仍被已在排队的任务引用，不能立即释放。
+        }
 
         Log.Info($"[DownloadManager] 最大并发下载数设置为: {_maxConcurrentDownloads}");
     }
@@ -141,7 +144,16 @@ public class DownloadManager
     /// </summary>
     public (int available, int total) GetQueueStatus()
     {
-        return (_downloadSemaphore.CurrentCount, _maxConcurrentDownloads);
+        var semaphore = GetSemaphore();
+        return (semaphore.CurrentCount, _maxConcurrentDownloads);
+    }
+
+    private SemaphoreSlim GetSemaphore()
+    {
+        lock (_lock)
+        {
+            return _downloadSemaphore;
+        }
     }
 
     /// <summary>
@@ -237,6 +249,8 @@ public class DownloadManager
         if (_tasks.TryGetValue(taskId, out var task))
         {
             task.Cancel();
+            TaskUpdated?.Invoke(task);
+            TaskListChanged?.Invoke();
             Log.Info($"[DownloadManager] 已取消任务: {task.Name}");
         }
     }
@@ -260,10 +274,7 @@ public class DownloadManager
     {
         if (_tasks.TryGetValue(taskId, out var task))
         {
-            if (status != null)
-            {
-                task.Status = status;
-            }
+            task.Status = status;
             if (statusMessage != null)
             {
                 task.StatusMessage = statusMessage;

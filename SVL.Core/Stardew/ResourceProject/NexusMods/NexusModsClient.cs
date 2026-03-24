@@ -20,6 +20,7 @@ public class NexusModsClient
 
     public const string BaseUrl = "https://api.nexusmods.com/v1";
     public const string GameDomain = "stardewvalley";
+    public const int GameId = 1303;
 
     // Nexus API 必需的应用信息（完全模拟 Mod Organizer 2）
     private const string ApplicationName = "Mod Organizer";
@@ -146,7 +147,7 @@ public class NexusModsClient
             var requestOffset = skip;
             var requestCount = pageSize;
 
-            // ✅ 正确的 GraphQL 查询结构 - mods 是根查询字段
+            // 稳定查询结构（Mod 类型当前不支持 translations 字段）。
             var graphQLQuery = @"
                 query SearchModsByGame($filter: ModsFilter, $sort: [ModsSort!], $offset: Int, $count: Int) {
                     mods(filter: $filter, sort: $sort, offset: $offset, count: $count) {
@@ -213,6 +214,7 @@ public class NexusModsClient
                         Log.Error($"[NexusMods] GraphQL 错误: {response.StatusCode}, 策略={strategyName}, 响应: {error}");
                     else
                         Log.Debug($"[NexusMods] GraphQL 搜索策略失败: {strategyName}, Status={response.StatusCode}");
+
                     return new List<NexusMod>();
                 }
 
@@ -1025,6 +1027,129 @@ public class NexusModsClient
         catch (Exception ex)
         {
             Log.Error(ex, $"Failed to get mod details: {modId}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 通过 GraphQL 查询 ModRequirements（REST 详情接口不包含该字段）
+    /// </summary>
+    public static async Task<NexusModRequirements?> GetModRequirementsGraphQlAsync(long modId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var graphQLQuery = @"
+                query GetModRequirements($gameId: ID!, $modId: ID!, $offset: Int!, $count: Int!) {
+                    mod(gameId: $gameId, modId: $modId) {
+                        modRequirements {
+                            dlcRequirements {
+                                gameExpansion {
+                                    gameId
+                                    id
+                                    name
+                                }
+                                notes
+                            }
+                            nexusRequirements(offset: $offset, count: $count) {
+                                totalCount
+                                nodesCount
+                                nodes {
+                                    externalRequirement
+                                    gameId
+                                    id
+                                    modId
+                                    modName
+                                    notes
+                                    url
+                                }
+                            }
+                            modsRequiringThisMod(offset: $offset, count: $count) {
+                                totalCount
+                                nodesCount
+                                nodes {
+                                    externalRequirement
+                                    gameId
+                                    id
+                                    modId
+                                    modName
+                                    notes
+                                    url
+                                }
+                            }
+                        }
+                    }
+                }";
+
+            var requestBody = new
+            {
+                query = graphQLQuery,
+                variables = new
+                {
+                    gameId = GameId,
+                    modId,
+                    offset = 0,
+                    count = 100
+                }
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.nexusmods.com/v2/graphql")
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json")
+            };
+
+            AddApiKeyHeader(request);
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                LogTokenExpiredWarningOnce();
+                throw new NexusModsTokenExpiredException();
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                Log.Debug($"[NexusMods] GraphQL modRequirements 查询失败: modId={modId}, status={response.StatusCode}, body={errorBody}");
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            using var document = JsonDocument.Parse(json);
+
+            if (document.RootElement.TryGetProperty("errors", out var errorsElement) &&
+                errorsElement.ValueKind == JsonValueKind.Array &&
+                errorsElement.GetArrayLength() > 0)
+            {
+                Log.Warn($"[NexusMods] GraphQL modRequirements 存在 errors: modId={modId}, errors={errorsElement.GetRawText()}");
+            }
+
+            if (!document.RootElement.TryGetProperty("data", out var dataElement) ||
+                !dataElement.TryGetProperty("mod", out var modElement) ||
+                modElement.ValueKind == JsonValueKind.Null)
+            {
+                Log.Warn($"[NexusMods] GraphQL modRequirements 返回空 mod: modId={modId}, gameId={GameId}");
+                return null;
+            }
+
+            if (!modElement.TryGetProperty("modRequirements", out var requirementsElement) ||
+                requirementsElement.ValueKind == JsonValueKind.Null)
+            {
+                Log.Warn($"[NexusMods] GraphQL modRequirements 字段为空: modId={modId}, gameId={GameId}");
+                return null;
+            }
+
+            return System.Text.Json.JsonSerializer.Deserialize<NexusModRequirements>(requirementsElement.GetRawText());
+        }
+        catch (NexusModsTokenExpiredException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"[NexusMods] GraphQL modRequirements 查询异常: modId={modId}, error={ex.Message}");
             return null;
         }
     }

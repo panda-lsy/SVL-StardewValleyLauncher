@@ -220,24 +220,46 @@
                                             </StackPanel>
 
                                             <!-- 取消按钮 -->
-                                            <Button Grid.Row="0"
-                                                    Grid.Column="2"
-                                                    Content="取消"
-                                                    Width="60"
-                                                    Height="32"
-                                                    FontSize="12"
-                                                    Command="{Binding DataContext.CancelTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding Id}"
-                                                    Background="{DynamicResource ColorBrush3}"
-                                                    Foreground="{DynamicResource ColorBrush1}"
-                                                    BorderThickness="0"
-                                                    Cursor="Hand">
-                                                <Button.Resources>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="CornerRadius" Value="4"/>
-                                                    </Style>
-                                                </Button.Resources>
-                                            </Button>
+                                            <StackPanel Grid.Row="0"
+                                                        Grid.Column="2"
+                                                    Orientation="Vertical"
+                                                    VerticalAlignment="Top">
+                                                <Button Content="重新打开页面"
+                                                        Width="76"
+                                                        Height="32"
+                                                        FontSize="12"
+                                                    Margin="0,0,0,6"
+                                                        Visibility="{Binding CanOpenBrowserPage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        Command="{Binding DataContext.OpenBrowserPageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}"
+                                                        Background="{DynamicResource ColorBrush2}"
+                                                        Foreground="White"
+                                                        BorderThickness="0"
+                                                        Cursor="Hand">
+                                                    <Button.Resources>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="CornerRadius" Value="4"/>
+                                                        </Style>
+                                                    </Button.Resources>
+                                                </Button>
+
+                                                <Button Content="取消"
+                                                        Width="60"
+                                                        Height="32"
+                                                        FontSize="12"
+                                                        Command="{Binding DataContext.CancelTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Id}"
+                                                        Background="{DynamicResource ColorBrush3}"
+                                                        Foreground="{DynamicResource ColorBrush1}"
+                                                        BorderThickness="0"
+                                                        Cursor="Hand">
+                                                    <Button.Resources>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="CornerRadius" Value="4"/>
+                                                        </Style>
+                                                    </Button.Resources>
+                                                </Button>
+                                            </StackPanel>
 
                                             <!-- 进度条 -->
                                             <Border Grid.Row="1"

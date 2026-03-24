@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using ICSharpCode.SharpZipLib.Zip;
+using SVL.Core.Config;
 using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
@@ -655,108 +656,56 @@ public class ModDownloadTask : DownloadTask
     /// </summary>
     private async Task DownloadFileWithProgressAsync(string downloadUrl, string targetPath)
     {
-        using var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
-
-        httpClient.Timeout = TimeSpan.FromMinutes(30);
-
         var candidateUrls = BuildCurseforgeDownloadCandidates(downloadUrl);
         Exception? lastException = null;
         string? lastFailureDetail = null;
+        var typeLabel = _isModpack ? "整合包" : "MOD";
+
+        var settings = AppConfig.GetSettings();
+        var threadCount = Math.Max(1, Math.Min(16, settings.DownloadSegmentThreads <= 0 ? 4 : settings.DownloadSegmentThreads));
 
         for (var i = 0; i < candidateUrls.Count; i++)
         {
             var candidateUrl = candidateUrls[i];
             try
             {
-                StatusMessage = $"正在下载{(_isModpack ? "整合包" : "MOD")}...\n尝试地址 {i + 1}/{candidateUrls.Count}";
+                StatusMessage = $"正在下载{typeLabel}...\n尝试地址 {i + 1}/{candidateUrls.Count}（{threadCount} 线程）";
 
                 if (i > 0)
                 {
                     Log.Warn($"[ModDownloadTask] 尝试备用下载地址 ({i + 1}/{candidateUrls.Count}): {candidateUrl}");
                 }
 
-                using var requestTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(_linkedToken);
-                if (IsCurseforgeSource())
-                {
-                    // 对第三方 CDN 单地址设置较短超时，避免全部不可用时任务长时间无响应。
-                    requestTimeoutCts.CancelAfter(TimeSpan.FromSeconds(20));
-                }
-
-                var response = await httpClient.GetAsync(candidateUrl, HttpCompletionOption.ResponseHeadersRead, requestTimeoutCts.Token);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var code = (int)response.StatusCode;
-                    lastFailureDetail = $"{response.StatusCode} ({candidateUrl})";
-                    var canRetry = IsCurseforgeSource() && i < candidateUrls.Count - 1
-                        && (code == 403 || code == 404 || code >= 500);
-
-                    if (canRetry)
+                await HttpMultiThreadDownloader.DownloadAsync(
+                    candidateUrl,
+                    targetPath,
+                    threadCount,
+                    (percent, bytesRead, totalBytes, speed) =>
                     {
-                        Log.Warn($"[ModDownloadTask] 下载地址返回 {response.StatusCode}，准备切换备用地址");
-                        continue;
-                    }
+                        var normalizedTotal = totalBytes > 0 ? totalBytes : Math.Max(bytesRead, 1);
+                        Progress = 10 + (int)(Math.Max(0, Math.Min(100, percent)) * 0.4);
 
-                    response.EnsureSuccessStatusCode();
-                }
-
-                var totalBytes = response.Content.Headers.ContentLength ?? 0;
-                Log.Info($"[ModDownloadTask] 文件大小: {totalBytes} 字节");
-
-                using var fs = new FileStream(targetPath, FileMode.Create);
-                using var stream = await response.Content.ReadAsStreamAsync();
-
-                var buffer = new byte[8192];
-                int bytesRead;
-                long totalRead = 0;
-
-                // 速度计算
-                var startTime = DateTime.UtcNow;
-                var lastUpdateTime = startTime;
-                const int updateIntervalMs = 500; // 每 500ms 更新一次显示
-                var typeLabel = _isModpack ? "整合包" : "MOD";
-
-                while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, _linkedToken)) > 0)
-                {
-                    await fs.WriteAsync(buffer, 0, bytesRead, _linkedToken);
-                    totalRead += bytesRead;
-
-                    var now = DateTime.UtcNow;
-                    var elapsedMs = (int)(now - lastUpdateTime).TotalMilliseconds;
-
-                    if (elapsedMs >= updateIntervalMs && totalBytes > 0)
-                    {
-                        // 计算下载速度
-                        var totalElapsedSec = (now - startTime).TotalSeconds;
-                        var speed = totalElapsedSec > 0 ? totalRead / totalElapsedSec : 0;
-
-                        // 计算进度
-                        var currentProgress = (double)totalRead / totalBytes;
-                        var progressValue = 10 + (int)(currentProgress * 40);
-                        Progress = progressValue;
-
-                        // 格式化显示：百分比 + 已下载 / 总大小 (速度)
-                        var progressPercent = currentProgress * 100;
-                        var downloadedMB = totalRead / (1024.0 * 1024.0);
-                        var totalMB = totalBytes / (1024.0 * 1024.0);
+                        var downloadedMB = bytesRead / (1024.0 * 1024.0);
+                        var totalMB = normalizedTotal / (1024.0 * 1024.0);
                         var speedMB = speed / (1024.0 * 1024.0);
 
-                        StatusMessage = $"正在下载{typeLabel}...\n{progressPercent:F2}%\t{downloadedMB:F1} MB / {totalMB:F1} MB ({speedMB:F1} MB/s)";
-                        lastUpdateTime = now;
-                    }
-                }
+                        StatusMessage = $"正在下载{typeLabel}...\n{percent:F2}%\t{downloadedMB:F1} MB / {totalMB:F1} MB ({speedMB:F1} MB/s)";
+                    },
+                    _linkedToken);
 
-                // 下载完成，显示最终状态
-                var finalMB = totalRead / (1024.0 * 1024.0);
+                var finalInfo = new FileInfo(targetPath);
+                var finalMB = finalInfo.Length / (1024.0 * 1024.0);
                 StatusMessage = $"正在下载{typeLabel}...\n100.00%\t{finalMB:F1} MB / {finalMB:F1} MB (完成)";
                 return;
             }
             catch (Exception ex)
             {
                 lastException = ex;
-                if (ex is OperationCanceledException && !_linkedToken.IsCancellationRequested)
+                if (ex is OperationCanceledException)
                 {
-                    lastFailureDetail = $"请求超时 ({candidateUrl})";
+                    lastFailureDetail = _linkedToken.IsCancellationRequested
+                        ? $"用户取消 ({candidateUrl})"
+                        : $"请求超时 ({candidateUrl})";
                 }
                 else if (!string.IsNullOrWhiteSpace(ex.Message))
                 {

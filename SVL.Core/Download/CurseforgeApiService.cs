@@ -765,12 +765,70 @@ public static class CurseforgeApiService
             return new List<string>();
         }
 
-        var result = JsonSerializer.Deserialize<CurseforgeGameVersionsV2Response>(body);
-        return result?.Data?
-            .SelectMany(item => item.Versions ?? new List<CurseforgeGameVersionItem>())
-            .Select(item => string.IsNullOrWhiteSpace(item.Name) ? item.Slug : item.Name)
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToList() ?? new List<string>();
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (!document.RootElement.TryGetProperty("data", out var dataElement) || dataElement.ValueKind != JsonValueKind.Array)
+            {
+                Log.Warn("[Curseforge] 获取游戏版本 V2 失败: data 字段不是数组");
+                return new List<string>();
+            }
+
+            var versions = new List<string>();
+
+            foreach (var groupElement in dataElement.EnumerateArray())
+            {
+                if (!groupElement.TryGetProperty("versions", out var versionsElement) || versionsElement.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                foreach (var versionElement in versionsElement.EnumerateArray())
+                {
+                    string? value = versionElement.ValueKind switch
+                    {
+                        JsonValueKind.String => versionElement.GetString(),
+                        JsonValueKind.Object => ParseVersionFromObject(versionElement),
+                        JsonValueKind.Number => versionElement.GetRawText(),
+                        _ => null
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        versions.Add(value);
+                    }
+                }
+            }
+
+            return versions;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[Curseforge] 解析游戏版本 V2 响应失败: {ex.Message}");
+            return new List<string>();
+        }
+    }
+
+    private static string? ParseVersionFromObject(JsonElement versionObject)
+    {
+        if (versionObject.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
+        {
+            var name = nameElement.GetString();
+            if (!string.IsNullOrWhiteSpace(name))
+                return name;
+        }
+
+        if (versionObject.TryGetProperty("slug", out var slugElement) && slugElement.ValueKind == JsonValueKind.String)
+        {
+            var slug = slugElement.GetString();
+            if (!string.IsNullOrWhiteSpace(slug))
+                return slug;
+        }
+
+        if (versionObject.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.Number)
+        {
+            return idElement.GetRawText();
+        }
+
+        return null;
     }
 
     private static async Task<List<string>> TryGetGameVersionsV1Async(int gameId)

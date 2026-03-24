@@ -1,6 +1,7 @@
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SVL.Core.Download;
+using SVL.Desktop.Utilities;
 
 namespace SVL.Desktop.ViewModels;
 
@@ -29,6 +30,7 @@ public partial class DownloadTaskViewModel : ObservableObject
             OnPropertyChanged(nameof(IsActive));
             OnPropertyChanged(nameof(IsCompleted));
             OnPropertyChanged(nameof(IsFailed));
+            OnPropertyChanged(nameof(CanOpenBrowserPage));
         };
         timer.Start();
     }
@@ -63,6 +65,8 @@ public partial class DownloadTaskViewModel : ObservableObject
                               Status == DownloadTaskStatus.Cancelled;
 
     public bool IsFailed => Status == DownloadTaskStatus.Failed;
+
+    public bool CanOpenBrowserPage => DownloadTaskBrowserHelper.HasBrowserOpenUrl(_task);
 
     /// <summary>
     /// 是否被选中（用于任务切换界面）

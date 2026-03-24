@@ -2,6 +2,43 @@
 
 All notable changes to SVL (Stardew Valley Launcher) will be documented in this file.
 
+## [1.1.8.6] - 2026-03-24
+
+### Added
+
+- **汉化与社区数据支持增强**
+
+  - 新增汉化 Mod 指引支持
+  - 更新社区数据模板，提升新数据兼容性
+- **Tag 与依赖展示能力增强**
+
+  - 修复 Tag 管理中的 Tag 列表滚动条样式
+  - 优化前置 Mod 获取逻辑：原有算法调整为“相关 Mod”独立策略
+- **下载与任务入口增强**
+
+  - 下载页“重新打开下载页面”按钮文案统一为“重新打开浏览器”
+  - 任务状态页复用原有“重新打开浏览器”卡片入口，新增 SMAPI 任务可重开按钮 Card
+  - 新增多线程下载，并支持在设置中调整线程数与接管下载
+
+### Changed
+
+- **下载页面与列表体验优化**
+
+  - 优化 SMAPI 下载页面显示效果与加载速度
+  - 优化整合包与 Mod 列表显示策略，减少错页问题
+- **代码结构去重优化**
+
+  - 新增 `DownloadTaskBrowserHelper`，统一浏览器 URL 解析、Nexus URL 构造与常用状态文案
+  - `DownloadLeftViewModel`、`DownloadManagerViewModel`、`DownloadTaskViewModel`、`TaskStatusViewModel` 消除重复浏览器 URL 分支
+  - `TaskStatusViewModel` 抽取通用属性刷新方法，减少重复 `OnPropertyChanged` 代码
+  - `ModDetailsViewModel`、`VersionSettingsViewModel`、`ModSearchViewModel` 统一复用 Nexus URL 构造方法
+
+### Fixed
+
+- 修复下载区域一处字体显示不统一的问题
+- 修复浏览器下载引导弹窗显示异常（阴影/模糊相关）问题
+- 修复任务管理器红点不消失的问题
+
 ## [1.1.8.5] - 2026-03-23
 
 ### Added

@@ -67,6 +67,13 @@ public class NexusModsBrowserDownloadTask : DownloadTask
     public long PendingFileId => _fileId;
 
     /// <summary>
+    /// 任务管理器“重新打开页面”使用的 URL。
+    /// </summary>
+    public string BrowserOpenUrl => _downloadPageUrl.Contains("nmm=")
+        ? _downloadPageUrl
+        : _downloadPageUrl + (_downloadPageUrl.Contains("?") ? "&" : "?") + "nmm=1";
+
+    /// <summary>
     /// 处理 NXM URL 回调
     /// </summary>
     public bool HandleNxmUrl(NxmUrl nxmUrl)

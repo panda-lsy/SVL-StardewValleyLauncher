@@ -16,6 +16,7 @@ using SVL.Core.Stardew.Localization;
 using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Core.Download;
+using SVL.Desktop.Utilities;
 using SVL.Desktop.Controls;
 
 namespace SVL.Desktop.ViewModels;
@@ -1031,6 +1032,10 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             _modManager ??= new ModManager();
             var loadedMods = await _modManager.LoadModsAsync(modsPath);
             BuildDisplayDependencies(loadedMods);
+            foreach (var mod in loadedMods)
+            {
+                mod.DisplayLocalizedMods = [];
+            }
 
             System.Diagnostics.Debug.WriteLine($"[VersionSettings] 成功加载 {loadedMods.Count} 个 MOD");
 
@@ -1149,6 +1154,129 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             InstalledModName = installedMod?.Name ?? string.Empty,
             Note = note
         };
+    }
+
+    private async Task BuildDisplayLocalizedModsAsync(List<SdVMod> loadedMods)
+    {
+        if (loadedMods == null || loadedMods.Count == 0)
+            return;
+
+        var installedByUniqueId = loadedMods
+            .Where(m => !string.IsNullOrWhiteSpace(m.UniqueId))
+            .GroupBy(m => m.UniqueId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mod in loadedMods)
+        {
+            mod.DisplayLocalizedMods = [];
+        }
+
+        var candidates = loadedMods
+            .Where(mod => HasAnySourceForLocalization(mod))
+            .ToList();
+
+        if (candidates.Count == 0)
+            return;
+
+        var settings = SVL.Core.Config.AppConfig.GetSettings();
+        var maxThreads = Math.Max(1, Math.Min(8, settings.MaxConcurrentModLocalizationChecks));
+
+        using var semaphore = new SemaphoreSlim(maxThreads, maxThreads);
+        var tasks = candidates.Select(async mod =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                CommunityLocalizationEntry? localization = null;
+                string sourcePlatform = string.Empty;
+
+                var sourceInfo = TryGetLocalizationSourceInfo(mod);
+                if (sourceInfo != null)
+                {
+                    sourcePlatform = sourceInfo.Value.Platform;
+                    localization = await CommunityLocalizationService.GetAsync("mod", sourceInfo.Value.Platform, sourceInfo.Value.ProjectId, forceRefresh: false);
+                }
+
+                if (localization == null && !string.IsNullOrWhiteSpace(mod.UniqueId))
+                {
+                    localization = await CommunityLocalizationService.GetByUniqueIdAsync(mod.UniqueId, forceRefresh: false);
+                    if (string.IsNullOrWhiteSpace(sourcePlatform))
+                        sourcePlatform = localization?.Platform ?? string.Empty;
+                }
+
+                if (localization == null)
+                    return;
+
+                var links = BuildLocalizedModLinks(localization.LocalizedMods, sourcePlatform, installedByUniqueId);
+                mod.DisplayLocalizedMods = links;
+            }
+            catch (Exception ex)
+            {
+                SVL.Core.Logging.Log.Debug($"[VersionSettings] 构建汉化 Mod 链接失败: {mod.Name}, {ex.Message}");
+                mod.DisplayLocalizedMods = [];
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
+    }
+
+    private static List<ModDependencyLink> BuildLocalizedModLinks(
+        IEnumerable<CommunityLocalizationRelation>? relations,
+        string sourcePlatform,
+        IReadOnlyDictionary<string, SdVMod>? installedByUniqueId = null)
+    {
+        var links = new List<ModDependencyLink>();
+
+        foreach (var relation in relations ?? Array.Empty<CommunityLocalizationRelation>())
+        {
+            if (relation == null || string.IsNullOrWhiteSpace(relation.Id))
+                continue;
+
+            SdVMod? installedMod = null;
+            if (installedByUniqueId != null)
+                installedByUniqueId.TryGetValue(relation.Id, out installedMod);
+            var normalizedPlatform = CommunityLocalizationService.NormalizePlatform(sourcePlatform);
+
+            links.Add(new ModDependencyLink
+            {
+                UniqueId = relation.Id,
+                DisplayName = !string.IsNullOrWhiteSpace(relation.Name) ? relation.Name : SimplifyUniqueId(relation.Id),
+                IsRequired = false,
+                IsInstalled = installedMod != null,
+                IsInstalledAndEnabled = installedMod?.IsEnabled == true,
+                IsInstalledButDisabled = installedMod != null && !installedMod.IsEnabled,
+                InstalledModId = installedMod?.Id ?? string.Empty,
+                InstalledModName = installedMod?.Name ?? string.Empty,
+                Source = normalizedPlatform,
+                ProjectId = relation.Id,
+                Url = BuildLocalizedModUrl(normalizedPlatform, relation.Id),
+                Note = string.IsNullOrWhiteSpace(relation.Reason) ? "社区标注汉化" : $"社区标注汉化：{relation.Reason.Trim()}"
+            });
+        }
+
+        return links
+            .Where(link => !string.IsNullOrWhiteSpace(link.DisplayName))
+            .GroupBy(link => $"{link.Source}|{link.ProjectId}|{link.UniqueId}|{link.DisplayName}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+    }
+
+    private static string BuildLocalizedModUrl(string sourcePlatform, string relationId)
+    {
+        if (string.IsNullOrWhiteSpace(relationId))
+            return string.Empty;
+
+        if (string.Equals(sourcePlatform, "NexusMods", StringComparison.OrdinalIgnoreCase) && long.TryParse(relationId, out _))
+            return DownloadTaskBrowserHelper.BuildNexusModPageUrl(relationId);
+
+        if (string.Equals(sourcePlatform, "Curseforge", StringComparison.OrdinalIgnoreCase) && long.TryParse(relationId, out _))
+            return $"https://www.curseforge.com/stardewvalley/mods/{relationId}";
+
+        return string.Empty;
     }
 
     private static string SimplifyUniqueId(string uniqueId)
@@ -1463,6 +1591,11 @@ public partial class VersionSettingsRightViewModel : ObservableObject
             int appliedCount = 0;
             int outdatedCount = 0;
 
+            foreach (var mod in Mods)
+            {
+                mod.DisplayLocalizedMods = [];
+            }
+
             // 获取所有可能带有来源信息的 Mod（包括 svl.source.json、UpdateKeys、ProjectId、UniqueId）
             var modsWithSource = Mods.Where(HasAnySourceForLocalization).ToList();
             SVL.Core.Logging.Log.Info($"[VersionSettings] 找到 {modsWithSource.Count} 个可能带有来源信息的 Mod");
@@ -1520,6 +1653,9 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                         {
                             Interlocked.Increment(ref foundCount);
                             SVL.Core.Logging.Log.Info($"[VersionSettings] Mod '{mod.Name}' 找到汉化: {localization.Name?.ZhCn ?? "N/A"}");
+
+                            var relationPlatform = sourceInfo?.Platform ?? localization.Platform;
+                            mod.DisplayLocalizedMods = BuildLocalizedModLinks(localization.LocalizedMods, relationPlatform);
 
                             if (ShouldApplyLocalization(mod, localization))
                             {
@@ -1710,6 +1846,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 return false;
 
             mod.ApplyLocalization(credential.Localization);
+            mod.DisplayLocalizedMods = BuildLocalizedModLinks(latest.LocalizedMods, credential.Platform);
             return true;
         }
         catch (Exception ex)
@@ -3213,7 +3350,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                     IconUrl = !string.IsNullOrWhiteSpace(detail.PictureUrl) ? detail.PictureUrl : detail.PictureUrlLegacy,
                     DownloadCount = detail.Downloads,
                     LastUpdateTime = detail.UpdatedAt != default ? detail.UpdatedAt.ToString("yyyy-MM-dd") : string.Empty,
-                    Url = string.IsNullOrWhiteSpace(dependency.Url) ? $"https://www.nexusmods.com/stardewvalley/mods/{nexusId}" : dependency.Url
+                    Url = string.IsNullOrWhiteSpace(dependency.Url) ? DownloadTaskBrowserHelper.BuildNexusModPageUrl(nexusId) : dependency.Url
                 };
             }
 
@@ -3225,7 +3362,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 Description = string.IsNullOrWhiteSpace(dependency.Note) ? "前置 Mod" : dependency.Note,
                 Summary = dependency.Note,
                 Source = "NexusMods",
-                Url = string.IsNullOrWhiteSpace(dependency.Url) ? $"https://www.nexusmods.com/stardewvalley/mods/{nexusId}" : dependency.Url
+                Url = string.IsNullOrWhiteSpace(dependency.Url) ? DownloadTaskBrowserHelper.BuildNexusModPageUrl(nexusId) : dependency.Url
             };
         }
 
@@ -3277,7 +3414,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                 IconUrl = !string.IsNullOrWhiteSpace(candidate.PictureUrl) ? candidate.PictureUrl : candidate.PictureUrlLegacy,
                 DownloadCount = candidate.Downloads,
                 LastUpdateTime = candidate.UpdatedAt != default ? candidate.UpdatedAt.ToString("yyyy-MM-dd") : string.Empty,
-                Url = $"https://www.nexusmods.com/stardewvalley/mods/{modId}"
+                Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(modId)
             };
         }
         catch (Exception ex)
@@ -3880,7 +4017,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                     DownloadCount = info.Downloads,
                     Category = string.IsNullOrWhiteSpace(info.Category) ? "未分类" : info.Category,
                     LastUpdateTime = info.UpdatedAt != default ? info.UpdatedAt.ToString("yyyy-MM-dd") : "",
-                    Url = $"https://www.nexusmods.com/stardewvalley/mods/{modId}"
+                    Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(modId)
                 };
             }
 
@@ -3972,7 +4109,7 @@ public partial class VersionSettingsRightViewModel : ObservableObject
                         Description = string.IsNullOrWhiteSpace(mod.Description) ? "无描述" : mod.Description,
                         Summary = string.IsNullOrWhiteSpace(mod.Description) ? "无描述" : mod.Description,
                         Source = "NexusMods",
-                        Url = $"https://www.nexusmods.com/stardewvalley/mods/{preferredNexusId}"
+                        Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(preferredNexusId)
                     });
                     navigated = true;
                 }

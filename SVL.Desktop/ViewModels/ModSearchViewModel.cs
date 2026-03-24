@@ -830,9 +830,6 @@ public partial class ModSearchViewModel : ObservableObject
             ModList.Clear();
             Log.Info("[ModSearchViewModel] ModList 已清空");
 
-            // 计算分页参数
-            int skip = (CurrentPage - 1) * PageSize;
-
             // 收集所有类型
             var allCategories = new HashSet<string>();
             var addedCount = 0;
@@ -840,12 +837,12 @@ public partial class ModSearchViewModel : ObservableObject
             // 收集所有模组的临时列表（用于统一排序）
             var allMods = new List<ModSearchItem>();
 
-            // 计算需要获取的数据量（双倍数据量，用于跨来源统一排序）
-            int fetchCount = SelectedSource == "全部" ? PageSize * 2 : PageSize;
+            // 全部来源时，交错展示最多只会用到每源一半数量，避免过抓导致等待变长。
+            int fetchCount = SelectedSource == "全部" ? Math.Max(1, PageSize / 2) : PageSize;
 
             // 并行加载 Curseforge 和 NexusMods 的热门模组
             var curseforgeTask = (SelectedSource == "全部" || SelectedSource == "Curseforge")
-                ? LoadModsFromCurseforgeAsync(skip, fetchCount)
+                ? LoadModsFromCurseforgeAsync(CurrentPage, fetchCount)
                 : Task.CompletedTask;
 
             var nexusModsTask = (SelectedSource == "全部" || SelectedSource == "NexusMods")
@@ -994,14 +991,14 @@ public partial class ModSearchViewModel : ObservableObject
     /// <summary>
     /// 从 Curseforge 加载 Mods
     /// </summary>
-    private async Task<LoadModsResult> LoadModsFromCurseforgeAsync(int skip, int pageSize)
+    private async Task<LoadModsResult> LoadModsFromCurseforgeAsync(int page, int pageSize)
     {
         var result = new LoadModsResult();
 
         try
         {
-            Log.Info($"[ModSearchViewModel] 从 Curseforge 搜索热门模组（跳过{skip}个）");
-            var filteredPage = Math.Max(1, (skip / Math.Max(pageSize, 1)) + 1);
+            Log.Info($"[ModSearchViewModel] 从 Curseforge 搜索热门模组（第{page}页，每页{pageSize}个）");
+            var filteredPage = Math.Max(1, page);
             var fetchResult = await FetchCurseforgeModsForCurrentTypeAsync(string.Empty, filteredPage, pageSize);
             var curseforgeMods = fetchResult.Items;
             result.HasMore = fetchResult.HasMore;
@@ -1119,7 +1116,7 @@ public partial class ModSearchViewModel : ObservableObject
                         Category = category,
                         SupportedGameVersions = supportedGameVersions,
                         Rating = mod.Endorsements,  // 使用推荐数作为评分
-                        Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
+                        Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(mod.ModId)
                     };
 
                     result.ModItems.Add(searchItem);
@@ -1198,7 +1195,7 @@ public partial class ModSearchViewModel : ObservableObject
             {
                 // 普通关键词搜索 - 收集所有结果后统一排序
                 var allSearchResults = new List<ModSearchItem>();
-                int fetchCount = SelectedSource == "全部" ? PageSize * 2 : PageSize;  // 全部来源时保留交错排序的冗余抓取
+                int fetchCount = SelectedSource == "全部" ? Math.Max(1, PageSize / 2) : PageSize;
 
                 if (SelectedSource == "全部" || SelectedSource == "Curseforge")
                 {
@@ -1563,7 +1560,7 @@ public partial class ModSearchViewModel : ObservableObject
                         Category = category,
                         SupportedGameVersions = new List<string>(),
                         Rating = mod.Endorsements,  // 使用推荐数作为评分
-                        Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
+                        Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(mod.ModId)
                     };
 
                     ModList.Add(searchItem);
@@ -1667,7 +1664,7 @@ public partial class ModSearchViewModel : ObservableObject
                         Category = category,
                         SupportedGameVersions = supportedGameVersions,
                         Rating = mod.Endorsements,
-                        Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
+                        Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(mod.ModId)
                     };
 
                     results.Add(searchItem);
@@ -1963,7 +1960,7 @@ public partial class ModSearchViewModel : ObservableObject
                     Category = string.IsNullOrWhiteSpace(mod.Category) ? "未分类" : mod.Category,
                     SupportedGameVersions = await GetNexusSupportedGameVersionsAsync(mod.ModId),
                     Rating = mod.Endorsements,
-                    Url = $"https://www.nexusmods.com/stardewvalley/mods/{mod.ModId}"
+                    Url = DownloadTaskBrowserHelper.BuildNexusModPageUrl(mod.ModId)
                 };
 
                 await LocalizationDisplayHelper.ApplyLocalizationAsync(searchItem);

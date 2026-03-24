@@ -14,20 +14,12 @@
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
 
-    <!-- 背景遮罩（与其他对话框一致） -->
-    <Grid Background="{DynamicResource ColorBrushMask}">
+    <Grid Background="Transparent">
         <Border Width="540"
                 Background="{DynamicResource ColorBrushBackground}"
                 CornerRadius="8"
                 BorderBrush="{DynamicResource ColorBrush3}"
                 BorderThickness="1">
-            <Border.Effect>
-                <DropShadowEffect Color="Black"
-                                  Opacity="0.3"
-                                  BlurRadius="20"
-                                  ShadowDepth="0"/>
-            </Border.Effect>
-
             <Grid Margin="24">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

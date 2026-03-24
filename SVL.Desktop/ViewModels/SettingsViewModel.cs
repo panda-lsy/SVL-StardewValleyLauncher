@@ -15,6 +15,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SVL.Core.App;
 using SVL.Core.Config;
+using SVL.Core.Download;
 using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Desktop.Controls;
@@ -305,6 +306,18 @@ public partial class SettingsViewModel : ObservableObject
     private int _maxConcurrentModUpdateChecks = 4;
 
     /// <summary>
+    /// 单文件下载分片线程数（1-16）
+    /// </summary>
+    [ObservableProperty]
+    private int _downloadSegmentThreads = 4;
+
+    /// <summary>
+    /// 接管下载 URL 输入框
+    /// </summary>
+    [ObservableProperty]
+    private string _takeoverDownloadUrl = string.Empty;
+
+    /// <summary>
     /// Mod 汉化检测并发线程数（1-16）
     /// </summary>
     [ObservableProperty]
@@ -584,6 +597,7 @@ public partial class SettingsViewModel : ObservableObject
                 SmapiDefaultSource = SmapiDefaultSource,
                 ModDefaultSource = ModDefaultSource,
                 LocalizationPreferredSource = LocalizationPreferredSource,
+                DownloadSegmentThreads = DownloadSegmentThreads,
                 MaxConcurrentModUpdateChecks = MaxConcurrentModUpdateChecks,
                 MaxConcurrentModLocalizationChecks = MaxConcurrentModLocalizationChecks,
 
@@ -1592,6 +1606,7 @@ public partial class SettingsViewModel : ObservableObject
             SmapiDefaultSource = settings.SmapiDefaultSource ?? "全部";
             ModDefaultSource = settings.ModDefaultSource ?? "全部";
             LocalizationPreferredSource = string.IsNullOrWhiteSpace(settings.LocalizationPreferredSource) ? "Gitee" : settings.LocalizationPreferredSource;
+            DownloadSegmentThreads = Math.Max(1, Math.Min(16, settings.DownloadSegmentThreads <= 0 ? 4 : settings.DownloadSegmentThreads));
             MaxConcurrentModUpdateChecks = Math.Max(1, Math.Min(16, settings.MaxConcurrentModUpdateChecks));
             MaxConcurrentModLocalizationChecks = Math.Max(1, Math.Min(16, settings.MaxConcurrentModLocalizationChecks));
             _suppressDefaultSourceImmediateSave = false;
@@ -1887,6 +1902,77 @@ public partial class SettingsViewModel : ObservableObject
         }
 
         AutoSave();
+    }
+
+    partial void OnDownloadSegmentThreadsChanged(int value)
+    {
+        if (_suppressDefaultSourceImmediateSave)
+            return;
+
+        if (value < 1)
+        {
+            DownloadSegmentThreads = 1;
+            return;
+        }
+
+        if (value > 16)
+        {
+            DownloadSegmentThreads = 16;
+            return;
+        }
+
+        AutoSave();
+    }
+
+    [RelayCommand]
+    private async Task SaveTakeoverDownloadAsAsync()
+    {
+        var url = TakeoverDownloadUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(url) ||
+            !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            StatusMessage = "请输入有效的 http/https 下载地址";
+            return;
+        }
+
+        var suggestedFileName = GuessFileNameFromUrl(uri);
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = suggestedFileName,
+            Filter = "所有文件 (*.*)|*.*",
+            Title = "接管下载 - 另存为"
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var threadCount = Math.Max(1, Math.Min(16, DownloadSegmentThreads));
+        var task = new UrlDownloadTask(url, dialog.FileName, threadCount);
+        await DownloadManager.Instance.AddTaskAsync(task);
+
+        StatusMessage = $"已添加接管下载任务：{Path.GetFileName(dialog.FileName)}（{threadCount} 线程）";
+        Log.Info($"[SettingsViewModel] 已创建接管下载任务: url={url}, file={dialog.FileName}, threads={threadCount}");
+    }
+
+    private static string GuessFileNameFromUrl(Uri uri)
+    {
+        try
+        {
+            var fileName = Path.GetFileName(uri.LocalPath);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                return fileName;
+            }
+        }
+        catch
+        {
+            // ignore and fallback
+        }
+
+        return "download.bin";
     }
 
     [RelayCommand]

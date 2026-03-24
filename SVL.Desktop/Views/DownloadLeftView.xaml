@@ -243,6 +243,25 @@
                                                        TextWrapping="NoWrap">
                                                 <Run Text="{Binding StatusMessage, Mode=OneWay}"/>
                                             </TextBlock>
+
+                                                <Button Content="重新打开浏览器"
+                                                    FontSize="10"
+                                                    Padding="8,2"
+                                                    Margin="0,6,0,0"
+                                                    HorizontalAlignment="Left"
+                                                    Visibility="{Binding CanOpenBrowserPage, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                    Command="{Binding DataContext.OpenBrowserPageCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Background="{DynamicResource ColorBrush2}"
+                                                    Foreground="White"
+                                                    BorderThickness="0"
+                                                    Cursor="Hand">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="CornerRadius" Value="4"/>
+                                                    </Style>
+                                                </Button.Resources>
+                                            </Button>
                                         </StackPanel>
                                     </Grid>
                                 </Border>

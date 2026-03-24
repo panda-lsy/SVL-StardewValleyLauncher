@@ -17,6 +17,7 @@ public class SdVMod : INotifyPropertyChanged
     private bool _isGroupExpanded;
     private bool _useLocalizedName = true;
     private bool _useLocalizedDescription = true;
+    private List<ModDependencyLink> _displayLocalizedMods = [];
 
     public string Id { get; set; }
     public string Name { get; set; }
@@ -147,6 +148,22 @@ public class SdVMod : INotifyPropertyChanged
     /// 用于 UI 展示和导航的前置模组信息
     /// </summary>
     public List<ModDependencyLink> DisplayDependencies { get; set; } = [];
+
+    /// <summary>
+    /// 用于 UI 展示和导航的汉化模组信息
+    /// </summary>
+    public List<ModDependencyLink> DisplayLocalizedMods
+    {
+        get => _displayLocalizedMods;
+        set
+        {
+            _displayLocalizedMods = value ?? [];
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasDisplayLocalizedMods));
+        }
+    }
+
+    public bool HasDisplayLocalizedMods => DisplayLocalizedMods.Count > 0;
 
     /// <summary>
     /// 是否被选中（用于UI多选）

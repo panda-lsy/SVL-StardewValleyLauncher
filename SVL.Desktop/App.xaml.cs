@@ -501,22 +501,41 @@ public partial class App : System.Windows.Application
     /// </summary>
     private static string GetDefaultUpdateLog()
     {
-        return @"## v1.1.3.1 更新内容
+                return @"v1.1.8.6 Release 更新内容
 
-### 新功能
-• Release 版本静默更新（无控制台窗口）
-• 更新失败时弹窗提示错误信息
-• 更新完成对话框美化
+汉化与社区数据：
 
-### 优化
-• 更新日志使用自定义滚动条样式
-• Gitee 更新源持久化保存
-• 优化 prerelease 版本检测逻辑
+    新增汉化 Mod 指引支持
+    更新社区数据模板，提升新数据兼容性
 
-### 修复
-• 修复快速切换更新源崩溃问题
-• 修复更新源设置重启后丢失问题
-• 修复 prerelease 缓存未正确失效问题
-• 修复更新后重启程序启动失败问题";
+Tag 与依赖识别优化：
+
+    新增 Tag 管理的 Tag 列表能力
+    前置 Mod 获取更准确，原有算法独立为“相关 Mod”
+
+下载与页面展示优化：
+
+    优化 SMAPI 下载页面显示效果与加载速度
+    优化整合包与 Mod 列表显示策略，减少错页问题
+    下载页按钮文案统一为“重新打开浏览器”
+    任务状态页复用原有“重新打开浏览器”入口，SMAPI 待下载任务也可直接重开
+    统一 Placeholder/SMAPI/NexusBrowser 任务的浏览器地址识别逻辑
+
+下载引擎与设置能力：
+
+    多线程下载功能落地
+    设置页支持调整线程数与接管下载
+
+修复项：
+
+    修复下载区域一处字体不统一问题
+    修复浏览器下载引导弹窗显示异常
+    修复任务管理器红点不消失问题
+
+SMAPI 展示体验改进：
+
+    SMAPI 来源卡片增加本地图标兜底（/Images/Modded.png）
+    GitHub 来源恢复可显示 Card 图
+    添加 SMAPI 任务“重新打开浏览器”按钮 Card";
     }
 }

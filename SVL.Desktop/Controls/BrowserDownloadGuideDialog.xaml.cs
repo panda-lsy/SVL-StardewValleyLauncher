@@ -31,21 +31,8 @@ public partial class BrowserDownloadGuideDialog : Window
         if (owner != null)
             Owner = owner;
 
-        // 应用模糊效果到父窗口
-        if (Owner is MainWindow mainWindow)
-        {
-            mainWindow.ApplyBlurEffect();
-        }
-
-        var result = ShowDialog();
-
-        // 移除模糊效果
-        if (Owner is MainWindow main)
-        {
-            main.RemoveBlurEffect();
-        }
-
-        return result;
+        // 保留方法名以兼容现有调用，但不再启用主窗口 Blur。
+        return ShowDialog();
     }
 
     /// <summary>

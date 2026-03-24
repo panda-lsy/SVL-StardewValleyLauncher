@@ -842,64 +842,30 @@ public class CurseforgeModpackDownloadTask : DownloadTask
     /// </summary>
     private async Task DownloadFileFromUrlAsync(string downloadUrl, string targetPath)
     {
-        using var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
-
-        httpClient.Timeout = TimeSpan.FromMinutes(30);
-
         Log.Info($"[CurseforgeModpackDownload] 开始下载: {downloadUrl}");
 
-        var response = await httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, _cts.Token);
-        response.EnsureSuccessStatusCode();
+        var settings = AppConfig.GetSettings();
+        var threadCount = Math.Max(1, Math.Min(16, settings.DownloadSegmentThreads <= 0 ? 4 : settings.DownloadSegmentThreads));
 
-        var totalBytes = response.Content.Headers.ContentLength ?? 0;
-
-        using var fs = new FileStream(targetPath, FileMode.Create);
-        using var stream = await response.Content.ReadAsStreamAsync();
-
-        var buffer = new byte[8192];
-        int bytesRead;
-        long totalRead = 0;
-
-        // 速度计算
-        var startTime = DateTime.UtcNow;
-        var lastUpdateTime = startTime;
-        var lastUpdateBytes = 0L;
-        const int updateIntervalMs = 500; // 每 500ms 更新一次显示
-
-        while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, _cts.Token)) > 0)
-        {
-            await fs.WriteAsync(buffer, 0, bytesRead, _cts.Token);
-            totalRead += bytesRead;
-
-            var now = DateTime.UtcNow;
-            var elapsedMs = (int)(now - lastUpdateTime).TotalMilliseconds;
-
-            if (elapsedMs >= updateIntervalMs && totalBytes > 0)
+        await HttpMultiThreadDownloader.DownloadAsync(
+            downloadUrl,
+            targetPath,
+            threadCount,
+            (percent, bytesRead, totalBytes, speed) =>
             {
-                // 计算下载速度
-                var totalElapsedSec = (now - startTime).TotalSeconds;
-                var speed = totalElapsedSec > 0 ? totalRead / totalElapsedSec : 0;
+                var normalizedTotal = totalBytes > 0 ? totalBytes : Math.Max(bytesRead, 1);
+                Progress = 10 + (int)(Math.Max(0, Math.Min(100, percent)) * 0.2); // 10-30%
 
-                // 计算进度
-                var currentProgress = 10 + (int)((double)totalRead / totalBytes * 20); // 10-30%
-                Progress = currentProgress;
-
-                // 格式化显示：百分比 + 已下载 / 总大小 (速度)
-                var progressPercent = (double)totalRead / totalBytes * 100;
-                var downloadedMB = totalRead / (1024.0 * 1024.0);
-                var totalMB = totalBytes / (1024.0 * 1024.0);
+                var downloadedMB = bytesRead / (1024.0 * 1024.0);
+                var totalMB = normalizedTotal / (1024.0 * 1024.0);
                 var speedMB = speed / (1024.0 * 1024.0);
 
-                StatusMessage = $"正在下载整合包...\n{progressPercent:F2}%\t{downloadedMB:F1} MB / {totalMB:F1} MB ({speedMB:F1} MB/s)";
+                StatusMessage = $"正在下载整合包...\n{percent:F2}%\t{downloadedMB:F1} MB / {totalMB:F1} MB ({speedMB:F1} MB/s)";
+            },
+            _cts.Token);
 
-                lastUpdateTime = now;
-                lastUpdateBytes = totalRead;
-            }
-        }
-
-        // 下载完成，显示最终状态
-        var finalMB = totalRead / (1024.0 * 1024.0);
+        var finalInfo = new FileInfo(targetPath);
+        var finalMB = finalInfo.Length / (1024.0 * 1024.0);
         StatusMessage = $"正在下载整合包...\n100.00%\t{finalMB:F1} MB / {finalMB:F1} MB (完成)";
     }
 

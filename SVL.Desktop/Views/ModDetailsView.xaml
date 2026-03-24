@@ -531,6 +531,175 @@
             </controls:MyCard>
 
             <controls:MyCard Margin="0,0,0,20"
+                             Visibility="{Binding HasRelatedMods, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Margin="5">
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="相关Mod"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   VerticalAlignment="Center"/>
+
+                        <Border Grid.Column="1"
+                                Background="#1A8B5CF6"
+                                BorderBrush="#408B5CF6"
+                                BorderThickness="1"
+                                CornerRadius="999"
+                                Padding="10,4"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding RelatedModsCount, StringFormat={}{0} 项}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#6D28D9"/>
+                        </Border>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding RelatedMods}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.OpenRequiredModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Margin="0,0,8,8"
+                                        Padding="10,6"
+                                        Cursor="Hand"
+                                        BorderThickness="0"
+                                        ToolTip="{Binding Note}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#148B5CF6"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                BorderBrush="#408B5CF6"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="🔍"
+                                                                           Margin="0,0,6,0"
+                                                                           Foreground="#6D28D9"
+                                                                           VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding DisplayText}"
+                                                                           VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                    <Setter Property="Cursor" Value="Arrow"/>
+                                                    <Setter Property="Opacity" Value="0.75"/>
+                                                </DataTrigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#228B5CF6"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </controls:MyCard>
+
+            <controls:MyCard Margin="0,0,0,20"
+                             Visibility="{Binding HasLocalizedMods, Converter={StaticResource BoolToVisibilityConverter}}">
+                <StackPanel Margin="5">
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="汉化 Mod"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorBrush1}"
+                                   VerticalAlignment="Center"/>
+
+                        <Border Grid.Column="1"
+                                Background="#1A2A89D9"
+                                BorderBrush="#402A89D9"
+                                BorderThickness="1"
+                                CornerRadius="999"
+                                Padding="10,4"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding LocalizedModsCount, StringFormat={}{0} 项}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#1F5D93"/>
+                        </Border>
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding LocalizedMods}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.OpenRequiredModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Margin="0,0,8,8"
+                                        Padding="10,6"
+                                        Cursor="Hand"
+                                        BorderThickness="0"
+                                        ToolTip="{Binding Note}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#152A89D9"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource ColorBrush1}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                BorderBrush="#402A89D9"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="🌐"
+                                                                           Margin="0,0,6,0"
+                                                                           Foreground="#1F5D93"
+                                                                           VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding DisplayText}"
+                                                                           VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#222A89D9"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </controls:MyCard>
+
+            <controls:MyCard Margin="0,0,0,20"
                              Visibility="{Binding HasHardConflictMods, Converter={StaticResource BoolToVisibilityConverter}}">
                 <StackPanel Margin="5">
                     <Grid Margin="0,0,0,12">

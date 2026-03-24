@@ -3,11 +3,16 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace SVL.Core.Stardew.ResourceProject.NexusMods;
 
 public class NexusMod
 {
+    [JsonPropertyName("id")]
+    public string GraphQlId { get; set; }
+
     [JsonPropertyName("uid")]
     public long Uid { get; set; }
 
@@ -56,6 +61,9 @@ public class NexusMod
     [JsonPropertyName("downloads")]
     public long Downloads { get; set; }
 
+    [JsonPropertyName("mod_downloads")]
+    public long ModDownloadsLegacy { get; set; }  // 保留：REST API 兼容
+
     [JsonPropertyName("endorsements")]
     public int Endorsements { get; set; }
 
@@ -65,9 +73,136 @@ public class NexusMod
     [JsonPropertyName("category")]
     public string Category { get; set; }  // GraphQL 返回 String，不是对象
 
+    [JsonPropertyName("status")]
+    public string Status { get; set; }
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; }
+
+    [JsonPropertyName("adultContent")]
+    public bool AdultContent { get; set; }
+
+    [JsonPropertyName("directDownloadEnabled")]
+    public bool DirectDownloadEnabled { get; set; }
+
+    [JsonPropertyName("fileSize")]
+    public int? FileSize { get; set; }
+
+    [JsonPropertyName("isBlockedFromEarningDp")]
+    public bool? IsBlockedFromEarningDp { get; set; }
+
+    [JsonPropertyName("thumbnailBlurredUrl")]
+    public string ThumbnailBlurredUrl { get; set; }
+
+    [JsonPropertyName("thumbnailLargeBlurredUrl")]
+    public string ThumbnailLargeBlurredUrl { get; set; }
+
+    [JsonPropertyName("thumbnailLargeUrl")]
+    public string ThumbnailLargeUrl { get; set; }
+
+    [JsonPropertyName("thumbnailUrl")]
+    public string ThumbnailUrl { get; set; }
+
+    [JsonPropertyName("viewerBlocked")]
+    public bool ViewerBlocked { get; set; }
+
+    [JsonPropertyName("viewerDownloaded")]
+    public DateTime? ViewerDownloaded { get; set; }
+
+    [JsonPropertyName("viewerEndorsed")]
+    public bool? ViewerEndorsed { get; set; }
+
+    [JsonPropertyName("viewerIsBlocked")]
+    public bool? ViewerIsBlocked { get; set; }
+
+    [JsonPropertyName("viewerTracked")]
+    public bool ViewerTracked { get; set; }
+
+    [JsonPropertyName("viewerUpdateAvailable")]
+    public bool? ViewerUpdateAvailable { get; set; }
+
+    // GraphQL 可选字段：translations，结构可能随 API 演进变化，保留原始 JSON 便于兼容解析。
+    [JsonPropertyName("translations")]
+    public JsonElement TranslationsRaw { get; set; }
+
     // GraphQL 额外字段
     [JsonPropertyName("game")]
     public NexusGame Game { get; set; }
+
+    [JsonPropertyName("modCategory")]
+    public NexusModCategory ModCategory { get; set; }
+
+    [JsonPropertyName("uploader")]
+    public NexusUser Uploader { get; set; }
+
+    [JsonPropertyName("tags")]
+    public List<NexusLegacyTag> Tags { get; set; } = [];
+
+    [JsonPropertyName("mirrors")]
+    public List<NexusModMirror> Mirrors { get; set; } = [];
+
+    [JsonPropertyName("modRequirements")]
+    public NexusModRequirements ModRequirements { get; set; }
+
+    public bool HasTranslationSignals()
+    {
+        if (TranslationsRaw.ValueKind == JsonValueKind.Undefined ||
+            TranslationsRaw.ValueKind == JsonValueKind.Null)
+        {
+            return false;
+        }
+
+        var flattened = FlattenTranslationText(TranslationsRaw).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(flattened))
+            return false;
+
+        if (flattened.Contains("中文") || flattened.Contains("汉化") || flattened.Contains("漢化"))
+            return true;
+
+        return Regex.IsMatch(flattened, @"\b(chinese|mandarin|zh[-_ ]?cn|cn|translation|translations)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static string FlattenTranslationText(JsonElement element)
+    {
+        var builder = new StringBuilder();
+        AppendJsonText(element, builder);
+        return builder.ToString();
+    }
+
+    private static void AppendJsonText(JsonElement element, StringBuilder builder)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                var value = element.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    builder.Append(value);
+                    builder.Append(' ');
+                }
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    AppendJsonText(item, builder);
+                }
+                break;
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (!string.IsNullOrWhiteSpace(property.Name))
+                    {
+                        builder.Append(property.Name);
+                        builder.Append(' ');
+                    }
+                    AppendJsonText(property.Value, builder);
+                }
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 /// <summary>
@@ -83,6 +218,189 @@ public class NexusGame
 
     [JsonPropertyName("domainName")]
     public string DomainName { get; set; }
+}
+
+public class NexusModCategory
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; }
+
+    [JsonPropertyName("categoryId")]
+    public int CategoryId { get; set; }
+
+    [JsonPropertyName("gameId")]
+    public int GameId { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+}
+
+public class NexusUser
+{
+    [JsonPropertyName("memberId")]
+    public long MemberId { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("avatar")]
+    public string Avatar { get; set; }
+
+    [JsonPropertyName("isBlocked")]
+    public bool IsBlocked { get; set; }
+
+    [JsonPropertyName("isTracked")]
+    public bool IsTracked { get; set; }
+}
+
+public class NexusLegacyTag
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("global")]
+    public bool Global { get; set; }
+
+    [JsonPropertyName("parentId")]
+    public string ParentId { get; set; }
+
+    [JsonPropertyName("blockable")]
+    public bool Blockable { get; set; }
+
+    [JsonPropertyName("searchable")]
+    public bool Searchable { get; set; }
+}
+
+public class NexusModMirror
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; }
+
+    [JsonPropertyName("gameId")]
+    public int GameId { get; set; }
+
+    [JsonPropertyName("modId")]
+    public int ModId { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("uri")]
+    public string Uri { get; set; }
+
+    [JsonPropertyName("count")]
+    public int? Count { get; set; }
+
+    [JsonPropertyName("totalDownloads")]
+    public int? TotalDownloads { get; set; }
+}
+
+public class NexusModRequirements
+{
+    [JsonPropertyName("dlcRequirements")]
+    public List<NexusModRequirementsDlc> DlcRequirements { get; set; } = [];
+
+    [JsonPropertyName("nexusRequirements")]
+    public NexusModRequirementPage NexusRequirements { get; set; }
+
+    [JsonPropertyName("modsRequiringThisMod")]
+    public NexusModRequiringPage ModsRequiringThisMod { get; set; }
+}
+
+public class NexusModRequirementsDlc
+{
+    [JsonPropertyName("gameExpansion")]
+    public NexusGameExpansion GameExpansion { get; set; }
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; }
+}
+
+public class NexusGameExpansion
+{
+    [JsonPropertyName("gameId")]
+    public string GameId { get; set; }
+
+    [JsonPropertyName("id")]
+    public string Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+}
+
+public class NexusModRequirementPage
+{
+    [JsonPropertyName("totalCount")]
+    public int TotalCount { get; set; }
+
+    [JsonPropertyName("nodesCount")]
+    public int NodesCount { get; set; }
+
+    [JsonPropertyName("nodes")]
+    public List<NexusModRequirementNode> Nodes { get; set; } = [];
+}
+
+public class NexusModRequiringPage
+{
+    [JsonPropertyName("totalCount")]
+    public int TotalCount { get; set; }
+
+    [JsonPropertyName("nodesCount")]
+    public int NodesCount { get; set; }
+
+    [JsonPropertyName("nodes")]
+    public List<NexusModRequiringNode> Nodes { get; set; } = [];
+}
+
+public class NexusModRequirementNode
+{
+    [JsonPropertyName("externalRequirement")]
+    public bool ExternalRequirement { get; set; }
+
+    [JsonPropertyName("gameId")]
+    public string GameId { get; set; }
+
+    [JsonPropertyName("id")]
+    public string Id { get; set; }
+
+    [JsonPropertyName("modId")]
+    public string ModId { get; set; }
+
+    [JsonPropertyName("modName")]
+    public string ModName { get; set; }
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; }
+
+    [JsonPropertyName("url")]
+    public string Url { get; set; }
+}
+
+public class NexusModRequiringNode
+{
+    [JsonPropertyName("externalRequirement")]
+    public bool ExternalRequirement { get; set; }
+
+    [JsonPropertyName("gameId")]
+    public string GameId { get; set; }
+
+    [JsonPropertyName("id")]
+    public string Id { get; set; }
+
+    [JsonPropertyName("modId")]
+    public string ModId { get; set; }
+
+    [JsonPropertyName("modName")]
+    public string ModName { get; set; }
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; }
+
+    [JsonPropertyName("url")]
+    public string Url { get; set; }
 }
 
 // 保留旧的 NexusCategory 类以兼容 REST API
