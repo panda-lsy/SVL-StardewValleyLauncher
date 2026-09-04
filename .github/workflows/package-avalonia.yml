@@ -30,7 +30,7 @@ jobs:
         run: dotnet restore SVL.Migration.Tests/SVL.Migration.Tests.csproj
 
       - name: Run tests
-        run: dotnet test SVL.Migration.Tests/SVL.Migration.Tests.csproj --configuration Release --no-restore
+        run: dotnet test SVL.Migration.Tests/SVL.Migration.Tests.csproj --configuration Debug --no-restore
 
   package:
     name: Package ${{ matrix.rid }}
