@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **SVL is actively being rewritten. / SVL 正在进行新架构重构。**
+>
+> The current `main` branch contains the legacy .NET Framework 4.8 / WPF version. The next-generation cross-platform version is under active development on [`Dev-Avalonia`](https://github.com/panda-lsy/SVL-StardewValleyLauncher/tree/Dev-Avalonia), migrating SVL to .NET 10 + Avalonia while improving localization, maintainability, testing, and release workflows.
+>
+> 当前 `main` 分支保留旧版 .NET Framework 4.8 / WPF 实现。下一代跨平台版本正在 [`Dev-Avalonia`](https://github.com/panda-lsy/SVL-StardewValleyLauncher/tree/Dev-Avalonia) 分支持续开发，正迁移至 .NET 10 + Avalonia，并同步推进本地化、可维护性、测试与发布流程改造。
+
 <p align="center">
   <img src="SVL.Desktop/Images/icon.png" alt="SVL Logo" width="128" height="128">
 </p>
