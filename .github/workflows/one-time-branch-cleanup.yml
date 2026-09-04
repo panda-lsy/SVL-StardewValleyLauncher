@@ -1,0 +1,20 @@
+name: One-time branch cleanup
+
+on:
+  push:
+    branches:
+      - Dev-Avalonia
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.repository == 'panda-lsy/SVL-StardewValleyLauncher' && github.ref == 'refs/heads/Dev-Avalonia'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Delete the two obsolete branches
+        run: git push origin --delete codex/avalonia-review merge/pr-4-avalonia-fix
