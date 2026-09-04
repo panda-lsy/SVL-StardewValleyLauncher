@@ -99,16 +99,15 @@ public class MainFlowSmokeTests
             mainWindow.NavigateToDownloadCommand.Execute(null);
             Assert.AreEqual("下载", mainWindow.CurrentPage);
 
-            mainWindow.DownloadPage.AddTaskFromExternal(new ExternalDownloadRequest
+            var queued = await mainWindow.DownloadPage.AddTaskFromExternalAsync(new ExternalDownloadRequest
             {
                 ResourceName = "Smoke Mod",
                 ResourceSource = "NexusMods",
                 SelectedDownloadOption = "v1.0.0"
             });
 
-            await Task.Delay(150);
-
-            Assert.IsTrue(mainWindow.DownloadPage.DownloadTasks.Count > 0);
+            Assert.IsFalse(queued);
+            Assert.AreEqual(0, mainWindow.DownloadPage.DownloadTasks.Count);
 
             mainWindow.NavigateToTasksCommand.Execute(null);
             Assert.AreEqual("任务", mainWindow.CurrentPage);
