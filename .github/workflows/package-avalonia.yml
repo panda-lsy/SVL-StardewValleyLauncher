@@ -1,0 +1,73 @@
+name: Package Avalonia
+
+on:
+  push:
+    branches:
+      - Dev-Avalonia
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore tests
+        run: dotnet restore SVL.Migration.Tests/SVL.Migration.Tests.csproj
+
+      - name: Run tests
+        run: dotnet test SVL.Migration.Tests/SVL.Migration.Tests.csproj --configuration Release --no-restore
+
+  package:
+    name: Package ${{ matrix.rid }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-13
+            rid: osx-x64
+          - os: macos-14
+            rid: osx-arm64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore runtime
+        run: dotnet restore SVL.Avalonia/SVL.Avalonia.csproj --runtime ${{ matrix.rid }}
+
+      - name: Publish
+        run: dotnet publish SVL.Avalonia/SVL.Avalonia.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/${{ matrix.rid }} -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SVL-Avalonia-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}
+          if-no-files-found: error
+          retention-days: 14
