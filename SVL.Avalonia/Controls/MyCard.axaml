@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.MyCard"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="12" CornerRadius="10">
+		<StackPanel Spacing="8">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="sectionTitle" />
+			<TextBlock Text="{Binding Subtitle, ElementName=Root}" Opacity="0.75" TextWrapping="Wrap" />
+			<ContentPresenter Content="{Binding CardContent, ElementName=Root}" />
+		</StackPanel>
+	</Border>
+</UserControl>

@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Views.ExportView">
+	<Border Classes="panel">
+		<StackPanel Spacing="8">
+			<TextBlock Text="导出内容区" Classes="heroTitle" />
+			<TextBlock Text="用于展示 Modpack 导出任务状态与最近导出结果。" TextWrapping="Wrap" />
+			<TextBlock Text="建议先在导出页面执行导出，再回到此区查看摘要。" TextWrapping="Wrap" Opacity="0.75" />
+		</StackPanel>
+	</Border>
+</UserControl>

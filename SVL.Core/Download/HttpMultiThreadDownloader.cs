@@ -97,6 +97,11 @@ public static class HttpMultiThreadDownloader
         var finalSpeed = sw.Elapsed.TotalSeconds <= 0 ? 0 : downloaded / sw.Elapsed.TotalSeconds;
         if (contentLength > 0)
         {
+            if (downloaded != contentLength)
+            {
+                throw new EndOfStreamException($"服务器提前结束下载响应: {downloaded}/{contentLength} 字节");
+            }
+
             progressCallback?.Invoke(100, downloaded, contentLength, finalSpeed);
         }
         else
@@ -145,18 +150,42 @@ public static class HttpMultiThreadDownloader
                     throw new HttpRequestException($"服务器未返回分片响应: {(int)response.StatusCode} {response.StatusCode}");
                 }
 
+                var expectedBytes = end - start + 1;
+                var contentRange = response.Content.Headers.ContentRange;
+                if (contentRange != null &&
+                    (contentRange.From != start || contentRange.To != end ||
+                     (contentRange.Length.HasValue && contentRange.Length.Value != totalBytes)))
+                {
+                    throw new HttpRequestException("服务器返回的分片范围与请求不一致");
+                }
+
+                if (response.Content.Headers.ContentLength is long contentLength &&
+                    contentLength != expectedBytes)
+                {
+                    throw new HttpRequestException("服务器返回的分片大小与请求不一致");
+                }
+
                 using var source = await response.Content.ReadAsStreamAsync();
                 using var destination = new FileStream(targetPath, FileMode.Open, FileAccess.Write, FileShare.Write, 1024 * 32, true);
                 destination.Position = start;
 
                 var buffer = new byte[1024 * 32];
-                while (true)
+                var receivedBytes = 0L;
+                while (receivedBytes < expectedBytes)
                 {
-                    var read = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+                    var remaining = expectedBytes - receivedBytes;
+                    var read = await source.ReadAsync(
+                        buffer,
+                        0,
+                        (int)Math.Min(buffer.Length, remaining),
+                        cancellationToken);
                     if (read <= 0)
-                        break;
+                    {
+                        throw new EndOfStreamException("服务器提前结束分片响应");
+                    }
 
                     await destination.WriteAsync(buffer, 0, read, cancellationToken);
+                    receivedBytes += read;
                     var current = Interlocked.Add(ref downloaded, read);
 
                     var speed = sw.Elapsed.TotalSeconds <= 0 ? 0 : current / sw.Elapsed.TotalSeconds;

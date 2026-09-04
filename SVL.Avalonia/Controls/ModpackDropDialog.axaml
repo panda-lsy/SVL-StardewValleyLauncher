@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SVL.Avalonia.Controls.ModpackDropDialog"
+             x:Name="Root">
+  <Border Classes="panel" Padding="16" MinWidth="520" MaxWidth="620">
+    <StackPanel Spacing="12">
+      <TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+
+      <!-- 加载中 -->
+      <StackPanel IsVisible="{Binding IsLoading, ElementName=Root}" Spacing="8" Margin="0,8,0,0">
+        <ProgressBar IsIndeterminate="True" />
+        <TextBlock Text="正在检测整合包类型..." Opacity="0.7" HorizontalAlignment="Center" />
+      </StackPanel>
+
+      <!-- 错误态 -->
+      <StackPanel IsVisible="{Binding HasError, ElementName=Root}" Spacing="8" Margin="0,8,0,0">
+        <TextBlock Text="检测失败" FontWeight="SemiBold" Foreground="#D32F2F" />
+        <TextBlock Text="{Binding ErrorMessage, ElementName=Root}" TextWrapping="Wrap" Opacity="0.7" />
+        <Button Content="关闭" Command="{Binding CancelCommand, ElementName=Root}" HorizontalAlignment="Right" Margin="0,8,0,0" />
+      </StackPanel>
+
+      <!-- 正常态：元数据预览 + 版本名输入 -->
+      <StackPanel IsVisible="{Binding !IsLoading, ElementName=Root}" Spacing="10" Margin="0,4,0,0">
+        <!-- 图标 + 名称 + 类型/版本 -->
+        <Grid ColumnDefinitions="64,*" Margin="0,0,0,4">
+          <Border Grid.Column="0" Background="{DynamicResource CardBrush}" CornerRadius="6" Padding="4">
+            <Image Source="{Binding ModpackIconPath, ElementName=Root, Converter={StaticResource AssetImageConverter}}"
+                   Width="56" Height="56" Stretch="UniformToFill" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="3" VerticalAlignment="Center">
+            <TextBlock Text="{Binding ModpackName, ElementName=Root}" FontWeight="SemiBold" FontSize="15"
+                       TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <TextBlock Text="{Binding ModpackTypeText, ElementName=Root}" FontSize="12" Opacity="0.65" />
+              <TextBlock Text="{Binding ModpackVersion, ElementName=Root}" FontSize="12" Opacity="0.65" />
+            </StackPanel>
+          </StackPanel>
+        </Grid>
+
+        <!-- 元数据行：作者 / Mod 数 -->
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2,0,0">
+          <TextBlock Grid.Column="0" Text="作者" FontSize="12" Opacity="0.55" Margin="0,0,8,0" />
+          <TextBlock Grid.Column="1" Text="{Binding ModpackAuthor, ElementName=Root}" FontSize="12" TextTrimming="CharacterEllipsis" />
+          <TextBlock Grid.Column="2" Text="{Binding ModCountText, ElementName=Root}" FontSize="12" Opacity="0.65" />
+        </Grid>
+
+        <!-- 描述 -->
+        <Border Background="{DynamicResource CardBrush}" CornerRadius="4" Padding="8" Margin="0,2,0,0">
+          <TextBlock Text="{Binding ModpackDescription, ElementName=Root}" TextWrapping="Wrap" FontSize="12"
+                     MaxLines="4" TextTrimming="CharacterEllipsis" Opacity="0.8" />
+        </Border>
+
+        <!-- 安装目标路径选择（来自版本选择页路径列表） -->
+        <StackPanel Spacing="4" Margin="0,6,0,0" IsVisible="{Binding HasPathEntries, ElementName=Root}">
+          <TextBlock Text="安装到路径" FontSize="12" Opacity="0.7" />
+          <ComboBox ItemsSource="{Binding PathEntryDisplayNames, ElementName=Root}"
+                    SelectedIndex="{Binding SelectedPathIndex, ElementName=Root, Mode=TwoWay}"
+                    MinWidth="300" HorizontalAlignment="Stretch"
+                    ToolTip.Tip="从版本选择页路径列表中选择安装目标" />
+        </StackPanel>
+
+        <!-- 版本名输入 -->
+        <StackPanel Spacing="4" Margin="0,6,0,0">
+          <TextBlock Text="版本实例名称" FontSize="12" Opacity="0.7" />
+          <TextBox Text="{Binding InstanceName, ElementName=Root, Mode=TwoWay}"
+                   Watermark="输入版本实例名称（用于版本隔离目录）" />
+        </StackPanel>
+
+        <!-- 按钮行 -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+          <Button Content="取消" Command="{Binding CancelCommand, ElementName=Root}" MinWidth="80" />
+          <Button Content="导入" Command="{Binding ImportCommand, ElementName=Root}"
+                  CommandParameter="{Binding InstanceName, ElementName=Root}" MinWidth="80"
+                  Classes="accent" />
+        </StackPanel>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

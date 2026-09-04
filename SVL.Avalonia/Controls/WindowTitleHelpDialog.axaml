@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.WindowTitleHelpDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="14" MinWidth="460">
+		<StackPanel Spacing="10">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+			<TextBlock Text="{Binding HelpText, ElementName=Root}" TextWrapping="Wrap" />
+			<Button Content="我知道了" Command="{Binding CloseCommand, ElementName=Root}" HorizontalAlignment="Right" />
+		</StackPanel>
+	</Border>
+</UserControl>

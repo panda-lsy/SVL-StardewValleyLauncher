@@ -91,3 +91,6 @@ smapireleases.json
 .claude/
 .spec-workflow/
 CLAUDE.md
+
+# ----- Local docs (this workspace) -----
+docs/

@@ -1,0 +1,266 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:models="using:SVL.Avalonia.Models"
+             x:Class="SVL.Avalonia.Views.TaskStatusPageView"
+             x:DataType="vm:TaskStatusPageViewModel">
+  <Grid ColumnDefinitions="320,*">
+    <!-- 左栏：多任务列表 -->
+    <Border Grid.Column="0" Classes="panel">
+      <Grid RowDefinitions="Auto,*">
+        <!-- 列表标题 + 清空已完成 -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+          <StackPanel Grid.Column="0" Spacing="2">
+            <TextBlock Text="任务列表" Classes="sectionTitle" />
+            <TextBlock FontSize="12" Opacity="0.7">
+              <Run Text="进行中: " />
+              <Run Text="{Binding ActiveTasksCount}" />
+              <Run Text="  历史已完成: " />
+              <Run Text="{Binding FinishedTasksCount}" />
+            </TextBlock>
+          </StackPanel>
+          <Button Grid.Column="1" Content="清空已完成"
+                  Command="{Binding ClearCompletedCommand}"
+                  IsEnabled="{Binding CanClearCompleted}"
+                  Classes="settingsNav"
+                  MinWidth="92" />
+        </Grid>
+
+        <!-- 空状态 -->
+        <Border Grid.Row="1" Classes="hintCard" IsVisible="{Binding IsEmptyState}">
+          <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Path Data="{StaticResource Icon.Inbox}" Width="40" Height="40" Stretch="Uniform"
+                  Fill="{DynamicResource DefaultTextForeground}" HorizontalAlignment="Center" Opacity="0.4" />
+            <TextBlock Text="当前没有任务" FontWeight="SemiBold" HorizontalAlignment="Center" />
+            <TextBlock Text="去下载页发起任务后，这里会实时显示进度。" Opacity="0.72" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="240" />
+            <Button Content="前往下载" Command="{Binding GoToDownloadCommand}" HorizontalAlignment="Center" MinWidth="120" Height="34" Margin="0,8,0,0" />
+          </StackPanel>
+        </Border>
+
+        <!-- 任务列表 -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding !IsEmptyState}">
+          <ItemsControl ItemsSource="{Binding Tasks}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="models:DownloadTaskItem">
+                <Button Classes="flatTask"
+                        Command="{Binding DataContext.SelectTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                        Padding="8" Margin="0,0,0,6">
+                  <Grid RowDefinitions="Auto,Auto,Auto" Margin="2,0">
+                    <!-- 任务名 + 状态文本 -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"
+                                 TextTrimming="CharacterEllipsis" MaxLines="1" />
+                      <TextBlock Grid.Column="1" Text="{Binding DisplayStatusText}" FontSize="11" Opacity="0.7"
+                                 Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </Grid>
+                    <!-- 进度条 + 多线程分块进度 -->
+                    <StackPanel Grid.Row="1" Margin="0,4,0,0" Spacing="2">
+                      <!-- 多线程时用分块进度条作为主显示；单线程时才显示整条总进度 -->
+                      <ProgressBar Minimum="0" Maximum="100" Value="{Binding Progress}" Height="6" IsVisible="{Binding !HasSegmentProgress}" />
+                      <ItemsControl ItemsSource="{Binding SegmentItems}" IsVisible="{Binding HasSegmentProgress}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="models:DownloadSegmentItem">
+                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}" Height="6" Margin="1,0" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                    <!-- 速度/ETA/子进度 -->
+                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,2,0,0"
+                          IsVisible="{Binding HasSpeedInfo}">
+                      <TextBlock Grid.Column="0" FontSize="11" Opacity="0.65" TextTrimming="CharacterEllipsis">
+                        <Run Text="{Binding SpeedText}" />
+                        <Run Text=" · " />
+                        <Run Text="{Binding DownloadedSizeText}" />
+                        <Run Text=" / " />
+                        <Run Text="{Binding TotalSizeText}" />
+                      </TextBlock>
+                      <TextBlock Grid.Column="1" Text="{Binding EtaText}" FontSize="11" Opacity="0.65" Margin="8,0,0,0" />
+                    </Grid>
+                    <TextBlock Grid.Row="2" FontSize="11" Opacity="0.65" Text="{Binding SubProgressText}"
+                               IsVisible="{Binding HasSubProgress}" Margin="0,2,0,0" />
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+
+    <!-- 右栏：选中任务详情 + 操作栏 + 日志 -->
+    <Border Grid.Column="1" Classes="panel" Margin="12,0,0,0">
+      <ScrollViewer IsVisible="{Binding ShowMainStateContent}">
+        <StackPanel Spacing="12">
+          <TextBlock Text="任务状态详情" Classes="heroTitle" />
+
+          <!-- 空选中提示 -->
+          <Border Classes="hintCard" IsVisible="{Binding !HasSelectedTask}">
+            <StackPanel Spacing="8" HorizontalAlignment="Center">
+              <TextBlock Text="未选择任务" Classes="hintTitle" HorizontalAlignment="Center" />
+              <TextBlock Text="从左侧列表点击一个任务，这里会展示完整进度、失败原因与操作入口。"
+                         Opacity="0.75" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420" />
+            </StackPanel>
+          </Border>
+
+          <!-- 选中任务详情 -->
+          <Border Classes="hintCard" IsVisible="{Binding HasSelectedTask}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding CurrentTaskName}" FontWeight="SemiBold" FontSize="15" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding CurrentTaskStatus}" Opacity="0.8" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <!-- 失败详情 -->
+          <Border Classes="hintCard" IsVisible="{Binding IsFailedState}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="失败原因" Classes="hintTitle" />
+              <TextBlock Text="{Binding FailureSummary}" TextWrapping="Wrap" FontWeight="SemiBold" />
+            </StackPanel>
+          </Border>
+
+          <!-- 运行中进度（分层：总进度+子进度+速度+ETA） -->
+          <Border Classes="hintCard" IsVisible="{Binding IsRunningState}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="当前进度" Classes="hintTitle" />
+              <!-- 多线程时用分块进度条作为主显示；单线程时才显示整条总进度 -->
+              <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent}" Height="10" IsVisible="{Binding !SelectedTask.HasSegmentProgress}" />
+              <!-- 多线程分片进度（每线程一条，分块加载） -->
+              <ItemsControl ItemsSource="{Binding SelectedTask.SegmentItems}" IsVisible="{Binding SelectedTask.HasSegmentProgress}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="models:DownloadSegmentItem">
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}" Height="10" Margin="1,0" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" FontSize="12" Opacity="0.75">
+                  <Run Text="进度: " />
+                  <Run Text="{Binding ProgressPercent, StringFormat={}{0:F1}%}" />
+                </TextBlock>
+                <TextBlock Grid.Column="1" FontSize="12" Opacity="0.75" Text="{Binding SelectedTaskSpeedText}"
+                           IsVisible="{Binding SelectedTaskHasSpeedInfo}" />
+              </Grid>
+              <!-- 分层进度：速度/大小/ETA -->
+              <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding SelectedTaskHasSpeedInfo}" Margin="0,2,0,0">
+                <TextBlock Grid.Column="0" FontSize="12" Opacity="0.7">
+                  <Run Text="{Binding SelectedTaskDownloadedSizeText}" />
+                  <Run Text=" / " />
+                  <Run Text="{Binding SelectedTaskTotalSizeText}" />
+                </TextBlock>
+                <TextBlock Grid.Column="1" Text="{Binding SelectedTaskEtaText}" FontSize="12" Opacity="0.7" Margin="8,0,0,0" />
+              </Grid>
+              <!-- 子进度（Collection/整合包） -->
+              <StackPanel Spacing="4" IsVisible="{Binding SelectedTaskHasSubProgress}" Margin="0,4,0,0">
+                <TextBlock Text="{Binding SelectedTaskSubProgressText}" FontSize="12" Opacity="0.7" />
+                <ProgressBar Minimum="0" Maximum="100" Value="{Binding SelectedTaskSubProgress}" Height="4"
+                             IsVisible="{Binding SelectedTaskHasSubProgress}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- 完成/取消态提示 -->
+          <Border Classes="hintCard" IsVisible="{Binding IsCompletedState}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="任务完成" Classes="hintTitle" />
+              <TextBlock Text="可在下方操作栏点击打开目录查看安装结果。" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Classes="hintCard" IsVisible="{Binding IsCancelledState}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="任务已取消" Classes="hintTitle" />
+              <TextBlock Text="任务被取消后可移除清理，或在下载页发起新任务。" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <!-- 操作栏：完整操作按钮，按状态启用 -->
+          <Border Classes="hintCard" IsVisible="{Binding HasSelectedTask}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="操作" Classes="hintTitle" />
+              <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Button Content="取消任务" Command="{Binding CancelTaskCommand}"
+                        CommandParameter="{Binding SelectedTask}"
+                        IsEnabled="{Binding SelectedTaskCanCancel}"
+                        MinWidth="92" Margin="0,0,8,8" />
+                <Button Content="重试" Command="{Binding RetryTaskCommand}"
+                        CommandParameter="{Binding SelectedTask}"
+                        IsEnabled="{Binding SelectedTaskCanRetry}"
+                        MinWidth="92" Margin="0,0,8,8" />
+                <Button Content="移除" Command="{Binding RemoveTaskCommand}"
+                        CommandParameter="{Binding SelectedTask}"
+                        MinWidth="92" Margin="0,0,8,8" />
+                <Button Content="打开目录" Command="{Binding OpenDirectoryCommand}"
+                        CommandParameter="{Binding SelectedTask}"
+                        IsEnabled="{Binding SelectedTaskHasInstalledDirectory}"
+                        MinWidth="92" Margin="0,0,8,8" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- 建议操作 -->
+          <Border Classes="hintCard">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding AdviceTitle}" Classes="hintTitle" />
+              <ItemsControl ItemsSource="{Binding SuggestedActions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <!-- 冲突预览 -->
+          <Border Classes="hintCard" IsVisible="{Binding HasConflictPreview}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="安装冲突预览" Classes="hintTitle" />
+              <ScrollViewer Height="120">
+                <ItemsControl ItemsSource="{Binding ConflictPreviewItems}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
+
+          <!-- 实时日志面板 -->
+          <Border Classes="hintCard">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Grid.Column="0" Text="任务日志" Classes="hintTitle" />
+                <Button Grid.Column="1" Content="复制" Command="{Binding CopyLogsCommand}" MinWidth="60" Margin="0,0,6,0" />
+                <Button Grid.Column="2" Content="清空" Command="{Binding ClearLogsCommand}" MinWidth="60" />
+              </Grid>
+              <ScrollViewer Height="160">
+                <ItemsControl ItemsSource="{Binding TaskLogs}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding}" FontSize="11" FontFamily="Cascadia Mono,Consolas,Courier New"
+                                 Opacity="0.8" TextWrapping="Wrap" Margin="0,0,0,2" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</UserControl>

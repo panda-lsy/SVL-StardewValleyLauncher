@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             x:Class="SVL.Avalonia.Views.InstanceSettingsPageView"
+             x:DataType="vm:InstanceSettingsPageViewModel">
+  <Border Classes="panel">
+    <StackPanel Spacing="8">
+      <TextBlock Text="{Binding Title}" Classes="heroTitle" />
+      <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+      <Separator />
+      <TextBlock Text="实例名称" />
+      <TextBox Text="{Binding InstanceName}" />
+      <CheckBox Content="覆写 Steam 启动参数" IsChecked="{Binding OverrideSteamLaunchOptions}" />
+      <TextBlock Text="Steam 启动参数" />
+      <TextBox Text="{Binding SteamLaunchOptions}" AcceptsReturn="True" Height="90" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Status}" Opacity="0.75" />
+      <Button Content="保存实例设置" Command="{Binding SaveCommand}" HorizontalAlignment="Right" />
+    </StackPanel>
+  </Border>
+</UserControl>

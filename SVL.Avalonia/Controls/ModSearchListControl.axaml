@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.ModSearchListControl"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="12" MinWidth="500">
+		<StackPanel Spacing="8">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="sectionTitle" />
+			<ListBox Height="220"
+							 ItemsSource="{Binding Items, ElementName=Root}"
+							 SelectedItem="{Binding SelectedItem, ElementName=Root, Mode=TwoWay}" />
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Content="刷新" Command="{Binding RefreshCommand, ElementName=Root}" />
+				<Button Content="查看详情" Command="{Binding OpenDetailsCommand, ElementName=Root}" CommandParameter="{Binding SelectedItem, ElementName=Root}" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

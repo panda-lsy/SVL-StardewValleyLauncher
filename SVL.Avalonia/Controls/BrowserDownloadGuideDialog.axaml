@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.BrowserDownloadGuideDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="14" MinWidth="420">
+		<StackPanel Spacing="10">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+			<TextBlock Text="{Binding GuideMessage, ElementName=Root}" TextWrapping="Wrap" />
+			<Border Classes="hintCard" Padding="8">
+				<TextBlock Text="{Binding DownloadUrl, ElementName=Root}" TextWrapping="Wrap" />
+			</Border>
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Content="复制链接" Command="{Binding CopyLinkCommand, ElementName=Root}" CommandParameter="{Binding DownloadUrl, ElementName=Root}" />
+				<Button Content="在浏览器打开" Command="{Binding OpenInBrowserCommand, ElementName=Root}" CommandParameter="{Binding DownloadUrl, ElementName=Root}" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

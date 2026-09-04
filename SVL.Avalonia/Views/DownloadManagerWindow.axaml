@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 xmlns:views="using:SVL.Avalonia.Views"
+						 x:Class="SVL.Avalonia.Views.DownloadManagerWindow">
+	<Grid RowDefinitions="Auto,*">
+		<Border Classes="panel" Padding="10">
+			<TextBlock Text="下载管理器（兼容旧视图入口）" Classes="sectionTitle" />
+		</Border>
+		<views:TaskStatusPageView Grid.Row="1" Margin="0,8,0,0" DataContext="{Binding TaskStatusPage}" />
+	</Grid>
+</UserControl>

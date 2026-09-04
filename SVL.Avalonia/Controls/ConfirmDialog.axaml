@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SVL.Avalonia.Controls.ConfirmDialog"
+        Width="420"
+        Height="220"
+        WindowStartupLocation="CenterOwner"
+        Title="确认">
+  <Border Padding="16">
+    <StackPanel Spacing="12">
+      <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Content="取消" Click="Cancel_Click" />
+        <Button Content="确定" Click="Confirm_Click" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

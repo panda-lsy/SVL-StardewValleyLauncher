@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SVL.Avalonia.Views.SplashWindow"
+        Width="200"
+        Height="200"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="-1">
+  <Grid>
+    <Image Source="avares://SVL.Avalonia/Assets/Icons/icon.png"
+           Width="128"
+           Height="128"
+           Stretch="Uniform"
+           HorizontalAlignment="Center"
+           VerticalAlignment="Center" />
+  </Grid>
+</Window>

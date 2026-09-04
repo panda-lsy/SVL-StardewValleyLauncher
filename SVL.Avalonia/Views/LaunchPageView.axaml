@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:angif="using:AnimatedImage.Avalonia"
+             mc:Ignorable="d"
+             x:Class="SVL.Avalonia.Views.LaunchPageView"
+             x:DataType="vm:LaunchPageViewModel">
+  <Grid ColumnDefinitions="300,*">
+    <Border Grid.Column="0" Classes="panel">
+      <Grid RowDefinitions="Auto,*,Auto">
+        <StackPanel Grid.Row="0" Margin="20,20,20,10" Spacing="8">
+          <Border Width="110" Height="110" CornerRadius="10" Background="{DynamicResource CardBrush}" HorizontalAlignment="Center">
+            <Image Source="{Binding InstanceIconSource, Converter={StaticResource AssetImageConverter}}"
+                   angif:ImageBehavior.AnimatedSource="{Binding InstanceIconSource, Converter={StaticResource AssetImageConverter}, ConverterParameter=animate}"
+                   Width="78"
+                   Height="78"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Stretch="Uniform" />
+          </Border>
+          <TextBlock Text="{Binding InstanceName}" Classes="sectionValue" HorizontalAlignment="Center" TextAlignment="Center" />
+          <TextBlock Text="{Binding GameVersion}" HorizontalAlignment="Center" Opacity="0.82" />
+          <TextBlock Text="{Binding VersionStatus}" Classes="pill" HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <Border Grid.Row="1" />
+
+        <StackPanel Grid.Row="2" Spacing="12" HorizontalAlignment="Stretch" Margin="20,0,20,20">
+          <Button Classes="launchPrimary" Content="{Binding LaunchButtonText}" Command="{Binding LaunchGameCommand}" Height="48" FontSize="15" IsEnabled="{Binding HasInstances}" HorizontalAlignment="Stretch" />
+          <Button Classes="launchSecondary" Content="{Binding VersionSelectButtonText}" Command="{Binding NavigateToVersionSelectCommand}" Height="42" FontSize="14" HorizontalAlignment="Stretch" />
+          <Button Classes="launchSecondary" Content="{Binding ModManageButtonText}" Command="{Binding OpenModManageCommand}" IsVisible="{Binding ShowModManageButton}" Height="42" FontSize="14" HorizontalAlignment="Stretch" />
+          <Button Classes="launchSecondary" Content="{Binding VersionSettingsButtonText}" Command="{Binding OpenVersionSettingsCommand}" IsEnabled="{Binding CanOpenVersionSettings}" Height="42" FontSize="14" HorizontalAlignment="Stretch" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border Grid.Column="1" Classes="panel" Margin="12,0,0,0">
+      <ScrollViewer>
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding WelcomeTitle}" Classes="heroTitle" />
+            <TextBlock Text="{Binding BrandText}" Opacity="0.8" />
+          </StackPanel>
+
+          <Border Classes="hintCard">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding StatusHeadline}" Classes="hintTitle" />
+              <TextBlock Text="{Binding StatusSubline}" Opacity="0.82" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="96,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding InstanceInfoLabel}" Opacity="0.7" Margin="0,0,8,6" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding InstanceName}" FontWeight="Medium" TextWrapping="Wrap" Margin="0,0,0,6" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding LaunchModeLabel}" Opacity="0.7" Margin="0,0,8,6" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding PreferredLaunchMode}" Margin="0,0,0,6" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding SafeLaunchLabel}" Opacity="0.7" Margin="0,0,8,6" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SafeLaunchState}" Margin="0,0,0,6" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Binding StatusLabel}" Opacity="0.7" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ActionStatus}" TextWrapping="Wrap" />
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding ShowOnboardingCard}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding GetStartedTitle}" Classes="hintTitle" />
+              <TextBlock Text="{Binding GuideNoInstanceLead}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding GuideStep1}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding GuideStep2}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding GuideStep3}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding GuideStep4}" TextWrapping="Wrap" />
+              <Button Classes="launchPrimary" Content="{Binding VersionSelectButtonText}" Command="{Binding NavigateToVersionSelectCommand}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding GuideUsageTitle}" Classes="hintTitle" />
+              <TextBlock Text="{Binding GuideUsageLine1}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding GuideUsageLine2}" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding GuideUsageModManageLine}" TextWrapping="Wrap" />
+              <Button Content="{Binding ModManageButtonText}" Command="{Binding OpenModManageCommand}" IsVisible="{Binding ShowModManageButton}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</UserControl>

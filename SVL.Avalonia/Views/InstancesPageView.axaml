@@ -1,0 +1,387 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:converters="using:SVL.Avalonia.Converters"
+             xmlns:angif="using:AnimatedImage.Avalonia"
+             mc:Ignorable="d"
+             x:Class="SVL.Avalonia.Views.InstancesPageView"
+             x:Name="Root"
+             x:DataType="vm:InstancesPageViewModel">
+  <UserControl.Resources>
+    <DataTemplate x:Key="InstanceCardTemplate" x:DataType="vm:InstanceItem">
+      <Border Classes="instanceCardFrame"
+              Classes.selected="{Binding IsSelected}"
+              Margin="0,0,0,12"
+              Padding="0">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+          <Button Grid.Column="0"
+                  Classes="instanceCardBody"
+              Command="{Binding DataContext.SelectInstanceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}">
+            <Border Padding="16">
+              <Grid ColumnDefinitions="Auto,*">
+                <Border Grid.Column="0"
+                        Width="46"
+                        Height="46"
+                        CornerRadius="6"
+                        Background="{DynamicResource WindowBackgroundBrush}"
+                        BorderBrush="{DynamicResource PanelBorderBrush}"
+                        BorderThickness="1"
+                        Margin="0,0,14,0">
+                  <Image Source="{Binding IconSource, Converter={StaticResource AssetImageConverter}}"
+                         angif:ImageBehavior.AnimatedSource="{Binding IconSource, Converter={StaticResource AssetImageConverter}, ConverterParameter=animate}"
+                         Stretch="Uniform" Margin="6" />
+                </Border>
+
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                    <Border Classes="instanceTag smapi" IsVisible="{Binding IsSmapiInstance}">
+                      <TextBlock Text="SMAPI" />
+                    </Border>
+                    <Border Classes="instanceTag vanilla" IsVisible="{Binding IsVanillaInstance}">
+                      <TextBlock Text="原版" />
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Tags}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Border Classes="instanceTag meta">
+                            <TextBlock Text="{Binding}" />
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+
+                  <TextBlock Text="{Binding DisplayVersion, StringFormat=游戏版本: {0}}" FontSize="12" Opacity="0.78" />
+                  <TextBlock Text="{Binding SmapiVersion, StringFormat=SMAPI 版本: {0}}"
+                             FontSize="11"
+                             Opacity="0.72"
+                             IsVisible="{Binding IsSmapiInstance}" />
+                  <TextBlock Text="{Binding Path}" FontSize="11" Opacity="0.62" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </Button>
+
+          <Button Grid.Column="1"
+                  Classes="instanceAction"
+                  ToolTip.Tip="版本设置"
+                  Margin="8,0,0,0"
+              Command="{Binding DataContext.OpenVersionSettingsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}">
+            <Path Data="{StaticResource Icon.Settings}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+          </Button>
+
+          <Button Grid.Column="2"
+                  Classes="instanceAction"
+                  ToolTip.Tip="收藏"
+                  Content="{Binding FavoriteGlyph}"
+                  Margin="4,0,0,0"
+              Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}" />
+
+          <TextBlock Grid.Column="3"
+                     Text="→"
+                     FontSize="20"
+                     Foreground="{DynamicResource AccentBrush}"
+                     VerticalAlignment="Center"
+                     Margin="8,0,12,0" />
+        </Grid>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="Button.pathAction">
+      <Setter Property="Height" Value="34" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+
+    <Style Selector="Button.pathAction.primary">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="Button.pathAction.primary:pointerover">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.pathAction.secondary">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="Button.pathAction.secondary:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    </Style>
+
+    <Style Selector="ListBox.pathList">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="ListBox.pathList ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="PathEntryBorder"
+                  Background="{DynamicResource CardBrush}"
+                  BorderBrush="Transparent"
+                  BorderThickness="2"
+                  CornerRadius="6"
+                  Padding="12,10"
+                  Cursor="Hand">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+
+    <Style Selector="ListBox.pathList ListBoxItem:pointerover /template/ Border#PathEntryBorder">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    </Style>
+
+    <Style Selector="ListBox.pathList ListBoxItem:selected /template/ Border#PathEntryBorder">
+      <Setter Property="Background" Value="{DynamicResource CardHighlightBg}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    </Style>
+
+    <Style Selector="Button.instanceCard">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <Style Selector="Button.instanceCard:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    </Style>
+
+    <Style Selector="Button.instanceCard.selected">
+      <Setter Property="Background" Value="{DynamicResource CardHighlightBg}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+
+    <Style Selector="Border.instanceCardFrame">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="Border.instanceCardFrame:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    </Style>
+
+    <Style Selector="Border.instanceCardFrame.selected">
+      <Setter Property="Background" Value="{DynamicResource CardHighlightBg}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+
+    <Style Selector="Button.instanceCardBody">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <Style Selector="Button.instanceAction">
+      <Setter Property="Width" Value="40" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontSize" Value="20" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.instanceAction:pointerover">
+      <Setter Property="Background" Value="{DynamicResource CardHighlightBg}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    </Style>
+
+    <Style Selector="Border.instanceTag">
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="6,2" />
+    </Style>
+
+    <Style Selector="Border.instanceTag.smapi">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <Style Selector="Border.instanceTag.vanilla">
+      <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+    </Style>
+
+    <Style Selector="Border.instanceTag.meta">
+      <Setter Property="Background" Value="{DynamicResource ColorBrush3}" />
+      <Setter Property="Margin" Value="4,0,0,0" />
+    </Style>
+
+    <Style Selector="Border.instanceTag TextBlock">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- 原版Tag使用浅色背景，文字用深色确保对比度 -->
+    <Style Selector="Border.instanceTag.vanilla TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <Style Selector="Border.instanceTag.meta TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid ColumnDefinitions="280,1,*">
+    <Border Grid.Column="0" Classes="panel" Padding="12">
+      <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
+        <TextBlock Grid.Row="0" Text="{Binding PathListTitle}" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+        <ListBox Grid.Row="1"
+                 Classes="pathList"
+                 ItemsSource="{Binding PathEntries}"
+                 SelectedItem="{Binding SelectedPathEntry}"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 Margin="0,0,0,8">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PathEntryItem">
+              <Grid RowDefinitions="Auto,Auto,Auto"
+                    HorizontalAlignment="Stretch"
+                  Background="Transparent"
+                  PointerPressed="PathEntry_PointerPressed">
+                <Grid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="重命名"
+                              Command="{Binding DataContext.RenamePathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="打开文件夹"
+                              Command="{Binding DataContext.OpenFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="刷新信息"
+                              Command="{Binding DataContext.RefreshPathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              CommandParameter="{Binding}" />
+                    <Separator />
+                    <MenuItem Header="删除"
+                              Command="{Binding DataContext.DeletePathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              CommandParameter="{Binding}" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
+
+                <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="1" Text="{Binding Version, StringFormat=版本: {0}}" FontSize="11" Opacity="0.72" Margin="0,2,0,0" />
+                <TextBlock Grid.Row="2" Text="{Binding GamePath}" FontSize="11" Opacity="0.65" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock Grid.Row="1"
+                   Text="当前未探测到可用路径，可通过下方按钮手动添加"
+                   IsVisible="{Binding HasNoPathEntries}"
+                   Opacity="0.68"
+                   TextWrapping="Wrap"
+                   Margin="0,8,0,0" />
+
+        <TextBlock Grid.Row="2" Text="{Binding PathActionsTitle}" FontSize="18" FontWeight="SemiBold" Margin="0,4,0,8" />
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" Margin="0,0,0,8">
+          <Button Grid.Row="0" Grid.Column="0"
+            Classes="pathAction primary"
+            Content="{Binding AddManualButtonText}"
+            Command="{Binding AddInstanceCommand}"
+            Margin="0,0,4,4" />
+          <Button Grid.Row="0" Grid.Column="1"
+            Classes="pathAction secondary"
+            Content="{Binding ImportModpackButtonText}"
+            Command="{Binding ImportModpackCommand}"
+            Margin="4,0,0,4" />
+          <Button Grid.Row="1" Grid.Column="0"
+            Classes="pathAction secondary"
+            Content="{Binding RefreshButtonText}"
+            Command="{Binding ReloadCommand}"
+            Margin="0,4,4,0" />
+          <Button Grid.Row="1" Grid.Column="1"
+            Classes="pathAction secondary"
+            Content="{Binding OpenFolderButtonText}"
+            Command="{Binding OpenSelectedPathFolderCommand}"
+            IsEnabled="{Binding CanOpenSelectedPathFolder}"
+            Margin="4,4,0,0" />
+        </Grid>
+
+        <Border Grid.Row="4" Classes="hintCard" Padding="10,8" Margin="0,4,0,0">
+          <TextBlock Text="{Binding Status}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <Border Grid.Column="1" Background="{DynamicResource PanelBorderBrush}" Margin="0,16" />
+
+    <Grid Grid.Column="2" RowDefinitions="Auto,*">
+      <Border Grid.Row="0" Classes="hintCard" Margin="16,16,16,0" Padding="16,12">
+        <TextBlock Text="{Binding ChooseVersionTitle}" FontSize="16" FontWeight="SemiBold" />
+      </Border>
+
+      <ScrollViewer Grid.Row="1" Margin="16,12,16,16" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+          <StackPanel IsVisible="{Binding HasNoSelectedPath}" HorizontalAlignment="Center" Margin="0,40,0,0">
+            <TextBlock Text="{Binding EmptyHintPrimaryText}" FontSize="14" Opacity="0.8" HorizontalAlignment="Center" />
+            <TextBlock Text="{Binding EmptyHintSecondaryText}" FontSize="12" Opacity="0.7" HorizontalAlignment="Center" Margin="0,8,0,0" />
+          </StackPanel>
+
+          <StackPanel IsVisible="{Binding HasSelectedPath}">
+            <TextBlock Text="Base"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Opacity="0.72"
+                       Margin="0,0,0,8"
+                       IsVisible="{Binding HasBaseInstances}" />
+            <ItemsControl ItemsSource="{Binding BaseInstances}"
+                          ItemTemplate="{StaticResource InstanceCardTemplate}"
+                          IsVisible="{Binding HasBaseInstances}" />
+
+            <TextBlock Text="Versions"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Opacity="0.72"
+                       Margin="0,6,0,8"
+                       IsVisible="{Binding HasVersionInstances}" />
+            <ItemsControl ItemsSource="{Binding VersionInstances}"
+                          ItemTemplate="{StaticResource InstanceCardTemplate}"
+                          IsVisible="{Binding HasVersionInstances}" />
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</UserControl>

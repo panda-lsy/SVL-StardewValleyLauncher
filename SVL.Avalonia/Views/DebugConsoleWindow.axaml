@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SVL.Avalonia.ViewModels"
+        xmlns:svc="using:SVL.Avalonia.Services"
+        x:Class="SVL.Avalonia.Views.DebugConsoleWindow"
+        x:DataType="vm:DebugConsoleViewModel"
+        Width="980"
+        Height="460"
+        MinWidth="760"
+        MinHeight="340"
+        Title="SVL Debug Console"
+        Background="{DynamicResource WindowBackgroundBrush}">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+      <TextBlock Text="Debug 日志输出" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
+      <Button Grid.Column="1" Content="导出" Command="{Binding ExportCommand}" Margin="0,0,8,0" />
+      <Button Grid.Column="2" Content="清空" Command="{Binding ClearCommand}" />
+    </Grid>
+
+    <!-- 级别过滤按钮：使用普通 Button，点击切换过滤状态，样式与导出/清空一致 -->
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+      <TextBlock Text="级别过滤:" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,4,0" />
+      <Button Content="DEBUG" Command="{Binding ToggleDebugCommand}" Margin="0,0,4,0" />
+      <Button Content="INFO" Command="{Binding ToggleInfoCommand}" Margin="0,0,4,0" />
+      <Button Content="WARN" Command="{Binding ToggleWarnCommand}" Margin="0,0,4,0" />
+      <Button Content="ERROR" Command="{Binding ToggleErrorCommand}" />
+    </StackPanel>
+
+    <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,8" TextWrapping="Wrap" />
+
+    <Border Grid.Row="3" Background="{DynamicResource CardBrush}" CornerRadius="6" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="2">
+      <ScrollViewer x:Name="LogScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <ItemsControl ItemsSource="{Binding FilteredLogEntries}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="svc:DebugLogEntry">
+              <TextBlock Text="{Binding Text}"
+                         Foreground="{Binding Level, Converter={x:Static vm:DebugLogLevelToBrushConverter.Instance}}"
+                         FontFamily="Consolas,Menlo,Monaco,monospace"
+                         FontSize="12"
+                         TextWrapping="NoWrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</Window>

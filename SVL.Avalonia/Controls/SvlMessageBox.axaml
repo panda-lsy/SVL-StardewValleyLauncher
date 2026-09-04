@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SVL.Avalonia.Controls.SvlMessageBox"
+        Width="420"
+        Height="220"
+        WindowStartupLocation="CenterOwner"
+        Title="提示">
+  <Border Padding="16">
+    <StackPanel Spacing="12">
+      <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" />
+      <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+      <Button Content="确定" HorizontalAlignment="Right" Click="Ok_Click" />
+    </StackPanel>
+  </Border>
+</Window>
