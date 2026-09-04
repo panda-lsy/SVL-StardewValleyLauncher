@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.UpdateCompleteDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="14" MinWidth="440">
+		<StackPanel Spacing="10">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+			<TextBlock Text="{Binding Summary, ElementName=Root}" TextWrapping="Wrap" />
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Content="查看更新日志" Command="{Binding OpenChangelogCommand, ElementName=Root}" />
+				<Button Content="稍后重启" Command="{Binding LaterCommand, ElementName=Root}" />
+				<Button Content="立即重启" Command="{Binding RestartNowCommand, ElementName=Root}" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

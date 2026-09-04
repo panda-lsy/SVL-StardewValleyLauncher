@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             x:Class="SVL.Avalonia.Views.ModpackSearchPageView"
+             x:DataType="vm:ModpackSearchPageViewModel">
+  <Border Classes="panel">
+    <StackPanel Spacing="8">
+      <TextBlock Text="{Binding Title}" Classes="heroTitle" />
+      <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+      <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+        <TextBox Grid.Column="0" Text="{Binding Query}" Watermark="输入 Modpack 关键词" Margin="0,0,8,0" />
+        <Button Grid.Column="1" Content="搜索" Command="{Binding SearchCommand}" />
+      </Grid>
+      <ComboBox ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" />
+      <TextBlock Text="{Binding Status}" Opacity="0.75" />
+      <ItemsControl ItemsSource="{Binding Results}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Button Classes="flatTask"
+                    Command="{Binding DataContext.OpenDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    CommandParameter="{Binding}"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                    Padding="8" Margin="0,0,0,4">
+              <Grid ColumnDefinitions="44,*,Auto">
+                <Image Grid.Column="0"
+                       Source="{Binding IconUrl, Converter={StaticResource AssetImageConverter}}"
+                       Width="36" Height="36" Stretch="UniformToFill" />
+                <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="2">
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" MaxLines="2"
+                             TextTrimming="CharacterEllipsis" FontSize="12" Opacity="0.7" />
+                  <TextBlock Text="{Binding SourceTag}" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="2" VerticalAlignment="Top" HorizontalAlignment="Right">
+                  <TextBlock Text="{Binding Stat}" FontSize="11" Opacity="0.6" />
+                  <TextBlock Text="{Binding TimeTag}" FontSize="11" Opacity="0.6" />
+                </StackPanel>
+              </Grid>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </Border>
+</UserControl>

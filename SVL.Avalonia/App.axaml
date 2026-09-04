@@ -1,0 +1,77 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="using:SVL.Avalonia.Converters"
+             x:Class="SVL.Avalonia.App"
+             RequestedThemeVariant="Light">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://SVL.Avalonia/Resources/Icons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+      <converters:AssetImageConverter x:Key="AssetImageConverter" />
+
+      <!-- PCL 星露谷风格配色系统（ThemeService 运行时更新这些资源） -->
+      <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F5EDE0" />
+      <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#D47748" />
+      <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FAF7EE" />
+      <SolidColorBrush x:Key="PanelBorderBrush" Color="#B89B7F" />
+      <SolidColorBrush x:Key="AccentBrush" Color="#D47748" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#FAF7EE" />
+      <SolidColorBrush x:Key="CardBrush" Color="#F8F2DE" />
+      <SolidColorBrush x:Key="BorderBrush" Color="#D4C4A8" />
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#3A2B22" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8B7355" />
+      <SolidColorBrush x:Key="ColorBrush1" Color="#663021" />
+      <SolidColorBrush x:Key="ColorBrush2" Color="#D47748" />
+      <SolidColorBrush x:Key="ColorBrush3" Color="#FED183" />
+      <SolidColorBrush x:Key="ColorBrush4" Color="#D8E8F6" />
+      <SolidColorBrush x:Key="ColorBrush5" Color="#E7E0B1" />
+      <SolidColorBrush x:Key="ColorBrush6" Color="#0455A4" />
+      <SolidColorBrush x:Key="ColorBrush7" Color="#158BF1" />
+      <SolidColorBrush x:Key="ColorBrush8" Color="#5EC3E6" />
+      <SolidColorBrush x:Key="ColorBrushBg0" Color="#0455A4" />
+      <SolidColorBrush x:Key="ColorBrushBg1" Color="#E7E0B1" />
+      <SolidColorBrush x:Key="ColorBrushGray1" Color="#5C4033" />
+      <SolidColorBrush x:Key="ColorBrushGray2" Color="#8B7355" />
+      <SolidColorBrush x:Key="ColorBrushGray3" Color="#A0826D" />
+      <SolidColorBrush x:Key="ColorBrushGray4" Color="#B89B7F" />
+      <SolidColorBrush x:Key="ColorBrushGray5" Color="#D4C4A8" />
+      <SolidColorBrush x:Key="ColorBrushGray6" Color="#EBE0CC" />
+      <SolidColorBrush x:Key="ColorBrushGray7" Color="#F5EDE0" />
+      <SolidColorBrush x:Key="ColorBrushGray8" Color="#FAF7EE" />
+      <SolidColorBrush x:Key="ColorBrushSuccess" Color="#5EC3E6" />
+      <SolidColorBrush x:Key="ColorBrushSuccessLight" Color="#94D9F0" />
+      <SolidColorBrush x:Key="ColorBrushRedBack" Color="#FFE0CC" />
+      <SolidColorBrush x:Key="ColorBrushRedLight" Color="#FFB38A" />
+      <SolidColorBrush x:Key="ColorBrushRedDark" Color="#D47748" />
+      <SolidColorBrush x:Key="ColorBrushTransparent" Color="#00FFFFFF" />
+      <SolidColorBrush x:Key="ColorBrushFatal" Color="#8B4033" />
+      <SolidColorBrush x:Key="ColorBrushError" Color="#D47748" />
+      <SolidColorBrush x:Key="ColorBrushWarn" Color="#FED183" />
+      <SolidColorBrush x:Key="ColorBrushInfoDark" Color="#663021" />
+      <SolidColorBrush x:Key="ColorBrushInfo" Color="#E7E0B1" />
+      <SolidColorBrush x:Key="ColorBrushDebug" Color="#A0826D" />
+
+      <!-- 下载页语义色 -->
+      <SolidColorBrush x:Key="CategorySelectedBg" Color="#33D4C4A8" />
+      <SolidColorBrush x:Key="CategoryIndicator" Color="#D47748" />
+      <SolidColorBrush x:Key="WarningBg" Color="#33F59E0B" />
+      <SolidColorBrush x:Key="WarningBorder" Color="#EAB308" />
+      <SolidColorBrush x:Key="IconBg" Color="#F7D38A" />
+      <SolidColorBrush x:Key="IconBorder" Color="#D4C4A8" />
+      <SolidColorBrush x:Key="CardHighlightBg" Color="#0CF7D38A" />
+      <SolidColorBrush x:Key="CardHighlightBorder" Color="#44D2A679" />
+      <SolidColorBrush x:Key="PillBg" Color="#33D47748" />
+      <!-- 导航栏文字始终白色（深色背景头栏） -->
+      <SolidColorBrush x:Key="NavTextBrush" Color="#FFFFFFFF" />
+      <!-- 选中态按钮文字（在强调色/选中背景上始终为白色，两种主题通用） -->
+      <SolidColorBrush x:Key="TextOnAccentBrush" Color="#FFFFFFFF" />
+      <!-- 导航按钮图标/文字前景色 -->
+      <SolidColorBrush x:Key="DefaultTextForeground" Color="#3A2B22" />
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://SVL.Avalonia/Resources/Theme.axaml" />
+  </Application.Styles>
+</Application>

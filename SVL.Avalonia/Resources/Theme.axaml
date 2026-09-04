@@ -1,0 +1,363 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- 颜色资源定义已移至 App.axaml Application.Resources，由 ThemeService 运行时更新 -->
+
+
+  <Style Selector="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="Button">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBox">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+  </Style>
+
+  <!-- ComboBox 下拉弹出面板背景：直接定位模板内 PopupBorder，绕过 FluentTheme ThemeScope 的 Light 变体资源 -->
+  <Style Selector="ComboBox /template/ Border#PopupBorder">
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+  </Style>
+
+  <!-- FlyoutPresenter: ComboBox/Menu 等弹出面板背景，使用 DynamicResource 跟随深色模式 -->
+  <Style Selector="FlyoutPresenter">
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+  </Style>
+
+  <!-- ToolTip: 提示框背景/前景，使用 DynamicResource 跟随深色模式 -->
+  <Style Selector="ToolTip">
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <!-- ComboBoxItem: 下拉项前景色，确保暗黑模式下可读 -->
+  <Style Selector="ComboBoxItem">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <!-- 内容控件前景色：确保暗黑模式下文字可读 -->
+  <Style Selector="CheckBox">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="RadioButton">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="ToggleSwitch">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="ListBoxItem">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Expander">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="TabItem">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Slider">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.brand">
+    <Setter Property="Foreground" Value="{DynamicResource NavTextBrush}" />
+    <Setter Property="FontSize" Value="18" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.nav TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource NavTextBrush}" />
+  </Style>
+
+  <Style Selector="Button.nav">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource NavTextBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.14" />
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="Button.nav:pointerover">
+    <Setter Property="Background" Value="#33FFFFFF" />
+  </Style>
+
+  <Style Selector="Button.nav.selected">
+    <Setter Property="Background" Value="#33FFFFFF" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.nav.back">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Width" Value="32" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="MinWidth" Value="32" />
+  </Style>
+
+  <Style Selector="Button.settingsNav TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="Button.settingsNav.selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.navButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="MinHeight" Value="34" />
+  </Style>
+
+  <Style Selector="Button.navButton TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+
+  <Style Selector="Button.navButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
+  </Style>
+
+  <Style Selector="Button.navButton Path">
+    <Setter Property="Fill" Value="{DynamicResource DefaultTextForeground}" />
+  </Style>
+
+  <Style Selector="Button.navButton.selected">
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
+  </Style>
+
+  <Style Selector="Button.navButton.selected TextBlock">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.settingsNav">
+    <Setter Property="Background" Value="{DynamicResource ColorBrushTransparent}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushGray5}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="MinHeight" Value="34" />
+    <Setter Property="Padding" Value="12,6" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+  </Style>
+
+  <Style Selector="Button.settingsNav:pointerover">
+    <Setter Property="Background" Value="{DynamicResource ColorBrushGray5}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushGray4}" />
+  </Style>
+
+  <Style Selector="Button.settingsNav:pressed">
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
+  </Style>
+
+  <Style Selector="Button.settingsNav.selected">
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button.winCtrl">
+    <Setter Property="Width" Value="32" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="16" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="Button.winCtrl:pointerover">
+    <Setter Property="Opacity" Value="0.92" />
+  </Style>
+
+  <Style Selector="Button.winCtrl.min:pointerover">
+    <Setter Property="Background" Value="#3381C784" />
+  </Style>
+
+  <Style Selector="Button.winCtrl.max:pointerover">
+    <Setter Property="Background" Value="#33FFCA28" />
+  </Style>
+
+  <Style Selector="Button.winCtrl.close:pointerover">
+    <Setter Property="Background" Value="#44EF5350" />
+  </Style>
+
+  <Style Selector="TextBlock.platformTag">
+    <Setter Property="Foreground" Value="{DynamicResource ColorBrush5}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Border.panel">
+    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="14" />
+  </Style>
+
+  <Style Selector="TextBlock.sectionTitle">
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="FontSize" Value="14" />
+  </Style>
+
+  <Style Selector="TextBlock.sectionValue">
+    <Setter Property="FontSize" Value="22" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="TextBlock.pill">
+    <Setter Property="Background" Value="{DynamicResource PillBg}" />
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+  </Style>
+
+  <Style Selector="TextBlock.heroTitle">
+    <Setter Property="FontSize" Value="24" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+
+  <Style Selector="Border.hintCard">
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="12" />
+  </Style>
+
+  <Style Selector="Border.hintCard:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.hintTitle">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="Button">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button:pointerover:enabled">
+    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+  </Style>
+
+  <Style Selector="Button:disabled">
+    <Setter Property="Background" Value="{DynamicResource ColorBrushGray6}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushGray4}" />
+    <Setter Property="Opacity" Value="0.6" />
+  </Style>
+
+  <Style Selector="Button.flatTask">
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.16" />
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="Button.flatTask:pointerover">
+    <Setter Property="Opacity" Value="0.9" />
+  </Style>
+
+  <Style Selector="Button.flatTask.activeTask">
+    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBrush3}" />
+  </Style>
+
+  <Style Selector="Button.flatTask.historyTask">
+    <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+  </Style>
+
+  <Style Selector="Button.taskAction">
+    <Setter Property="Padding" Value="8,3" />
+    <Setter Property="Margin" Value="0,0,4,4" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <Style Selector="Button.downloadCategory">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="#00FFFFFF" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="MinHeight" Value="52" />
+  </Style>
+
+  <Style Selector="Button.downloadCategory:pointerover">
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
+    <Setter Property="BorderBrush" Value="#66D4C4A8" />
+  </Style>
+
+  <Style Selector="Button.downloadCategory:pressed">
+    <Setter Property="Background" Value="{DynamicResource ColorBrushGray4}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushGray4}" />
+  </Style>
+
+  <Style Selector="Button.launchPrimary">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button.launchPrimary:pointerover">
+    <Setter Property="Background" Value="{DynamicResource ColorBrush2}" />
+  </Style>
+
+  <Style Selector="Button.launchSecondary">
+    <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button.launchSecondary:pointerover">
+    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+  </Style>
+</Styles>

@@ -2,6 +2,51 @@
 
 All notable changes to SVL (Stardew Valley Launcher) will be documented in this file.
 
+## [1.2.0.0] - 2026-07-10
+
+### 架构迁移
+
+- 从 WPF / .NET Framework 4.8 / Windows-only 迁移到 **Avalonia UI 11.2 / .NET 10 / 跨平台**（Windows + macOS）
+- 全新 DynamicResource 主题配色系统，完整支持深色/浅色模式
+- 统一打包脚本 `build.ps1`，支持 Windows/macOS 的 Debug/Release 配置
+
+### Added
+
+- **主题与深色模式**
+  - Nexus 登录页面、Debug 页面、版本设置页面、版本选择/路径列表全面适配主题配色
+  - 暗色模式 Tooltip、搜索框、下拉列表配色优化
+  - 暗色模式按钮选中态文字颜色修复
+  - 详情页游戏版本 Tag 选中态主题配色
+- **Nexus 登录失效智能提醒**
+  - 三按钮通知：不再提示 / 本次使用期间不提示 / 去登录
+  - 去登录跳转设置-Nexus 登录区
+  - 设置中可取消不再提示
+- **下载悬浮球重写**
+  - 中央下载图标、主题适配红点、支持拖动移动位置
+- **Mod 搜索优化**
+  - 居中加载动画
+  - Nexus/CurseForge 搜索并行化（Task.WhenAll）
+  - 社区本地化仅对最终展示项应用
+- **详情页增强**
+  - 中英文切换修复
+  - Modpack 前置 Mod / 冲突 Mod / 功能重叠 Mod 卡片
+  - 游戏版本解析修复（支持 SV/SDV 前缀）
+  - 文件列表支持 channel-tag（Release/Beta/Alpha）、大小、下载量、日期
+- **Modpack 安装路径选择**
+  - 安装 Modpack 时可从路径列表选择目标游戏路径
+- **社区汉化双源**（GitHub + Gitee）支持 Mod/Modpack/Collection
+- **缓存管理**（统计与清理）、**Collection 安装向导**
+
+### Changed
+
+- Mod 下载页面重排版：来源/版本/类型+重置单行布局
+- 版本号升至 1.2.0.0
+
+### Removed
+
+- 移除迁移工作流文件、审计报告、scripts/ 文件夹
+- 移除旧迁移门禁 CI
+
 ## [1.1.8.6] - 2026-03-24
 
 ### Added

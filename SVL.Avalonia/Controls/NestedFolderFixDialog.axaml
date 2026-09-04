@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.NestedFolderFixDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="14" MinWidth="500">
+		<StackPanel Spacing="8">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+			<TextBlock Text="{Binding Message, ElementName=Root}" TextWrapping="Wrap" />
+			<TextBlock Text="源目录: {Binding SourceFolder, ElementName=Root}" TextWrapping="Wrap" />
+			<TextBlock Text="目标目录: {Binding TargetFolder, ElementName=Root}" TextWrapping="Wrap" />
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Content="跳过" Command="{Binding SkipCommand, ElementName=Root}" />
+				<Button Content="自动修复" Command="{Binding FixCommand, ElementName=Root}" CommandParameter="{Binding SourceFolder, ElementName=Root}" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

@@ -1,0 +1,347 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:converters="using:SVL.Avalonia.Converters"
+             mc:Ignorable="d"
+             x:Class="SVL.Avalonia.Views.SettingsPageView"
+             x:DataType="vm:SettingsPageViewModel">
+  <Grid ColumnDefinitions="240,*">
+    <Border Grid.Column="0" Classes="panel">
+      <StackPanel Spacing="8">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Image Source="avares://SVL.Avalonia/Assets/Icons/Junimo2.png" Width="22" Height="22" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding PageTitleText}" Classes="heroTitle" VerticalAlignment="Center" />
+        </StackPanel>
+        <TextBlock Text="参数与行为配置中心" Opacity="0.75" />
+        <Border Classes="hintCard">
+          <StackPanel Spacing="6">
+            <Button Classes="settingsNav" Classes.selected="{Binding IsBasicTab}" Command="{Binding SelectTabCommand}" CommandParameter="0" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
+              <TextBlock>
+                <Run Text="› " />
+                <Run Text="{Binding TabBasicText}" />
+              </TextBlock>
+            </Button>
+            <Button Classes="settingsNav" Classes.selected="{Binding IsDownloadTab}" Command="{Binding SelectTabCommand}" CommandParameter="1" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
+              <TextBlock>
+                <Run Text="› " />
+                <Run Text="{Binding TabDownloadText}" />
+              </TextBlock>
+            </Button>
+            <Button Classes="settingsNav" Classes.selected="{Binding IsPersonalizationTab}" Command="{Binding SelectTabCommand}" CommandParameter="2" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
+              <TextBlock>
+                <Run Text="› " />
+                <Run Text="{Binding TabPersonalizationText}" />
+              </TextBlock>
+            </Button>
+            <Button Classes="settingsNav" Classes.selected="{Binding IsOtherTab}" Command="{Binding SelectTabCommand}" CommandParameter="3" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
+              <TextBlock>
+                <Run Text="› " />
+                <Run Text="{Binding TabOtherText}" />
+              </TextBlock>
+            </Button>
+            <Button Classes="settingsNav" Classes.selected="{Binding IsAboutTab}" Command="{Binding SelectTabCommand}" CommandParameter="4" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
+              <TextBlock>
+                <Run Text="› " />
+                <Run Text="{Binding TabAboutText}" />
+              </TextBlock>
+            </Button>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Column="1" Classes="panel" Margin="12,0,0,0">
+      <ScrollViewer>
+        <StackPanel Spacing="12">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding PageTitleText}" Classes="heroTitle" />
+            <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" VerticalAlignment="Center" />
+          </Grid>
+
+          <Border Classes="hintCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding SettingsPath, StringFormat=配置文件: {0}}" Opacity="0.8" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding OperationPathHint}" Opacity="0.7" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <!-- 顶部操作栏 -->
+          <Border Classes="hintCard" Padding="12,8">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+              <Button Grid.Column="0" Content="{Binding SaveButtonText}"
+                      Command="{Binding SaveSettingsCommand}"
+                      MinWidth="100" Height="30" Padding="14,0" />
+              <Button Grid.Column="1" Content="打开 JSON"
+                      Command="{Binding OpenSettingsJsonCommand}"
+                      MinWidth="90" Height="30" Padding="14,0" Margin="8,0,0,0" />
+              <TextBlock Grid.Column="3" Text="{Binding StatusMessage}"
+                         VerticalAlignment="Center" Opacity="0.75" FontSize="12" />
+            </Grid>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsBasicTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding BasicCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="基本设置" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="以下字段会影响窗口标题、应用名称和启动标识。" Opacity="0.72" TextWrapping="Wrap" />
+              <TextBlock Text="游戏窗口标题" />
+              <TextBox Text="{Binding GameWindowTitle}" />
+              <TextBlock Text="启动器标题" />
+              <TextBox Text="{Binding LauncherTitle}" />
+              <TextBlock Text="启动器简称" />
+              <TextBox Text="{Binding LauncherAppName}" />
+              <CheckBox Content="{Binding InstanceAutoConnectLabelText}" IsChecked="{Binding InstanceAutoConnectServer}" Margin="0,6,0,0" />
+              <TextBlock Text="{Binding InstanceServerAddressLabelText}" />
+              <TextBox Text="{Binding InstanceServerAddress}" Watermark="例如: 127.0.0.1:24642" />
+              <TextBlock Text="{Binding InstanceSteamInviteCodeLabelText}" />
+              <TextBox Text="{Binding InstanceSteamInviteCode}" Watermark="例如: ABCD-EFGH-IJKL" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding DownloadCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="下载设置" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="下载任务与 Collection 处理参数" Opacity="0.72" TextWrapping="Wrap" />
+              <CheckBox Content="启用下载缓存" IsChecked="{Binding EnableDownloadCache}" />
+              <CheckBox Content="启用下载代理" IsChecked="{Binding EnableDownloadProxy}" />
+              <TextBlock Text="代理地址 (http://host:port)" />
+              <TextBox Text="{Binding DownloadProxyUrl, UpdateSourceTrigger=PropertyChanged}" Watermark="例如: http://127.0.0.1:7890" />
+              <TextBlock Text="提示：Clash 等本地代理通常无需填写用户名/密码。" Opacity="0.68" TextWrapping="Wrap" />
+              <TextBlock Text="代理用户名（可选）" />
+              <TextBox Text="{Binding DownloadProxyUserName, UpdateSourceTrigger=PropertyChanged}" />
+              <TextBlock Text="代理密码（可选）" />
+              <TextBox Text="{Binding DownloadProxyPassword, UpdateSourceTrigger=PropertyChanged}" PasswordChar="*" />
+              <CheckBox Content="启用任务浮动按钮" IsChecked="{Binding EnableDownloadFloatingTaskButton}" />
+              <TextBlock Text="Collection 冲突策略" />
+              <ComboBox ItemsSource="{Binding CollectionConflictStrategies}" SelectedItem="{Binding SelectedCollectionConflictStrategy}" />
+              <TextBlock Text="Collection 下载并发上限" />
+              <ComboBox ItemsSource="{Binding CollectionDownloadParallelismOptions}" SelectedItem="{Binding SelectedCollectionDownloadParallelism}" />
+              <TextBlock Text="下载线程数" />
+              <ComboBox ItemsSource="{Binding DownloadThreadOptions}" SelectedItem="{Binding SelectedDownloadThreads}" />
+              <TextBlock Text="多线程分片下载可提升大文件速度，任务进度条将按线程分块显示；失败重试支持断点续传。" Opacity="0.68" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding DownloadCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="接管下载" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="粘贴 http/https 下载地址，另存为本地文件。适用于非 Nexus/CurseForge 来源的 Mod 或资源。" Opacity="0.72" TextWrapping="Wrap" />
+              <TextBox Text="{Binding TakeoverDownloadUrl, Mode=TwoWay}" Watermark="https://example.com/mod.zip" />
+              <Button Content="另存为并下载" Command="{Binding SaveTakeoverDownloadAsCommand}" HorizontalAlignment="Left" MinWidth="140" Classes="accent" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding NexusCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="NexusMods 账户" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="登录后可直接处理 NXM 链接与受限资源" Opacity="0.72" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding NexusStatus, StringFormat=状态: {0}}" />
+              <TextBlock Text="{Binding NexusDisplayName, StringFormat=账号: {0}}" />
+              <TextBlock Text="未登录时仅可使用非 Nexus 资源；登录后可直接导入 NXM 并执行受限下载。" Opacity="0.75" TextWrapping="Wrap" IsVisible="{Binding ShowNexusLoginGuide}" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="登录 Nexus" Command="{Binding OpenNexusLoginCommand}" />
+                <Button Content="验证状态" Command="{Binding ValidateNexusCommand}" />
+                <Button Content="刷新 Token" Command="{Binding RefreshOAuthTokenCommand}" />
+                <Button Content="退出登录" Command="{Binding LogoutNexusCommand}" />
+              </StackPanel>
+              <CheckBox Content="Nexus 登录失效提醒" IsChecked="{Binding EnableNexusAuthNotification}" ToolTip.Tip="关闭后下载页将不再提示 Nexus 登录失效" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding NxmProtocolCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding NxmProtocolCardTitleText}" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="处理浏览器中的 nxm:// 协议跳转" Opacity="0.72" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding NxmProtocolStatusLabelText}" />
+              <TextBlock Text="{Binding NxmProtocolStatusText}" />
+              <CheckBox Content="{Binding NxmAutoRegisterLabelText}" IsChecked="{Binding RegisterNxmProtocolOnStartup}" />
+              <TextBlock Text="{Binding NxmProtocolDescriptionText}" Opacity="0.75" TextWrapping="Wrap" />
+              <Button Content="{Binding NxmRegisterNowButtonText}" Command="{Binding RegisterNxmProtocolNowCommand}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding DownloadCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="缓存管理" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="社区汉化数据源与本地缓存清理" Opacity="0.72" TextWrapping="Wrap" />
+              <TextBlock Text="社区汉化数据源" />
+              <ComboBox ItemsSource="{Binding LocalizationSourceOptions}" SelectedItem="{Binding SelectedLocalizationSource}" />
+              <TextBlock Text="GitHub 为国际源，Gitee 为国内加速源。首选源失败时自动尝试备用源。" Opacity="0.68" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" Margin="0,2,0,2">
+                <TextBlock Text="总缓存大小" Opacity="0.85" />
+                <TextBlock Grid.Column="1" Text="{Binding TotalCacheSizeText}" />
+                <TextBlock Grid.Row="1" Text="缓存文件数" Opacity="0.85" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalCacheFileCount}" Margin="0,4,0,0" />
+              </Grid>
+              <Grid ColumnDefinitions="*,*" Margin="0,2,0,2">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="社区汉化" Opacity="0.85" />
+                  <TextBlock Text="{Binding CommunityLocalizationCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearCommunityLocalizationCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <TextBlock Text="SMAPI 下载" Opacity="0.85" />
+                  <TextBlock Text="{Binding SmapiDownloadsCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearSmapiDownloadsCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="*,*" Margin="0,2,0,2">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="下载安装" Opacity="0.85" />
+                  <TextBlock Text="{Binding DownloadInstallCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearDownloadInstallCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <TextBlock Text="SMAPI 图标" Opacity="0.85" />
+                  <TextBlock Text="{Binding SmapiIconsCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearSmapiIconsCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                </StackPanel>
+              </Grid>
+              <Grid ColumnDefinitions="*,*,*" Margin="0,2,0,2">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="下载文件缓存" Opacity="0.85" />
+                  <TextBlock Text="{Binding DownloadsCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearDownloadsCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <TextBlock Text="游戏本体下载缓存" Opacity="0.85" />
+                  <TextBlock Text="{Binding GameDownloadCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearGameDownloadCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="2">
+                  <TextBlock Text="Nexus 下载缓存" Opacity="0.85" />
+                  <TextBlock Text="{Binding NexusDownloadCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearNexusDownloadCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                </StackPanel>
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                <Button Content="刷新统计" Command="{Binding RefreshCacheStatisticsCommand}" />
+                <Button Content="全部清理" Command="{Binding ClearAllCacheCommand}" Classes="accent" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsPersonalizationTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding PersonalizationCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="个性化" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="{Binding ThemeModeLabelText}" />
+              <ComboBox ItemsSource="{Binding ThemeModes}" SelectedItem="{Binding SelectedThemeMode}" />
+              <TextBlock Text="配色方案" />
+              <ComboBox ItemsSource="{Binding ThemeStyleOptions}" SelectedItem="{Binding SelectedThemeStyle}" />
+              <TextBlock Text="{Binding UiLanguageLabelText}" />
+              <ComboBox ItemsSource="{Binding UiLanguages}" SelectedItem="{Binding SelectedUiLanguage}" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard" IsVisible="{Binding IsOtherTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding OtherCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="其他" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="{Binding OtherSectionSubtitleText}" Opacity="0.72" TextWrapping="Wrap" />
+              <CheckBox Content="{Binding ShowNotificationsLabelText}" IsChecked="{Binding ShowNotifications}" />
+              <CheckBox Content="{Binding DebugModeLabelText}" IsChecked="{Binding DebugMode}" />
+              <CheckBox Content="{Binding MinimizeOnStartupLabelText}" IsChecked="{Binding MinimizeToTrayOnStartup}" />
+              <CheckBox Content="{Binding MinimizeOnCloseLabelText}" IsChecked="{Binding MinimizeToTrayOnClose}" />
+            </StackPanel>
+          </Border>
+
+          <!-- 作者卡片 -->
+          <Border Classes="hintCard" IsVisible="{Binding IsAboutTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding AboutCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="作者" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <Grid ColumnDefinitions="Auto,*">
+                <Border Grid.Column="0" Width="56" Height="56" CornerRadius="28" ClipToBounds="True" VerticalAlignment="Center" Margin="0,0,12,0">
+                  <Image Source="avares://SVL.Avalonia/Assets/Icons/author-icon.png" Width="56" Height="56" Stretch="UniformToFill" />
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                  <TextBlock Text="盛夏de背影" FontWeight="SemiBold" FontSize="15" />
+                  <TextBlock Text="mc_shengxia" Opacity="0.7" FontSize="12" />
+                </StackPanel>
+              </Grid>
+              <Button Content="赞助支持" Command="{Binding SponsorCommand}" HorizontalAlignment="Left" MinWidth="120" Margin="0,4,0,0" />
+            </StackPanel>
+          </Border>
+
+          <!-- 启动器信息卡片 -->
+          <Border Classes="hintCard" IsVisible="{Binding IsAboutTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="avares://SVL.Avalonia/Assets/Icons/Junimo.png" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="Stardew Valley Launcher" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                <TextBlock Text="版本号：" Opacity="0.85" />
+                <TextBlock Grid.Column="1" Text="{Binding AppVersion}" FontWeight="SemiBold" />
+                <TextBlock Grid.Row="1" Text="技术栈：" Opacity="0.85" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text=".NET 10 + Avalonia 11（跨平台）" Margin="0,4,0,0" />
+              </Grid>
+              <WrapPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <Button Content="查看源码" Command="{Binding ViewSourceCommand}" MinWidth="100" Margin="0,0,8,0" />
+                <Button Content="打开官网" Command="{Binding OpenHomePageCommand}" MinWidth="100" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- 更新设置卡片 -->
+          <Border Classes="hintCard" IsVisible="{Binding IsAboutTab}">
+            <StackPanel Spacing="8">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Image Source="{Binding UpdateCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding UpdateCardTitleText}" Classes="hintTitle" VerticalAlignment="Center" />
+              </StackPanel>
+              <TextBlock Text="自动检查和版本通道策略" Opacity="0.72" TextWrapping="Wrap" />
+              <CheckBox Content="{Binding AutoUpdateCheckLabelText}" IsChecked="{Binding EnableAutoUpdateCheck}" />
+              <TextBlock Text="{Binding UpdateSourcePreferenceLabelText}" />
+              <ComboBox ItemsSource="{Binding UpdateSourceOptions}" SelectedItem="{Binding SelectedUpdateSource}" />
+              <TextBlock Text="{Binding UpdateChannelLabelText}" />
+              <ComboBox ItemsSource="{Binding UpdateChannels}" SelectedItem="{Binding SelectedUpdateChannel}" />
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" Margin="0,2,0,2">
+                <TextBlock Text="{Binding UpdateStatusLabelText}" Opacity="0.85" />
+                <TextBlock Grid.Column="1" Text="{Binding UpdateStatusText}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="1" Text="{Binding LatestVersionLabelText}" Opacity="0.85" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LatestVersionText}" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="2" Text="{Binding UpdateSourceLabelText}" Opacity="0.85" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding UpdateSourceText}" Margin="0,4,0,0" />
+              </Grid>
+              <Button Content="{Binding CheckUpdateButtonText}" Command="{Binding CheckLauncherUpdateCommand}" IsEnabled="{Binding CanCheckLauncherUpdate}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="hintCard">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="修改完成后请保存，语言与主题会立即影响界面。" VerticalAlignment="Center" Opacity="0.75" />
+              <Button Grid.Column="1" Content="{Binding SaveButtonText}" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Right" MinWidth="120" />
+            </Grid>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
+</UserControl>

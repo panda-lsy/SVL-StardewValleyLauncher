@@ -1,0 +1,356 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:conv="using:SVL.Avalonia.Converters"
+             x:Class="SVL.Avalonia.Views.ModDetailsPageView"
+             x:DataType="vm:ModDetailsPageViewModel">
+  <UserControl.Resources>
+    <conv:AssetImageConverter x:Key="AssetImageConverter" />
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="Button.gameVersionTag">
+      <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.gameVersionTag.is-selected">
+      <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Classes="panel">
+    <Grid>
+    <ScrollViewer>
+      <StackPanel Spacing="12">
+        <Border Classes="hintCard">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <Border Grid.Column="0"
+                    Width="86"
+                    Height="86"
+                    CornerRadius="12"
+                    Background="#14334155"
+                    BorderBrush="#224B6B8B"
+                    BorderThickness="1"
+                    IsVisible="{Binding HasDisplayIcon}">
+                    <Image Source="{Binding DisplayIconUrl, Converter={StaticResource AssetImageConverter}}" Stretch="UniformToFill" />
+            </Border>
+
+            <Border Grid.Column="0"
+                    Width="86"
+                    Height="86"
+                    CornerRadius="12"
+                    Background="#10334155"
+                    BorderBrush="#224B6B8B"
+                    BorderThickness="1"
+                  IsVisible="{Binding HasNoDisplayIcon}">
+              <TextBlock Text="MOD"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         FontWeight="SemiBold"
+                         Opacity="0.55" />
+            </Border>
+
+            <StackPanel Grid.Column="1" Spacing="8" Margin="12,0,0,0">
+              <TextBlock Text="{Binding DisplayResourceName}" Classes="heroTitle" TextWrapping="Wrap" />
+              <WrapPanel Orientation="Horizontal" ItemHeight="24">
+                <TextBlock Text="{Binding ResourceSource}" Classes="pill" />
+                <TextBlock Text="{Binding ResourceMetricTag}" Classes="pill" IsVisible="{Binding HasResourceMetricTag}" Margin="6,0,0,0" />
+                <TextBlock Text="{Binding ResourceTimeTag}" Classes="pill" IsVisible="{Binding HasResourceTimeTag}" Margin="6,0,0,0" />
+                <TextBlock Text="{Binding ResourceIdText, StringFormat=资源ID: {0}}" Classes="pill" Margin="6,0,0,0" />
+              </WrapPanel>
+              <TextBlock Text="{Binding DisplayResourceSummary}" TextWrapping="Wrap" Opacity="0.8" />
+              <TextBlock Text="{Binding LocalizationContributor, StringFormat=本地化贡献者: {0}}"
+                         Opacity="0.72"
+                         IsVisible="{Binding HasLocalizationContributor}" />
+              <TextBlock Text="{Binding DetailsStatus, StringFormat=状态: {0}}" Opacity="0.75" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Spacing="8" HorizontalAlignment="Right">
+              <Border Classes="hintCard" Padding="8">
+              <StackPanel Spacing="8">
+                <Grid ColumnDefinitions="*,1,56" VerticalAlignment="Center">
+                  <Button Grid.Column="0"
+                    Content="转到来源"
+                    Command="{Binding OpenSourcePageCommand}"
+                    IsEnabled="{Binding HasSourcePageUrl}"
+                        Height="34"
+                        Padding="10,0"
+                    HorizontalAlignment="Stretch"
+                    FontWeight="SemiBold" />
+                  <Border Grid.Column="1" Width="1" Margin="6,3" Background="#335A6B82" />
+                  <Button Grid.Column="2"
+                    Content="{Binding DisplayLanguageToggleText}"
+                    Command="{Binding ToggleDisplayLanguageCommand}"
+                        Height="34"
+                        Padding="10,0"
+                    FontWeight="Bold" />
+                </Grid>
+
+                <Border Height="1" Background="#335A6B82" Margin="2,0" />
+
+                <Grid ColumnDefinitions="*,1,44" VerticalAlignment="Center">
+                  <Button Grid.Column="0"
+                    Content="贡献本地化"
+                    Command="{Binding OpenLocalizationContributionPageCommand}"
+                        Height="34"
+                        Padding="10,0"
+                    HorizontalAlignment="Stretch"
+                    FontWeight="SemiBold" />
+                  <Border Grid.Column="1" Width="1" Margin="6,3" Background="#335A6B82" />
+                  <Button Grid.Column="2"
+                    Content="i"
+                    Command="{Binding ShowLocalizationContributorInfoCommand}"
+                        Height="34"
+                    FontWeight="Bold" />
+                </Grid>
+              </StackPanel>
+              </Border>
+
+              <Border Classes="hintCard" Padding="8">
+                <Grid ColumnDefinitions="Auto,1,*,1,*" VerticalAlignment="Center">
+                  <TextBlock Grid.Column="0" Text="复制" VerticalAlignment="Center" Opacity="0.75" Margin="0,0,6,0" />
+                  <Border Grid.Column="1" Width="1" Margin="0,3" Background="#335A6B82" />
+                  <Button Grid.Column="2" Content="名称" Command="{Binding CopyNameCommand}" Height="34" Padding="10,0" HorizontalAlignment="Stretch" Margin="6,0" />
+                  <Border Grid.Column="3" Width="1" Margin="0,3" Background="#335A6B82" />
+                  <Button Grid.Column="4" Content="{Binding CopyIdButtonText}" Command="{Binding CopyIdCommand}" Height="34" Padding="10,0" HorizontalAlignment="Stretch" Margin="6,0,0,0" />
+                </Grid>
+              </Border>
+
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <Border Classes="hintCard" IsVisible="{Binding HasDependencyItems}">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Text="前置 Mod（必需）" Classes="hintTitle" />
+              <TextBlock Grid.Column="1" Text="{Binding RequiredDependencyCountText, StringFormat=数量 {0}}" Opacity="0.75" VerticalAlignment="Center" />
+            </Grid>
+            <TextBlock Text="暂无前置 Mod" Opacity="0.65" IsVisible="{Binding HasNoRequiredDependencyItems}" />
+            <ItemsControl ItemsSource="{Binding RequiredDependencyItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="{Binding}" TextWrapping="Wrap" />
+                    <Button Grid.Column="1"
+                            Content="来源页"
+                            Command="{Binding DataContext.OpenDependencySourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            MinWidth="62"
+                            Height="26"
+                            Margin="10,0,0,0" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="hintCard" IsVisible="{Binding HasRelatedDependencyItems}">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Text="相关 Mod" Classes="hintTitle" />
+              <TextBlock Grid.Column="1" Text="{Binding RelatedDependencyCountText, StringFormat=数量 {0}}" Opacity="0.75" VerticalAlignment="Center" />
+            </Grid>
+            <ItemsControl ItemsSource="{Binding RelatedDependencyItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="{Binding}" TextWrapping="Wrap" />
+                    <Button Grid.Column="1"
+                            Content="来源页"
+                            Command="{Binding DataContext.OpenDependencySourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            MinWidth="62"
+                            Height="26"
+                            Margin="10,0,0,0" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="hintCard" IsVisible="{Binding HasLocalizedDependencyItems}">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Text="汉化 Mod" Classes="hintTitle" />
+              <TextBlock Grid.Column="1" Text="{Binding LocalizedDependencyCountText, StringFormat=数量 {0}}" Opacity="0.75" VerticalAlignment="Center" />
+            </Grid>
+            <ItemsControl ItemsSource="{Binding LocalizedDependencyItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="{Binding}" TextWrapping="Wrap" />
+                    <Button Grid.Column="1"
+                            Content="来源页"
+                            Command="{Binding DataContext.OpenDependencySourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            MinWidth="62"
+                            Height="26"
+                            Margin="10,0,0,0" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="hintCard" IsVisible="{Binding HasHardConflictDependencyItems}">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Text="冲突 Mod" Classes="hintTitle" />
+              <TextBlock Grid.Column="1" Text="{Binding HardConflictDependencyCountText, StringFormat=数量 {0}}" Opacity="0.75" VerticalAlignment="Center" />
+            </Grid>
+            <ItemsControl ItemsSource="{Binding HardConflictDependencyItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="{Binding}" TextWrapping="Wrap" />
+                    <Button Grid.Column="1"
+                            Content="来源页"
+                            Command="{Binding DataContext.OpenDependencySourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            MinWidth="62"
+                            Height="26"
+                            Margin="10,0,0,0" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="hintCard" IsVisible="{Binding HasFunctionalOverlapDependencyItems}">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Text="功能重叠 Mod" Classes="hintTitle" />
+              <TextBlock Grid.Column="1" Text="{Binding FunctionalOverlapDependencyCountText, StringFormat=数量 {0}}" Opacity="0.75" VerticalAlignment="Center" />
+            </Grid>
+            <ItemsControl ItemsSource="{Binding FunctionalOverlapDependencyItems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                    <TextBlock Grid.Column="0" Text="{Binding}" TextWrapping="Wrap" />
+                    <Button Grid.Column="1"
+                            Content="来源页"
+                            Command="{Binding DataContext.OpenDependencySourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            MinWidth="62"
+                            Height="26"
+                            Margin="10,0,0,0" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="hintCard" IsVisible="{Binding HasGameVersionFilters}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="支持的游戏版本" Classes="hintTitle" />
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+              <ItemsControl ItemsSource="{Binding GameVersionFilters}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="8" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Button Classes="gameVersionTag"
+                            Classes.is-selected="{Binding IsSelected}"
+                            Content="{Binding DisplayText}"
+                            Command="{Binding DataContext.SelectGameVersionFilterCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding Value}"
+                            Height="32"
+                            MinWidth="76"
+                            Padding="12,0"
+                            FontWeight="SemiBold" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="hintCard">
+          <StackPanel Spacing="8">
+            <TextBlock Text="版本列表" Classes="hintTitle" />
+            <TextBlock Text="暂无可安装版本" Opacity="0.65" IsVisible="{Binding HasNoVersionDownloadGroups}" />
+            <ItemsControl ItemsSource="{Binding VersionDownloadGroups}" IsVisible="{Binding HasVersionDownloadGroups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Classes="hintCard" Margin="0,0,0,8">
+                    <StackPanel Spacing="10">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding GameVersion, StringFormat=Stardew Valley {0}}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                Content="{Binding ExpandButtonText}"
+                                Command="{Binding DataContext.ToggleVersionGroupExpandedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"
+                                Width="78"
+                                Height="32" />
+                      </Grid>
+
+                      <ItemsControl ItemsSource="{Binding Files}" IsVisible="{Binding IsExpanded}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Border Background="#10FFFFFF" CornerRadius="8" Padding="10" Margin="0,0,0,8">
+                              <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                  <TextBlock FontWeight="SemiBold" TextWrapping="Wrap">
+                                    <Run Text="["/>
+                                    <Run Text="{Binding GameVersion}"/>
+                                    <Run Text="] "/>
+                                    <Run Text="{Binding TitleDisplay}"/>
+                                  </TextBlock>
+                                  <TextBlock Text="{Binding FileName}" Opacity="0.78" TextWrapping="Wrap" />
+                                  <WrapPanel Orientation="Horizontal" ItemHeight="18">
+                                    <TextBlock Text="{Binding SizeText}" Opacity="0.7" FontSize="11" IsVisible="{Binding HasSize}" Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding DownloadCountDisplay}" Opacity="0.7" FontSize="11" IsVisible="{Binding HasDownloadCount}" Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding DateText}" Opacity="0.7" FontSize="11" IsVisible="{Binding HasDate}" />
+                                  </WrapPanel>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="8,0,0,0">
+                                  <Button Content="{Binding InstallActionText}"
+                                          Width="80"
+                                          Height="34"
+                                          Command="{Binding DataContext.InstallVersionItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          CommandParameter="{Binding RawOption}" />
+                                  <Button Content="另存为"
+                                          Width="80"
+                                          Height="34"
+                                          Command="{Binding DataContext.SaveVersionItemAsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                          CommandParameter="{Binding RawOption}" />
+                                </StackPanel>
+                              </Grid>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <Panel IsVisible="{Binding IsLoadingDetails}" Background="#993A2B22">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+        <ProgressBar IsIndeterminate="True" Width="240" Height="6" />
+        <TextBlock Text="正在加载详情..." HorizontalAlignment="Center" Foreground="#FAF7EE" />
+      </StackPanel>
+    </Panel>
+    </Grid>
+  </Border>
+</UserControl>

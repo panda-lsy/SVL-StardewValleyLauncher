@@ -1,0 +1,629 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:model="using:SVL.Avalonia.Models"
+             xmlns:converters="using:SVL.Avalonia.Converters"
+             mc:Ignorable="d"
+             x:Class="SVL.Avalonia.Views.DownloadPageView"
+             x:Name="Root"
+             x:DataType="vm:DownloadPageViewModel">
+  <Grid ColumnDefinitions="280,*">
+    <Border Grid.Column="0" Classes="panel">
+      <ScrollViewer>
+        <StackPanel Spacing="8">
+        <TextBlock Text="{Binding DownloadCategoryTitleText}" Classes="sectionTitle" />
+        <Button Classes="downloadCategory" Command="{Binding SelectCategoryCommand}" CommandParameter="{x:Static model:DownloadCategory.Game}">
+          <Grid ColumnDefinitions="4,Auto,*">
+            <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsGameCategory}" />
+            <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsGameCategory}" />
+            <Image Grid.Column="1" Source="{Binding CategoryGameIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
+              <TextBlock Text="游戏本体" FontWeight="SemiBold" />
+              <TextBlock Text="SteamCMD 登录下载" FontSize="11" Opacity="0.72" />
+            </StackPanel>
+          </Grid>
+        </Button>
+        <Button Classes="downloadCategory" Command="{Binding SelectCategoryCommand}" CommandParameter="{x:Static model:DownloadCategory.Smapi}">
+          <Grid ColumnDefinitions="4,Auto,*">
+            <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsSmapiCategory}" />
+            <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsSmapiCategory}" />
+            <Image Grid.Column="1" Source="{Binding CategorySmapiIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
+              <TextBlock Text="{Binding CategorySmapiText}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding CategorySmapiSubText}" FontSize="11" Opacity="0.72" />
+            </StackPanel>
+          </Grid>
+        </Button>
+        <Button Classes="downloadCategory" Command="{Binding SelectCategoryCommand}" CommandParameter="{x:Static model:DownloadCategory.Mods}">
+          <Grid ColumnDefinitions="4,Auto,*">
+            <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsModsCategory}" />
+            <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsModsCategory}" />
+            <Image Grid.Column="1" Source="{Binding CategoryModsIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
+              <TextBlock Text="{Binding CategoryModsText}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding CategoryModsSubText}" FontSize="11" Opacity="0.72" />
+            </StackPanel>
+          </Grid>
+        </Button>
+        <Button Classes="downloadCategory" Command="{Binding SelectCategoryCommand}" CommandParameter="{x:Static model:DownloadCategory.Modpacks}">
+          <Grid ColumnDefinitions="4,Auto,*">
+            <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsModpacksCategory}" />
+            <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsModpacksCategory}" />
+            <Image Grid.Column="1" Source="{Binding CategoryModpacksIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
+              <TextBlock Text="{Binding CategoryModpacksText}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding CategoryModpacksSubText}" FontSize="11" Opacity="0.72" />
+            </StackPanel>
+          </Grid>
+        </Button>
+
+        <Separator Margin="0,8,0,8" />
+        <TextBlock Text="{Binding ActiveTasksTitleText}" Classes="sectionTitle" />
+        <TextBlock Text="{Binding NoActiveTasksText}" Opacity="0.65" IsVisible="{Binding HasNoActiveTasks}" />
+        <ItemsControl ItemsSource="{Binding ActiveTasks}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Classes="hintCard" Margin="0,0,0,6" Padding="10,6">
+                <StackPanel Spacing="4">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <Button Grid.Column="0" Classes="flatTask activeTask"
+                            Command="{Binding DataContext.SelectTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Image Source="{Binding StatusIconSource, Converter={StaticResource AssetImageConverter}}" Width="12" Height="12" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </Button>
+                    <Border Grid.Column="1" Background="{DynamicResource PillBg}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding DisplayStatusText}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    </Border>
+                  </Grid>
+                  <ProgressBar Value="{Binding Progress}" Minimum="0" Maximum="100" Height="5" Margin="0,2,0,0" />
+                  <TextBlock Text="{Binding FailedDetails}" FontSize="11" Opacity="0.8" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2" IsVisible="{Binding HasFailedDetails}" />
+                  <WrapPanel Orientation="Horizontal" Margin="0,2,0,0">
+                    <Button Content="{Binding DataContext.TaskCancelButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Classes="taskAction"
+                          Command="{Binding DataContext.CancelTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          CommandParameter="{Binding}"
+                          IsVisible="{Binding CanCancel}" />
+                    <Button Content="{Binding DataContext.TaskRetryButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Classes="taskAction"
+                          Command="{Binding DataContext.RetryTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          CommandParameter="{Binding}"
+                          IsVisible="{Binding CanRetry}" />
+                    <Button Content="{Binding DataContext.TaskOpenReportButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          Classes="taskAction"
+                          Command="{Binding DataContext.OpenTaskReportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          CommandParameter="{Binding}"
+                          IsVisible="{Binding HasReportPath}" />
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Separator Margin="0,8,0,8" />
+        <TextBlock Text="{Binding HistoryTasksTitleText}" Classes="sectionTitle" />
+        <TextBlock Text="{Binding NoHistoryTasksText}" Opacity="0.65" IsVisible="{Binding HasNoFinishedTasks}" />
+        <ItemsControl ItemsSource="{Binding FinishedTasks}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Classes="hintCard historyCard" Margin="0,0,0,4" Padding="10,6">
+                <Grid RowDefinitions="Auto,Auto">
+                  <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <Button Grid.Column="0" Classes="flatTask historyTask"
+                            Command="{Binding DataContext.SelectTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}">
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Image Source="{Binding StatusIconSource, Converter={StaticResource AssetImageConverter}}" Width="12" Height="12" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </Button>
+                    <Border Grid.Column="1" Background="{DynamicResource PillBg}" CornerRadius="3" Padding="6,1" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding DisplayStatusText}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    </Border>
+                  </Grid>
+                  <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="{Binding DataContext.TaskRetryButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Classes="taskAction"
+                            Command="{Binding DataContext.RetryTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            IsVisible="{Binding CanRetry}" />
+                    <Button Content="{Binding DataContext.TaskOpenReportButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Classes="taskAction"
+                            Command="{Binding DataContext.OpenTaskReportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            IsVisible="{Binding HasReportPath}" />
+                    <Button Content="{Binding DataContext.TaskOpenBackupButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Classes="taskAction"
+                            Command="{Binding DataContext.OpenTaskBackupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            IsVisible="{Binding HasBackupPath}" />
+                    <Button Content="{Binding DataContext.TaskCopyFailedButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Classes="taskAction"
+                            Command="{Binding DataContext.CopyTaskFailedDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            IsVisible="{Binding HasFailedDetails}" />
+                    <Button Content="{Binding DataContext.TaskOpenRetryReportButtonText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Classes="taskAction"
+                            Command="{Binding DataContext.OpenTaskRetryReportCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                            IsVisible="{Binding HasRetryReportPath}" />
+                  </WrapPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="{Binding SelectedTaskHint}" Opacity="0.75" TextWrapping="Wrap" />
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <Border Grid.Column="1" Classes="panel" Margin="12,0,0,0">
+      <Grid RowDefinitions="Auto,Auto,*">
+
+        <Border Grid.Row="0" Classes="hintCard" Margin="0,0,0,12" IsVisible="{Binding IsSmapiCategory}">
+          <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+              <TextBlock Grid.Column="0" Text="{Binding SmapiSearchTitleText}" Classes="hintTitle" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                <Run Text="{Binding StatusPrefixText}" />
+                <Run Text="{Binding Status}" />
+              </TextBlock>
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Grid.Column="0" Text="{Binding SmapiSearchText}" Watermark="{Binding SmapiSearchWatermarkText}" Margin="0,0,8,0" />
+              <Button Grid.Column="1" Content="{Binding SearchButtonText}" Command="{Binding SearchSmapiCommand}" />
+            </Grid>
+            <ComboBox ItemsSource="{Binding SmapiSources}" SelectedItem="{Binding SelectedSmapiSource}" />
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Row="0" Classes="hintCard" Margin="0,0,0,12" IsVisible="{Binding IsModsCategory}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="{Binding ModSearchTitleText}" Classes="hintTitle" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Grid.Column="0" Text="{Binding ModSearchText}" Watermark="{Binding ModSearchWatermarkText}" Margin="0,0,8,0" />
+              <Button Grid.Column="1" Content="{Binding SearchButtonText}" Command="{Binding SearchModsCommand}" />
+            </Grid>
+            <!-- 来源/版本/类型 + 重置：左标题右下拉框单行 -->
+            <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,*,Auto" Margin="0,2,0,0">
+              <TextBlock Grid.Column="0" Text="来源" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding ModSources}" SelectedItem="{Binding SelectedModSource}" Margin="0,0,12,0" ToolTip.Tip="来源筛选：全部/NexusMods/Curseforge" />
+              <TextBlock Grid.Column="2" Text="版本" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+              <ComboBox Grid.Column="3" ItemsSource="{Binding ModGameVersions}" SelectedItem="{Binding SelectedModGameVersion}" Margin="0,0,12,0" ToolTip.Tip="游戏版本筛选：按兼容版本过滤" />
+              <TextBlock Grid.Column="4" Text="类型" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+              <ComboBox Grid.Column="5" ItemsSource="{Binding ModTypes}" SelectedItem="{Binding SelectedModType}" Margin="0,0,12,0" ToolTip.Tip="类型筛选：按功能类别过滤" />
+              <Button Grid.Column="6" Content="重置" Command="{Binding ResetModFiltersCommand}" HorizontalAlignment="Right" MinWidth="60" Padding="12,4" />
+            </Grid>
+            <TextBlock Text="{Binding SelectedModSourceDescription}" Opacity="0.72" FontSize="11" />
+            <Border IsVisible="{Binding HasNexusAuthExpiredNotice}"
+                    Background="{DynamicResource WarningBg}"
+                    BorderBrush="{DynamicResource WarningBorder}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="10,8">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding NexusAuthExpiredNotice}"
+                           TextWrapping="Wrap" />
+                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                  <Button Content="不再提示"
+                          Command="{Binding DismissNexusAuthNotificationPermanentlyCommand}"
+                          Margin="0,0,8,0"
+                          MinWidth="80"
+                          ToolTip.Tip="持久化隐藏，直到在设置页重新开启" />
+                  <Button Content="本次使用期间不提示"
+                          Command="{Binding DismissNexusAuthNotificationThisSessionCommand}"
+                          Margin="0,0,8,0"
+                          MinWidth="80"
+                          ToolTip.Tip="仅在本次运行期间隐藏" />
+                  <Button Content="去登录"
+                          Command="{Binding GoToNexusLoginCommand}"
+                          MinWidth="80"
+                          ToolTip.Tip="跳转到设置页 Nexus 登录区" />
+                </WrapPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Row="0" Classes="hintCard" Margin="0,0,0,12" IsVisible="{Binding IsModpacksCategory}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="搜索 Modpack" Classes="hintTitle" />
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <TextBox Grid.Column="0" Text="{Binding ModpackSearchText}" Watermark="输入 Modpack 关键词" Margin="0,0,8,0" />
+              <ComboBox Grid.Column="1" ItemsSource="{Binding ModpackSources}" SelectedItem="{Binding SelectedModpackSource}" Width="120" Margin="0,0,8,0" />
+              <Button Grid.Column="2" Content="{Binding SearchButtonText}" Command="{Binding SearchModpacksCommand}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" Classes="hintCard" Margin="0,0,0,12" IsVisible="{Binding ShowGamePathWarning}">
+          <Grid ColumnDefinitions="*,Auto" Margin="0">
+            <StackPanel Grid.Column="0" Spacing="4">
+              <TextBlock Text="{Binding GamePathWarningTitleText}" Classes="hintTitle" />
+              <TextBlock Text="{Binding GamePathWarningDescriptionText}" TextWrapping="Wrap" />
+              <TextBlock>
+                <Run Text="{Binding GamePathHintPrefixText}" />
+                <Run Text="{Binding GamePathHint}" />
+              </TextBlock>
+            </StackPanel>
+            <Button Grid.Column="1" Content="{Binding GoInstanceButtonText}" Command="{Binding SelectGamePathCommand}" Margin="8,0,0,0" />
+          </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="2">
+          <StackPanel Spacing="12">
+            <!-- 游戏本体下载（SteamCMD） -->
+            <Border Classes="hintCard" IsVisible="{Binding IsGameCategory}">
+              <StackPanel Spacing="8">
+                <TextBlock Text="游戏本体下载（SteamCMD）" Classes="hintTitle" />
+                <TextBlock Text="线性流程：安装 SteamCMD → 登录 Steam 账号 → 选择版本下载。账号需已拥有该游戏。版本通过 SteamCMD 自动获取，也可输入自定义 Manifest ID。" Opacity="0.72" TextWrapping="Wrap" />
+
+                <!-- 步骤指示器 -->
+                <Grid ColumnDefinitions="*,*,*" Margin="0,4,0,0">
+                  <StackPanel Grid.Column="0" Spacing="2" HorizontalAlignment="Center">
+                    <Border Width="24" Height="24" CornerRadius="12"
+                            Background="{DynamicResource CategoryIndicator}" IsVisible="{Binding IsSteamCmdStepInstall}">
+                      <TextBlock Text="1" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border Width="24" Height="24" CornerRadius="12" Background="{DynamicResource IconBg}" IsVisible="{Binding !IsSteamCmdStepInstall}">
+                      <TextBlock Text="1" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="安装" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource DefaultTextForeground}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Spacing="2" HorizontalAlignment="Center">
+                    <Border Width="24" Height="24" CornerRadius="12"
+                            Background="{DynamicResource IconBg}" IsVisible="{Binding !IsSteamCmdStepLogin}">
+                      <TextBlock Text="2" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border Width="24" Height="24" CornerRadius="12"
+                            Background="{DynamicResource CategoryIndicator}" IsVisible="{Binding IsSteamCmdStepLogin}">
+                      <TextBlock Text="2" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="登录" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource DefaultTextForeground}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2" Spacing="2" HorizontalAlignment="Center">
+                    <Border Width="24" Height="24" CornerRadius="12"
+                            Background="{DynamicResource IconBg}" IsVisible="{Binding !IsSteamCmdStepDownload}">
+                      <TextBlock Text="3" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border Width="24" Height="24" CornerRadius="12"
+                            Background="{DynamicResource CategoryIndicator}" IsVisible="{Binding IsSteamCmdStepDownload}">
+                      <TextBlock Text="3" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="版本下载" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource DefaultTextForeground}" />
+                  </StackPanel>
+                </Grid>
+
+                <!-- 第 1 页：安装 -->
+                <StackPanel Spacing="6" IsVisible="{Binding IsSteamCmdStepInstall}">
+                  <TextBlock Text="安装 SteamCMD" FontWeight="SemiBold" Margin="0,4,0,0" />
+                  <TextBlock Text="首次使用需下载并解压 SteamCMD 命令行客户端（约 2MB），用于登录与下载游戏文件。" Opacity="0.72" TextWrapping="Wrap" />
+                  <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,4,0,0">
+                    <TextBlock Grid.Column="0" Text="SteamCMD 状态：" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding SteamCmdStatusText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Status}" Opacity="0.7" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="3" Content="下载 SteamCMD" Command="{Binding EnsureSteamCmdCommand}"
+                            IsEnabled="{Binding !IsSteamCmdBusy}" MinWidth="110" Margin="8,0,0,0" />
+                  </Grid>
+                </StackPanel>
+
+                <!-- 第 2 页：登录 -->
+                <StackPanel Spacing="6" IsVisible="{Binding IsSteamCmdStepLogin}">
+                  <TextBlock Text="Steam 账号登录" FontWeight="SemiBold" Margin="0,4,0,0" />
+                  <Grid ColumnDefinitions="*,*">
+                    <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,8,0">
+                      <TextBlock Text="账号" FontSize="12" />
+                      <TextBox Text="{Binding SteamUsername}" Watermark="Steam 登录账号" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                      <TextBlock Text="密码" FontSize="12" />
+                      <TextBox Text="{Binding SteamPassword}" PasswordChar="*" Watermark="Steam 密码" />
+                    </StackPanel>
+                  </Grid>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,8,0">
+                      <TextBlock Text="Steam Guard 验证码（如需要）" FontSize="12" />
+                      <TextBox Text="{Binding SteamGuardCode}" Watermark="邮箱验证码 / 手机令牌" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="登录" Command="{Binding SteamCmdLoginCommand}"
+                            IsEnabled="{Binding !IsSteamCmdBusy}" VerticalAlignment="Bottom" MinWidth="90" />
+                  </Grid>
+                  <Border Background="{DynamicResource WarningBg}" CornerRadius="6" Padding="8" Margin="0,2,0,0">
+                    <StackPanel Spacing="3">
+                      <TextBlock Text="关于 Steam Guard 登录" FontWeight="SemiBold" FontSize="12" />
+                      <TextBlock Text="若账号开启手机令牌：点击登录后请打开 Steam 手机 APP 批准本次登录，或通过 APP 获取 Steam Guard 验证码填入上方，直接登录。" FontSize="11" Opacity="0.85" TextWrapping="Wrap" />
+                      <TextBlock Text="若等待超时（约 180 秒）登录失败，请重试。" FontSize="11" Opacity="0.85" TextWrapping="Wrap" />
+                      <TextBlock Text="登录信息不会被存储。" FontSize="11" Opacity="0.85" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+
+                <!-- 第 3 页：版本下载 -->
+                <StackPanel Spacing="6" IsVisible="{Binding IsSteamCmdStepDownload}">
+                  <TextBlock Text="选择游戏版本并下载" FontWeight="SemiBold" Margin="0,4,0,0" />
+                  <TextBlock Text="版本通过 SteamCMD 自动获取（当前分支/历史分支）；也可输入自定义 Manifest ID。" Opacity="0.72" TextWrapping="Wrap" />
+                  <Grid ColumnDefinitions="*,*">
+                    <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,8,0">
+                      <TextBlock Text="SteamCMD 自动获取的版本" FontSize="12" />
+                      <ComboBox ItemsSource="{Binding GameVersionOptions}" SelectedItem="{Binding SelectedGameVersion}" />
+                      <TextBlock Text="{Binding SelectedGameVersionDescription}" FontSize="11" Opacity="0.75" TextWrapping="Wrap"
+                                 IsVisible="{Binding HasSelectedGameVersionDescription}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                      <TextBlock Text="自定义 Manifest ID（可选，优先于下拉）" FontSize="12" />
+                      <TextBox Text="{Binding CustomManifestId}" Watermark="从 SteamDB 查询 Manifest ID" />
+                    </StackPanel>
+                  </Grid>
+
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                    <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,8,0">
+                      <TextBlock Text="保存目录（须为空目录）" FontSize="12" />
+                      <TextBox Text="{Binding GameTargetPath}" Watermark="游戏文件保存位置" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="浏览" Command="{Binding BrowseGameTargetPathCommand}"
+                            VerticalAlignment="Bottom" MinWidth="80" />
+                  </Grid>
+
+                  <Button Content="下载游戏文件" Command="{Binding DownloadGameCommand}"
+                          IsEnabled="{Binding CanDownloadGame}" Classes="accent"
+                          HorizontalAlignment="Left" MinWidth="140" Margin="0,4,0,0" />
+                  <ProgressBar Minimum="0" Maximum="100" Value="{Binding GameDownloadProgress}" Height="8"
+                               IsVisible="{Binding IsSteamCmdBusy}" />
+                </StackPanel>
+
+                <!-- 翻页导航：上一步在左，下一步在右 -->
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4,0,0">
+                  <Button Grid.Column="0" Content="上一步" Command="{Binding PrevSteamCmdStepCommand}"
+                          IsVisible="{Binding CanGoPrevSteamCmdStep}" MinWidth="90" />
+                  <Button Grid.Column="2" Content="下一步" Command="{Binding NextSteamCmdStepCommand}"
+                          IsVisible="{Binding CanGoNextSteamCmdStep}" MinWidth="90" />
+                </Grid>
+
+                <!-- 日志 + 自定义指令（始终显示在底部） -->
+                <TextBlock Text="SteamCMD 日志" FontSize="12" FontWeight="SemiBold" Margin="0,6,0,0" />
+                <TextBox x:Name="SteamCmdLogBox" Text="{Binding SteamCmdLogText}" IsReadOnly="True" TextWrapping="Wrap" Height="180"
+                         FontFamily="Cascadia Mono,Consolas,Courier New" FontSize="11" TextChanged="SteamCmdLogBox_TextChanged" />
+
+                <!-- 自定义指令输入栏 -->
+                <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
+                  <TextBox Grid.Column="0" Text="{Binding SteamCmdInputText}"
+                           Watermark="输入自定义 SteamCMD 指令，如 app_update 413150 或 download_depot 413150 413151"
+                           FontFamily="Cascadia Mono,Consolas,Courier New" FontSize="11"
+                           VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Content="发送" Command="{Binding SteamCmdInputCommand}"
+                          IsEnabled="{Binding CanSendSteamCmdInput}" MinWidth="72" Margin="8,0,0,0" />
+                </Grid>
+                <TextBlock Text="提示：指令会以 +指令 +quit 形式执行；登录建议在登录页填写以支持 Steam Guard。" FontSize="10.5" Opacity="0.6" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="hintCard" IsVisible="{Binding IsSmapiCategory}">
+              <StackPanel Spacing="10">
+                <TextBlock Text="SMAPI 搜索结果" Classes="hintTitle" />
+
+                <StackPanel Spacing="8" IsVisible="{Binding HasSmapiGithubItems}">
+                  <TextBlock Text="GitHub" Classes="sectionTitle" />
+                  <ItemsControl ItemsSource="{Binding SmapiGithubItems}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Classes="hintCard" Margin="0,0,0,10">
+                          <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Width="72" Height="72" Background="{DynamicResource IconBg}" CornerRadius="6" BorderBrush="{DynamicResource IconBorder}" BorderThickness="1">
+                              <Image Source="{Binding IconSource, Converter={StaticResource AssetImageConverter}}" Width="64" Height="64" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="4" Margin="12,0,0,0">
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                              <WrapPanel Orientation="Horizontal" ItemHeight="24" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding SourceTag}" Classes="pill" />
+                                <TextBlock Text="{Binding MetricTag}" Classes="pill" IsVisible="{Binding HasMetricTag}" Margin="6,0,0,0" />
+                                <TextBlock Text="{Binding TimeTag}" Classes="pill" IsVisible="{Binding HasTimeTag}" Margin="6,0,0,0" />
+                              </WrapPanel>
+                              <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.75" />
+                            </StackPanel>
+                                <Button Grid.Column="2"
+                                  Content="进入详情"
+                                  Command="{Binding DataContext.OpenCatalogItemDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  CommandParameter="{Binding}"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0" />
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Spacing="8" IsVisible="{Binding HasSmapiNexusModsItems}">
+                  <TextBlock Text="NexusMods" Classes="sectionTitle" />
+                  <ItemsControl ItemsSource="{Binding SmapiNexusModsItems}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Classes="hintCard" Margin="0,0,0,10">
+                          <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Width="72" Height="72" Background="{DynamicResource IconBg}" CornerRadius="6" BorderBrush="{DynamicResource IconBorder}" BorderThickness="1">
+                              <Image Source="{Binding IconSource, Converter={StaticResource AssetImageConverter}}" Width="64" Height="64" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="4" Margin="12,0,0,0">
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                              <WrapPanel Orientation="Horizontal" ItemHeight="24" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding SourceTag}" Classes="pill" />
+                                <TextBlock Text="{Binding MetricTag}" Classes="pill" IsVisible="{Binding HasMetricTag}" Margin="6,0,0,0" />
+                                <TextBlock Text="{Binding TimeTag}" Classes="pill" IsVisible="{Binding HasTimeTag}" Margin="6,0,0,0" />
+                              </WrapPanel>
+                              <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.75" />
+                            </StackPanel>
+                                <Button Grid.Column="2"
+                                  Content="进入详情"
+                                  Command="{Binding DataContext.OpenCatalogItemDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  CommandParameter="{Binding}"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0" />
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <StackPanel Spacing="8" IsVisible="{Binding HasSmapiCurseforgeItems}">
+                  <TextBlock Text="Curseforge" Classes="sectionTitle" />
+                  <ItemsControl ItemsSource="{Binding SmapiCurseforgeItems}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Classes="hintCard" Margin="0,0,0,10">
+                          <Grid ColumnDefinitions="Auto,*,Auto">
+                            <Border Grid.Column="0" Width="72" Height="72" Background="{DynamicResource IconBg}" CornerRadius="6" BorderBrush="{DynamicResource IconBorder}" BorderThickness="1">
+                              <Image Source="{Binding IconSource, Converter={StaticResource AssetImageConverter}}" Width="64" Height="64" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="4" Margin="12,0,0,0">
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                              <WrapPanel Orientation="Horizontal" ItemHeight="24" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding SourceTag}" Classes="pill" />
+                                <TextBlock Text="{Binding MetricTag}" Classes="pill" IsVisible="{Binding HasMetricTag}" Margin="6,0,0,0" />
+                                <TextBlock Text="{Binding TimeTag}" Classes="pill" IsVisible="{Binding HasTimeTag}" Margin="6,0,0,0" />
+                              </WrapPanel>
+                              <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Opacity="0.75" />
+                            </StackPanel>
+                                <Button Grid.Column="2"
+                                  Content="进入详情"
+                                  Command="{Binding DataContext.OpenCatalogItemDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  CommandParameter="{Binding}"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0" />
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="hintCard" IsVisible="{Binding IsNonSmapiCategory}">
+              <Grid RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" Text="{Binding CatalogListTitleText}" Classes="hintTitle" Margin="0,0,0,8" />
+                <Grid Grid.Row="1">
+                  <TextBlock Text="{Binding CatalogNoItemsText}" Opacity="0.7" IsVisible="{Binding HasNoCategoryItems}" />
+                  <ScrollViewer IsVisible="{Binding IsCategoryListVisible}">
+                    <ItemsControl ItemsSource="{Binding CategoryItems}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <Border Classes="hintCard" Margin="0,0,0,10" BorderBrush="{DynamicResource CardHighlightBorder}" BorderThickness="1" Background="{DynamicResource CardHighlightBg}">
+                            <StackPanel Spacing="8">
+                              <Grid ColumnDefinitions="72,*,Auto" RowDefinitions="Auto,Auto">
+                                <Border Grid.RowSpan="2" Grid.Column="0" Width="64" Height="64" Background="{DynamicResource IconBg}" CornerRadius="6" BorderBrush="{DynamicResource IconBorder}" BorderThickness="1" Margin="0,2,10,0">
+                                  <Image Source="{Binding IconSource, Converter={StaticResource AssetImageConverter}}" Width="60" Height="60" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+
+                                <Grid Grid.Column="1" ColumnDefinitions="*" Margin="0,0,0,4">
+                                  <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,8,0" />
+                                </Grid>
+
+                                <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*" Margin="0,0,0,2">
+                                  <TextBlock Grid.Column="0" Text="{Binding DisplaySummary}" TextWrapping="Wrap" Opacity="0.75" Margin="0,0,8,0" />
+                                </Grid>
+
+                                <StackPanel Grid.Column="2" Grid.RowSpan="2" Spacing="6" Margin="10,0,0,0" VerticalAlignment="Top">
+                                  <Button Content="查看详情"
+                                          Command="{Binding DataContext.OpenCatalogItemDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"
+                                    Width="96"
+                                    Height="30"
+                                    FontSize="12" />
+                                  <Button Content="{Binding LocalizationToggleButtonText}"
+                                          Command="{Binding DataContext.ToggleLocalizedDisplayCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"
+                                    Width="96"
+                                    Height="30" />
+                                </StackPanel>
+                              </Grid>
+
+                              <WrapPanel Orientation="Horizontal" ItemHeight="24" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding SourceTag}" Classes="pill" />
+                                <TextBlock Text="{Binding Stat}" Classes="pill" IsVisible="{Binding HasMetricTag}" Margin="6,0,0,0" />
+                                <TextBlock Text="{Binding TimeTag}" Classes="pill" IsVisible="{Binding HasTimeTag}" Margin="6,0,0,0" />
+                                <TextBlock Text="{Binding ModTypeTag}" Classes="pill" IsVisible="{Binding HasModTypeTag}" Margin="6,0,0,0" />
+                                <TextBlock Text="{Binding GameVersionTag}" Classes="pill" IsVisible="{Binding HasGameVersionTag}" Margin="6,0,0,0" />
+                              </WrapPanel>
+
+                              <ProgressBar IsIndeterminate="True"
+                                           IsVisible="{Binding IsLoadingDetails}"
+                                           Height="3"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                  <Border Classes="hintCard"
+                          IsVisible="{Binding IsSearchingMods}"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          MinWidth="200"
+                          Margin="0,12,0,0">
+                    <StackPanel HorizontalAlignment="Center"
+                                Spacing="12"
+                                Margin="20,24">
+                      <ProgressBar IsIndeterminate="True" Width="240" Height="6" />
+                      <TextBlock Text="加载中..."
+                                 HorizontalAlignment="Center"
+                                 Foreground="{DynamicResource TextPrimaryBrush}"
+                                 Opacity="0.7" />
+                    </StackPanel>
+                  </Border>
+                </Grid>
+              </Grid>
+            </Border>
+
+            <Border Classes="hintCard" IsVisible="{Binding IsModsPageable}">
+              <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <Button Grid.Column="0"
+                        Content="上一页"
+                        Command="{Binding GoToPreviousModPageCommand}"
+                        IsEnabled="{Binding CanGoToPreviousModPage}"
+                        MinWidth="82" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ModPageInfoText}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+                <Button Grid.Column="2"
+                        Content="下一页"
+                        Command="{Binding GoToNextModPageCommand}"
+                        IsEnabled="{Binding CanGoToNextModPage}"
+                        MinWidth="82" />
+              </Grid>
+            </Border>
+
+            <Border Classes="hintCard" IsVisible="{Binding IsModpacksPageable}">
+              <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+                <Button Grid.Column="0"
+                        Content="上一页"
+                        Command="{Binding GoToPreviousModpackPageCommand}"
+                        IsEnabled="{Binding CanGoToPreviousModpackPage}"
+                        MinWidth="82" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ModpackPageInfoText}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+                <Button Grid.Column="2"
+                        Content="下一页"
+                        Command="{Binding GoToNextModpackPageCommand}"
+                        IsEnabled="{Binding CanGoToNextModpackPage}"
+                        MinWidth="82" />
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

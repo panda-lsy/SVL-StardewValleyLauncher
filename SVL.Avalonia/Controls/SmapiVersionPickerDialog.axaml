@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:models="using:SVL.Avalonia.Models"
+             x:Class="SVL.Avalonia.Controls.SmapiVersionPickerDialog"
+             x:DataType="vm:SmapiVersionPickerViewModel">
+  <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="8" Padding="24,20" MinWidth="520" MinHeight="440">
+    <StackPanel Spacing="14">
+
+      <!-- 标题 -->
+      <TextBlock Text="选择要安装的 SMAPI 版本"
+                 FontSize="16" FontWeight="SemiBold"
+                 Foreground="{DynamicResource TextPrimaryBrush}" />
+
+      <!-- 当前版本信息 -->
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <TextBlock Text="当前版本:" FontSize="13" Opacity="0.7" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding CurrentVersionText}" FontSize="13" Opacity="0.7" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <!-- 安装路径选择 -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="安装路径:" FontSize="13" Opacity="0.7" />
+        <ComboBox ItemsSource="{Binding AvailablePaths}"
+                  SelectedItem="{Binding SelectedPath}"
+                  HorizontalAlignment="Stretch"
+                  MinWidth="460" />
+      </StackPanel>
+
+      <!-- 下载源选择 -->
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Text="下载源:" FontSize="13" VerticalAlignment="Center" Opacity="0.7" />
+        <ComboBox ItemsSource="{Binding Sources}"
+                  SelectedItem="{Binding SelectedSource}"
+                  Width="130" />
+        <TextBlock Text="{Binding LoadingText}" FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <!-- 版本列表区域 -->
+      <Border Background="{DynamicResource CardBrush}"
+              BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="1" CornerRadius="6"
+              MinHeight="200" MaxHeight="300">
+        <Panel>
+          <!-- 加载中 -->
+          <StackPanel IsVisible="{Binding IsLoading}"
+                      VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
+            <Path Data="{StaticResource Icon.RefreshCw}" Width="24" Height="24"
+                  Stretch="Uniform" Fill="{DynamicResource AccentBrush}" Opacity="0.6" />
+            <TextBlock Text="正在获取版本列表..." FontSize="14" Opacity="0.6" HorizontalAlignment="Center" />
+          </StackPanel>
+
+          <!-- 版本列表 -->
+          <ListBox ItemsSource="{Binding Versions}"
+                   SelectedItem="{Binding SelectedVersion}"
+                   IsVisible="{Binding !IsLoading}"
+                   Background="Transparent"
+                   BorderThickness="0"
+                   Margin="4">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="models:SmapiVersionEntry">
+                <Border Padding="12,10" CornerRadius="4">
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Spacing="2">
+                      <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="SMAPI" FontSize="14" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Version}" FontSize="14" FontWeight="SemiBold" />
+                        <Border IsVisible="{Binding IsPrerelease}"
+                                Background="#FFF3E0" CornerRadius="3"
+                                Padding="6,1" VerticalAlignment="Center">
+                          <TextBlock Text="预发布" FontSize="10" Foreground="#E65100" />
+                        </Border>
+                      </StackPanel>
+                      <TextBlock Text="{Binding Description}" FontSize="12" Opacity="0.6"
+                                 TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding PublishedDate, StringFormat='{}{0:yyyy-MM-dd}'}"
+                               FontSize="11" Opacity="0.45" VerticalAlignment="Center"
+                               Margin="16,0,0,0" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Panel>
+      </Border>
+
+      <!-- 分页控制 -->
+      <Grid ColumnDefinitions="Auto,Auto,Auto" HorizontalAlignment="Center">
+        <Button Grid.Column="0" Content="◀ 上一页"
+                Command="{Binding PreviousPageCommand}"
+                IsEnabled="{Binding HasPreviousPage}"
+                MinWidth="100" Height="30" Padding="12,0" />
+        <TextBlock Grid.Column="1" Text="{Binding PageInfoText}"
+                   FontSize="12" Opacity="0.6" VerticalAlignment="Center"
+                   Margin="16,0" />
+        <Button Grid.Column="2" Content="下一页 ▶"
+                Command="{Binding NextPageCommand}"
+                IsEnabled="{Binding HasNextPage}"
+                MinWidth="100" Height="30" Padding="12,0" />
+      </Grid>
+
+      <!-- 按钮区域 -->
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,0,0">
+        <Button Content="确认安装" MinWidth="100" Height="32" Padding="16,0"
+                Command="{Binding ConfirmCommand}"
+                IsEnabled="{Binding HasSelectedVersion}"
+                Classes="accent" />
+        <Button Content="取消" MinWidth="80" Height="32" Padding="16,0"
+                Name="CancelButton" />
+      </StackPanel>
+
+    </StackPanel>
+  </Border>
+</UserControl>

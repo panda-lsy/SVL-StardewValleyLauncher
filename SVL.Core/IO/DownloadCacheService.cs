@@ -156,44 +156,31 @@ public static class DownloadCacheService
 
             Log.Info($"[DownloadCache] 开始下载: {key} from {url}");
 
-            using var httpClient = new System.Net.Http.HttpClient();
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "SVL-StardewValleyLauncher/1.0");
+            // 使用多线程分片下载，享受 DownloadSegmentThreads 设置（默认 4，范围 1-16）
+            var settings = SVL.Core.Config.AppConfig.GetSettings();
+            var threadCount = Math.Max(1, Math.Min(16, settings.DownloadSegmentThreads <= 0 ? 4 : settings.DownloadSegmentThreads));
 
-            httpClient.Timeout = TimeSpan.FromMinutes(30);
-
-            var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            var totalBytes = response.Content.Headers.ContentLength ?? 0;
-
-            using var fs = new FileStream(cachedPath, FileMode.Create);
-            using var stream = await response.Content.ReadAsStreamAsync();
-
-            var buffer = new byte[8192];
-            int bytesRead;
-            long totalRead = 0;
             double lastProgress = 0;
-
-            while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
-            {
-                await fs.WriteAsync(buffer, 0, bytesRead, cancellationToken);
-                totalRead += bytesRead;
-
-                if (totalBytes > 0)
+            await HttpMultiThreadDownloader.DownloadAsync(
+                url,
+                cachedPath,
+                threadCount,
+                (percent, bytesRead, totalBytes, speed) =>
                 {
-                    var currentProgress = (double)totalRead / totalBytes;
+                    var currentProgress = Math.Max(0, Math.Min(1, percent / 100.0));
                     // 每隔 5% 更新一次进度
                     if (currentProgress - lastProgress >= 0.05)
                     {
                         progressCallback?.Invoke(currentProgress);
                         lastProgress = currentProgress;
                     }
-                }
-            }
+                },
+                cancellationToken);
 
             progressCallback?.Invoke(1.0);
 
-            Log.Info($"[DownloadCache] 下载完成: {key} ({totalRead} 字节)");
+            var finalLength = new FileInfo(cachedPath).Length;
+            Log.Info($"[DownloadCache] 下载完成: {key} ({finalLength} 字节)");
             return cachedPath;
         }
         catch (Exception ex)

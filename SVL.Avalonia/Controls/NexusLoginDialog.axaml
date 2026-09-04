@@ -1,0 +1,106 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SVL.Avalonia.ViewModels"
+        x:Class="SVL.Avalonia.Controls.NexusLoginDialog"
+        Width="500"
+        Height="640"
+        WindowStartupLocation="CenterOwner"
+        x:DataType="vm:NexusLoginDialogViewModel"
+        Title="Nexus 登录">
+  <Border Background="{DynamicResource WindowBackgroundBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="12">
+    <Grid RowDefinitions="Auto,*,Auto">
+      <Border Grid.Row="0" Background="{DynamicResource AccentBrush}" CornerRadius="12,12,0,0" Padding="22,16">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <Path Data="{StaticResource Icon.Unlock}" Width="18" Height="18" Stretch="Uniform" Fill="{DynamicResource TextOnAccentBrush}" />
+            <TextBlock Text="Nexus Mods 登录" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextOnAccentBrush}" />
+          </StackPanel>
+          <Button Grid.Column="1" Width="30" Height="30" Padding="0" Command="{Binding CloseCommand}" Background="{DynamicResource CardHighlightBg}" BorderThickness="0" Foreground="{DynamicResource TextOnAccentBrush}">
+            <Path Data="{StaticResource Icon.X}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource TextOnAccentBrush}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="24,20">
+        <StackPanel Spacing="14">
+          <StackPanel Spacing="4" HorizontalAlignment="Center">
+            <TextBlock Text="NEXUS MODS" FontSize="30" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="安全登录 SVL 以访问 Nexus Mods 资源" Opacity="0.72" HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
+          </StackPanel>
+
+          <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="14" Background="{DynamicResource CardBrush}">
+            <StackPanel Spacing="6">
+              <StackPanel IsVisible="{Binding IsLoggedIn}">
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                  <Path Data="{StaticResource Icon.Check}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource ColorBrushSuccess}" VerticalAlignment="Center" />
+                  <TextBlock Text="已登录" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                </StackPanel>
+                <TextBlock Text="{Binding UserName}" HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                <TextBlock Text="{Binding MembershipType}" Opacity="0.7" HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
+              </StackPanel>
+              <StackPanel IsVisible="{Binding IsNotLoggedIn}">
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                  <Path Data="{StaticResource Icon.Lock}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" />
+                  <TextBlock Text="未登录" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                </StackPanel>
+                <TextBlock Text="请点击下方按钮登录您的 Nexus Mods 账户" Opacity="0.7" HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Button Content="{Binding LoginButtonText}"
+                  Command="{Binding LoginCommand}"
+                  Height="40"
+              Width="280"
+              HorizontalAlignment="Center"
+                  Background="{DynamicResource AccentBrush}"
+                  Foreground="{DynamicResource TextOnAccentBrush}"
+                  BorderThickness="0"
+                  IsVisible="{Binding IsNotLoggedIn}" />
+
+            <Button Content="重新打开浏览器窗口"
+                  Command="{Binding ReopenBrowserPageCommand}"
+              Width="220"
+              HorizontalAlignment="Center"
+                  Height="36"
+                  IsVisible="{Binding ShowReopenBrowserButton}" />
+
+            <TextBlock Text="{Binding RollbackAuthorizeUrlPreview}"
+                 HorizontalAlignment="Center"
+                 TextWrapping="Wrap"
+                 MaxWidth="420"
+                 Opacity="0.62"
+                 Foreground="{DynamicResource TextSecondaryBrush}"
+                 IsVisible="{Binding ShowReopenBrowserButton}" />
+
+          <Button Command="{Binding LogoutCommand}"
+                  Height="40"
+                  IsVisible="{Binding IsLoggedIn}">
+            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+              <Path Data="{StaticResource Icon.LogOut}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" />
+              <TextBlock Text="登出" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" Opacity="0.78" Foreground="{DynamicResource TextPrimaryBrush}" />
+          <TextBlock Text="{Binding OauthStatusMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" Opacity="0.72" Foreground="{DynamicResource TextSecondaryBrush}" />
+
+          <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+            <StackPanel Spacing="6">
+              <TextBlock Text="登录后您可以：" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+              <TextBlock Text="• 下载 Nexus Mods 上的 MOD" Opacity="0.8" Foreground="{DynamicResource TextSecondaryBrush}" />
+              <TextBlock Text="• 查看 MOD 详情和更新" Opacity="0.8" Foreground="{DynamicResource TextSecondaryBrush}" />
+              <TextBlock Text="• 同步您的 Nexus Mods 账户" Opacity="0.8" Foreground="{DynamicResource TextSecondaryBrush}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <Border Grid.Row="2" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,12,12" Padding="20,12">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <Button Content="关闭" Command="{Binding CloseCommand}" MinWidth="92" Height="34" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</Window>

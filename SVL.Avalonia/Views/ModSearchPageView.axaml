@@ -1,0 +1,68 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             x:Class="SVL.Avalonia.Views.ModSearchPageView"
+             x:DataType="vm:ModSearchPageViewModel">
+  <Border Classes="panel">
+    <StackPanel Spacing="10">
+      <TextBlock Text="{Binding Title}" Classes="heroTitle" />
+      <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Opacity="0.7" />
+
+      <!-- 搜索栏 -->
+      <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,4,0,0">
+        <TextBox Grid.Column="0" Text="{Binding Query}" Watermark="输入 Mod 关键词（留空则显示热门推荐）" Margin="0,0,8,0" />
+        <ComboBox Grid.Column="1" ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" Width="120" Margin="0,0,8,0" />
+        <Button Grid.Column="2" Content="搜索" Command="{Binding SearchCommand}" MinWidth="80" />
+      </Grid>
+
+      <!-- 状态 -->
+      <TextBlock Text="{Binding Status}" Opacity="0.75" FontSize="13" />
+
+      <!-- 结果列表 -->
+      <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="1" CornerRadius="6" MinHeight="200" MaxHeight="480" Padding="4">
+        <ScrollViewer>
+          <ItemsControl ItemsSource="{Binding Results}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button Classes="flatTask"
+                        Command="{Binding DataContext.OpenDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Padding="8" Margin="0,0,0,4">
+                  <Grid ColumnDefinitions="44,*,Auto">
+                    <Image Grid.Column="0"
+                           Source="{Binding IconUrl, Converter={StaticResource AssetImageConverter}}"
+                           Width="36" Height="36" Stretch="UniformToFill" />
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="2">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" MaxLines="2"
+                                 TextTrimming="CharacterEllipsis" FontSize="12" Opacity="0.7" />
+                      <TextBlock Text="{Binding SourceTag}" FontSize="11" Opacity="0.6" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="2" VerticalAlignment="Top" HorizontalAlignment="Right">
+                      <TextBlock Text="{Binding Stat}" FontSize="11" Opacity="0.6" />
+                      <TextBlock Text="{Binding TimeTag}" FontSize="11" Opacity="0.6" />
+                    </StackPanel>
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
+
+      <!-- 分页控制（仅依赖 Command CanExecute 控制启用状态） -->
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12">
+        <Button Content="◀ 上一页"
+                Command="{Binding PreviousPageCommand}"
+                MinWidth="100" Height="30" Padding="12,0" />
+        <TextBlock Text="{Binding PageInfoText}"
+                   FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
+        <Button Content="下一页 ▶"
+                Command="{Binding NextPageCommand}"
+                MinWidth="100" Height="30" Padding="12,0" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

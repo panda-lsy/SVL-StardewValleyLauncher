@@ -1,0 +1,68 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SVL.Avalonia.Controls.FloatingNotificationControl"
+             x:Name="Root"
+             IsHitTestVisible="True">
+  <!-- 通知卡片：背景色/图标由 code-behind 按 NotificationType 设置 -->
+  <Border x:Name="Card"
+          CornerRadius="8"
+          Padding="20,16"
+          Margin="20,20,20,0"
+          HorizontalAlignment="Center"
+          BoxShadow="0 8 16 0 #40000000">
+    <Border.RenderTransform>
+      <TranslateTransform Y="-150" />
+    </Border.RenderTransform>
+    <!-- Avalonia Transitions 仅支持控件自身的 StyledProperty，无法作用于 RenderTransform.Y，
+         故 Y 轴位移在 code-behind 瞬间设置，仅 Opacity 做过渡。退场时只淡出不位移，避免突兀。 -->
+    <Border.Transitions>
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="QuadraticEaseIn" />
+      </Transitions>
+    </Border.Transitions>
+
+    <Grid ColumnDefinitions="Auto,*,Auto">
+      <!-- 图标背景 -->
+      <Border x:Name="IconBackground"
+              Grid.Column="0"
+              Width="40"
+              Height="40"
+              CornerRadius="20"
+              Margin="0,0,16,0"
+              Background="White">
+        <TextBlock x:Name="IconText"
+                   FontSize="24"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+      </Border>
+
+      <!-- 标题 + 消息 -->
+      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+        <TextBlock Text="{Binding Title}"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Foreground="White"
+                   Margin="0,0,0,4" />
+        <TextBlock Text="{Binding Message}"
+                   FontSize="13"
+                   Foreground="White"
+                   Opacity="0.9"
+                   TextWrapping="Wrap" />
+      </StackPanel>
+
+      <!-- 关闭按钮 -->
+      <Button Grid.Column="2"
+              Content="×"
+              FontSize="18"
+              FontWeight="SemiBold"
+              Foreground="White"
+              Background="Transparent"
+              BorderThickness="0"
+              Padding="6,2"
+              VerticalAlignment="Top"
+              Command="{Binding DismissCommand}"
+              ToolTip.Tip="关闭通知" />
+    </Grid>
+  </Border>
+</UserControl>

@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.DownloadFloatingButton"
+						 x:Name="Root">
+	<Grid Width="60" Height="60">
+		<Button x:Name="FloatingBtn"
+						Width="56"
+						Height="56"
+						HorizontalAlignment="Center"
+						VerticalAlignment="Center"
+						Background="{DynamicResource AccentBrush}"
+						Foreground="{DynamicResource TextOnAccentBrush}"
+						BorderThickness="0"
+						CornerRadius="28"
+						Padding="0"
+						Command="{Binding OpenQueueCommand, ElementName=Root}"
+						CommandParameter="{Binding PendingTaskCount, ElementName=Root}">
+			<Path Data="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"
+						Width="24"
+						Height="24"
+						Stretch="Uniform"
+						Stroke="{DynamicResource TextOnAccentBrush}"
+						StrokeThickness="2.5"
+						StrokeLineCap="Round"
+						StrokeJoin="Round" />
+		</Button>
+
+		<Border Width="20"
+					Height="20"
+					Background="#E53935"
+					CornerRadius="10"
+					HorizontalAlignment="Right"
+					VerticalAlignment="Top"
+					Margin="0,0,0,0"
+					IsVisible="{Binding HasPendingTasks, ElementName=Root}">
+			<TextBlock Text="{Binding PendingTaskCount, ElementName=Root}"
+						 FontSize="11"
+						 FontWeight="SemiBold"
+						 Foreground="White"
+						 HorizontalAlignment="Center"
+						 VerticalAlignment="Center" />
+		</Border>
+	</Grid>
+</UserControl>

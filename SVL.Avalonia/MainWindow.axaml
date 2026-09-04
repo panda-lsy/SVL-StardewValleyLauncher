@@ -1,0 +1,161 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SVL.Avalonia.ViewModels"
+    xmlns:views="using:SVL.Avalonia.Views"
+      xmlns:controls="using:SVL.Avalonia.Controls"
+      xmlns:models="using:SVL.Avalonia.Models"
+        mc:Ignorable="d" d:DesignWidth="1050" d:DesignHeight="680"
+        x:Class="SVL.Avalonia.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding WindowTitle}"
+        Icon="avares://SVL.Avalonia/Assets/Icons/icon.png"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="48"
+        Width="1050"
+        Height="680"
+        MinWidth="900"
+        MinHeight="600"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        DragDrop.AllowDrop="True"
+        DragDrop.DragOver="MainWindow_DragOver"
+        DragDrop.Drop="MainWindow_Drop">
+
+  <Window.DataTemplates>
+    <DataTemplate DataType="vm:LaunchPageViewModel">
+      <views:LaunchPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:DownloadPageViewModel">
+      <views:DownloadPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:SettingsPageViewModel">
+      <views:SettingsPageView DataContext="{Binding}" />
+    </DataTemplate>
+    <DataTemplate DataType="vm:InstancesPageViewModel">
+      <views:InstancesPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:TaskStatusPageViewModel">
+      <views:TaskStatusPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:ModSearchPageViewModel">
+      <views:ModSearchPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:ModpackSearchPageViewModel">
+      <views:ModpackSearchPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:ModDetailsPageViewModel">
+      <views:ModDetailsPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:VersionSettingsPageViewModel">
+      <views:VersionSettingsPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:InstanceSettingsPageViewModel">
+      <views:InstanceSettingsPageView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:ExportPageViewModel">
+      <views:ExportPageView />
+    </DataTemplate>
+    <!-- 浮窗通知卡片：由 NotificationContainer ItemsControl 使用 -->
+    <DataTemplate DataType="models:NotificationItem">
+      <controls:FloatingNotificationControl />
+    </DataTemplate>
+  </Window.DataTemplates>
+
+  <Grid RowDefinitions="48,*">
+    <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" BorderBrush="#335D2C1F" BorderThickness="0,0,0,1" PointerPressed="TitleBar_PointerPressed">
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Classes="nav back" IsVisible="{Binding ShowBackButton}" Command="{Binding NavigateBackCommand}">
+            <Path Data="{StaticResource Icon.ArrowLeft}" Width="16" Height="16" Stretch="Uniform" Stroke="White" StrokeThickness="1.8" VerticalAlignment="Center" HorizontalAlignment="Center" />
+          </Button>
+          <Image Source="avares://SVL.Avalonia/Assets/Icons/Junimo.png" Width="22" Height="22" VerticalAlignment="Center" IsVisible="{Binding ShowBrandIdentity}" />
+          <TextBlock Text="{Binding LauncherAppNameText}" Classes="brand" Foreground="White" IsVisible="{Binding ShowBrandIdentity}" />
+          <TextBlock Text="{Binding ResourceDetailsHeaderTitle}" Classes="brand" Foreground="White" VerticalAlignment="Center" IsVisible="{Binding ShowResourceDetailHeaderTitle}" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+          <Button Classes="nav" Classes.selected="{Binding IsLaunchPage}" Command="{Binding NavigateToLaunchCommand}">
+            <TextBlock Text="{Binding NavLaunchText}" VerticalAlignment="Center" />
+          </Button>
+          <Button Classes="nav" Classes.selected="{Binding IsDownloadPage}" Command="{Binding NavigateToDownloadCommand}">
+            <TextBlock Text="{Binding NavDownloadText}" VerticalAlignment="Center" />
+          </Button>
+          <Button Classes="nav" Classes.selected="{Binding IsTasksPage}" Command="{Binding NavigateToTasksCommand}">
+            <Grid>
+              <TextBlock Text="{Binding NavTasksText}" VerticalAlignment="Center" />
+              <Ellipse Width="7"
+                       Height="7"
+                       Fill="#FFEF5350"
+                       Stroke="White"
+                       StrokeThickness="0.8"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Top"
+                       Margin="0,-2,-2,0"
+                       IsVisible="{Binding ShowTaskNavNotification}" />
+              <Ellipse Width="7"
+                       Height="7"
+                       Fill="#FFE0B85A"
+                       Stroke="#FFF8F2DE"
+                       StrokeThickness="0.8"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Top"
+                       Margin="0,-2,-2,0"
+                       IsVisible="{Binding ShowTaskNavSoftHint}" />
+            </Grid>
+          </Button>
+          <Button Classes="nav" Classes.selected="{Binding IsSettingsPage}" Command="{Binding NavigateToSettingsCommand}">
+            <TextBlock Text="{Binding NavSettingsText}" VerticalAlignment="Center" />
+          </Button>
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="8" IsVisible="{Binding ShowWindowControlButtons}">
+          <Button Classes="winCtrl min" Click="MinimizeButton_Click" ToolTip.Tip="最小化">
+            <Path Data="{StaticResource Icon.Minus}" Width="14" Height="14" Stretch="Uniform" Fill="White" VerticalAlignment="Center" HorizontalAlignment="Center">
+              <Path.RenderTransform>
+                <TranslateTransform Y="4" />
+              </Path.RenderTransform>
+            </Path>
+          </Button>
+          <Button Classes="winCtrl max" Click="MaximizeButton_Click" ToolTip.Tip="最大化/还原">
+            <Path Data="{StaticResource Icon.Maximize}" Width="14" Height="14" Stretch="Uniform" Stroke="White" StrokeThickness="1.6" VerticalAlignment="Center" HorizontalAlignment="Center" />
+          </Button>
+          <Button Classes="winCtrl close" Click="CloseButton_Click" ToolTip.Tip="关闭">
+            <Path Data="{StaticResource Icon.X}" Width="14" Height="14" Stretch="Uniform" Stroke="White" StrokeThickness="1.8" VerticalAlignment="Center" HorizontalAlignment="Center" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" Margin="16">
+      <Border Classes="panel">
+        <ContentControl Content="{Binding CurrentPageViewModel}" />
+      </Border>
+
+      <controls:DownloadFloatingButton
+        HorizontalAlignment="Right"
+        VerticalAlignment="Bottom"
+        Margin="0,0,24,24"
+        PendingTaskCount="{Binding FloatingTaskBadgeCount}"
+        OpenQueueCommand="{Binding OpenFloatingTaskManagerCommand}"
+        IsVisible="{Binding ShowDownloadFloatingTaskButton}" />
+    </Grid>
+
+    <!-- 浮窗通知容器：跨两行覆盖所有内容，ZIndex 最高，顶部居中堆叠 -->
+    <ItemsControl x:Name="NotificationContainer"
+                  Grid.RowSpan="2"
+                  ZIndex="9999"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Top"
+                  IsHitTestVisible="True"
+                  Focusable="False">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="0,20,0,0" Spacing="10" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+    </ItemsControl>
+  </Grid>
+</Window>

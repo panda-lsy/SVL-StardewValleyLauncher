@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.ModpackFailureDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="14" MinWidth="500">
+		<StackPanel Spacing="10">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+			<TextBlock Text="{Binding FailureReason, ElementName=Root}" TextWrapping="Wrap" />
+			<TextBlock Text="日志: {Binding LogPath, ElementName=Root}" TextWrapping="Wrap" Opacity="0.8" />
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Content="查看日志" Command="{Binding OpenLogCommand, ElementName=Root}" CommandParameter="{Binding LogPath, ElementName=Root}" />
+				<Button Content="重试" Command="{Binding RetryCommand, ElementName=Root}" />
+				<Button Content="关闭" Command="{Binding CloseCommand, ElementName=Root}" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

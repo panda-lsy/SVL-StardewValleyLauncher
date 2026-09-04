@@ -1,0 +1,118 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.LocalModDetailDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="0" MinWidth="560" MaxWidth="700" MaxHeight="760" CornerRadius="12" BorderBrush="#66B89B7F" BorderThickness="1">
+		<Grid RowDefinitions="Auto,*,Auto">
+			<Border Grid.Row="0" Background="#D2A679" Padding="18,14" CornerRadius="12,12,0,0">
+				<Grid ColumnDefinitions="*,Auto,Auto">
+					<TextBlock Grid.Column="0"
+								 Text="{Binding ModName, ElementName=Root}"
+								 FontSize="19"
+								 FontWeight="SemiBold"
+								 Foreground="White"
+								 TextWrapping="Wrap" />
+					<Button Grid.Column="1"
+								Content="贡献本地化"
+								Command="{Binding OpenLocalizationContributionCommand, ElementName=Root}"
+								Margin="8,0,0,0"
+								Height="34"
+								Padding="12,0"
+								Background="#33FFFFFF"
+								BorderBrush="#66FFFFFF"
+								BorderThickness="1"
+								Foreground="White"
+								CornerRadius="7" />
+					<Button Grid.Column="2"
+								Content="i"
+								Command="{Binding ShowLocalizationContributorInfoCommand, ElementName=Root}"
+								Margin="6,0,0,0"
+								Width="34"
+								Height="34"
+								Background="#33FFFFFF"
+								BorderBrush="#66FFFFFF"
+								BorderThickness="1"
+								Foreground="White"
+								CornerRadius="17" />
+				</Grid>
+			</Border>
+
+			<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="18,14">
+				<StackPanel Spacing="10">
+					<TextBlock Text="{Binding Description, ElementName=Root}" TextWrapping="Wrap" Opacity="0.82" />
+
+					<Grid ColumnDefinitions="92,*" Margin="0,2,0,0">
+						<TextBlock Text="版本：" Opacity="0.72" />
+						<TextBlock Grid.Column="1" Text="{Binding Version, ElementName=Root}" TextWrapping="Wrap" />
+					</Grid>
+					<Grid ColumnDefinitions="92,*">
+						<TextBlock Text="作者：" Opacity="0.72" />
+						<TextBlock Grid.Column="1" Text="{Binding Author, ElementName=Root}" TextWrapping="Wrap" />
+					</Grid>
+					<Grid ColumnDefinitions="92,*">
+						<TextBlock Text="唯一ID：" Opacity="0.72" />
+						<TextBlock Grid.Column="1" Text="{Binding UniqueId, ElementName=Root}" TextWrapping="Wrap" />
+					</Grid>
+					<Grid ColumnDefinitions="92,*">
+						<TextBlock Text="路径：" Opacity="0.72" />
+						<TextBlock Grid.Column="1" Text="{Binding ModPath, ElementName=Root}" TextWrapping="Wrap" Opacity="0.78" />
+					</Grid>
+					<Grid ColumnDefinitions="92,*">
+						<TextBlock Text="来源包：" Opacity="0.72" />
+						<TextBlock Grid.Column="1" Text="{Binding SourceFileName, ElementName=Root}" TextWrapping="Wrap" Opacity="0.78" />
+					</Grid>
+
+					<StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+						<Border Background="{Binding IsEnabledBackground, ElementName=Root}" CornerRadius="4" Padding="8,3">
+							<TextBlock Text="{Binding IsEnabledText, ElementName=Root}" FontSize="11" Foreground="White" />
+						</Border>
+						<Border Background="#D2A679" CornerRadius="4" Padding="8,3" IsVisible="{Binding HasUpdate, ElementName=Root}">
+							<TextBlock Text="可更新" FontSize="11" Foreground="White" />
+						</Border>
+					</StackPanel>
+
+					<Border BorderBrush="#44B89B7F" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,4,0,0" IsVisible="{Binding HasDependencies, ElementName=Root}">
+						<StackPanel Spacing="6">
+							<TextBlock Text="依赖项" FontWeight="SemiBold" />
+							<ItemsControl ItemsSource="{Binding Dependencies, ElementName=Root}">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate>
+										<StackPanel />
+									</ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
+								<ItemsControl.ItemTemplate>
+									<DataTemplate>
+										<Button Command="{Binding OpenDependencyCommand, ElementName=Root}"
+													CommandParameter="{Binding .}"
+													Background="Transparent"
+													BorderThickness="0"
+													Padding="0"
+													HorizontalContentAlignment="Left"
+													Cursor="Hand">
+											<TextBlock FontSize="12">
+												<Run Text="{Binding StatusPrefix}" Foreground="{Binding StatusPrefixColor}" />
+												<Run Text="{Binding StatusSuffix}" Foreground="#3E8EDE" />
+												<Run Text="{Binding DisplayText}" Foreground="#3E8EDE" />
+											</TextBlock>
+										</Button>
+									</DataTemplate>
+								</ItemsControl.ItemTemplate>
+							</ItemsControl>
+						</StackPanel>
+					</Border>
+				</StackPanel>
+			</ScrollViewer>
+
+			<Border Grid.Row="2" Background="#0FD2A679" BorderBrush="#33B89B7F" BorderThickness="0,1,0,0" Padding="14,12" CornerRadius="0,0,12,12">
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+					<Button Content="打开目录"
+								Command="{Binding OpenFolderCommand, ElementName=Root}"
+								Height="34"
+								Padding="14,0"
+								IsVisible="{Binding CanOpenFolder, ElementName=Root}" />
+					<Button Content="关闭" Command="{Binding CloseCommand, ElementName=Root}" Height="34" Padding="18,0" />
+				</StackPanel>
+			</Border>
+		</Grid>
+	</Border>
+</UserControl>

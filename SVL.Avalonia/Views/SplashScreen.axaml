@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Views.SplashScreen"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="20" MinWidth="480">
+		<StackPanel Spacing="12" VerticalAlignment="Center">
+			<TextBlock Text="{Binding AppName, ElementName=Root}" Classes="heroTitle" HorizontalAlignment="Center" />
+			<TextBlock Text="{Binding StatusText, ElementName=Root}" HorizontalAlignment="Center" Opacity="0.8" />
+			<ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressPercent, ElementName=Root}" Height="10" />
+		</StackPanel>
+	</Border>
+</UserControl>

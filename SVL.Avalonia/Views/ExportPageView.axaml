@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SVL.Avalonia.ViewModels"
+             x:Class="SVL.Avalonia.Views.ExportPageView"
+             x:DataType="vm:ExportPageViewModel">
+  <Border Classes="panel">
+    <StackPanel Spacing="10">
+      <TextBlock Text="{Binding Title}" Classes="heroTitle" />
+      <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+      <Separator />
+
+      <TextBlock Text="导出文件名前缀" FontWeight="SemiBold" />
+      <TextBox Text="{Binding ExportNamePrefix}" Watermark="SVL-Modpack" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="导出当前 Mods 为 ZIP" Command="{Binding ExportCurrentModsCommand}" />
+        <Button Content="打开导出文件" Command="{Binding OpenExportFolderCommand}" />
+      </StackPanel>
+
+      <TextBlock Text="{Binding LastExportPath, StringFormat=最近导出: {0}}" TextWrapping="Wrap" Opacity="0.75" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Opacity="0.75" />
+    </StackPanel>
+  </Border>
+</UserControl>

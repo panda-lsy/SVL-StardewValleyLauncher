@@ -1,0 +1,51 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    SVL 矢量图标资源字典
+    基于 Lucide Icons (MIT) SVG path 数据转换为 Avalonia StreamGeometry
+    所有图标均为 24x24 viewBox，使用 CurrentForeground 绑定颜色
+  -->
+
+  <!-- 导航图标 -->
+  <StreamGeometry x:Key="Icon.BarChart">M3 3v18h18M7 16l4-8 4 5 5-9</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Download">M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Package">M16.5 9.4l-9-5.19M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12.01l8.73-5.05M12 22.08V12</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Settings">M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2zM12 15a3 3 0 100-6 3 3 0 000 6z</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Upload">M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12</StreamGeometry>
+  <StreamGeometry x:Key="Icon.ArrowLeft">M19 12H5M12 19l-7-7 7-7</StreamGeometry>
+
+  <!-- 窗口控制图标 -->
+  <StreamGeometry x:Key="Icon.Minus">M6 10.5 L18 10.5 L18 13.5 L6 13.5 Z</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Maximize">M8 8 L16 8 L16 16 L8 16 Z</StreamGeometry>
+
+
+  <!-- 版本信息图标 -->
+  <StreamGeometry x:Key="Icon.Gamepad">M6 11h4M8 9v4M15 12h.01M18 10h.01M17.32 5H6.68a4 4 0 00-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 003 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 019.828 16h4.344a2 2 0 011.414.586L17 18c.5.5 1 1 2 1a3 3 0 003-3c0-1.544-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0017.32 5z</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Wrench">M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Lightbulb">M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z</StreamGeometry>
+
+  <!-- 状态/警告图标 -->
+  <StreamGeometry x:Key="Icon.AlertTriangle">M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Info">M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 16v-4M12 8h.01</StreamGeometry>
+
+  <!-- 操作图标 -->
+  <StreamGeometry x:Key="Icon.RefreshCw">M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15</StreamGeometry>
+  <StreamGeometry x:Key="Icon.FileText">M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Globe">M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z</StreamGeometry>
+  <StreamGeometry x:Key="Icon.ExternalLink">M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3</StreamGeometry>
+  <StreamGeometry x:Key="Icon.FolderOpen">M2 19a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H4a2 2 0 00-2 2z</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Power">M18.36 6.64a9 9 0 11-12.73 0M12 2v10</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Save">M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8</StreamGeometry>
+  <StreamGeometry x:Key="Icon.RotateCcw">M1 4v6h6M3.51 15a9 9 0 102.13-9.36L1 10</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Trash2">M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6</StreamGeometry>
+
+  <!-- 其他图标 -->
+  <StreamGeometry x:Key="Icon.Inbox">M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Lock">M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Unlock">M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 019.9-1</StreamGeometry>
+  <StreamGeometry x:Key="Icon.LogOut">M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9</StreamGeometry>
+  <StreamGeometry x:Key="Icon.Check">M20 6L9 17l-5-5</StreamGeometry>
+  <StreamGeometry x:Key="Icon.X">M18 6L6 18M6 6l12 12</StreamGeometry>
+  <StreamGeometry x:Key="Icon.HardDrive">M2 12h20M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11zM6 16h.01M10 16h.01</StreamGeometry>
+
+</ResourceDictionary>

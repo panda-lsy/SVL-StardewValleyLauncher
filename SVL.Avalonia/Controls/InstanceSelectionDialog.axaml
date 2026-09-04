@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.InstanceSelectionDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="14" MinWidth="460">
+		<StackPanel Spacing="10">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+			<TextBlock Text="选择 Base 路径" />
+			<ComboBox ItemsSource="{Binding Instances, ElementName=Root}"
+								SelectedItem="{Binding SelectedInstance, ElementName=Root, Mode=TwoWay}"
+								Width="420"
+								HorizontalAlignment="Stretch" />
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Content="取消" Command="{Binding CancelCommand, ElementName=Root}" />
+				<Button Content="确认" Command="{Binding ConfirmCommand, ElementName=Root}" CommandParameter="{Binding SelectedInstance, ElementName=Root}" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

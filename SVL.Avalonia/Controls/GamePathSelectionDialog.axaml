@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.GamePathSelectionDialog"
+						 x:Name="Root">
+	<Border Classes="panel" Padding="14" MinWidth="500">
+		<StackPanel Spacing="10">
+			<TextBlock Text="{Binding Title, ElementName=Root}" Classes="heroTitle" />
+			<TextBlock Text="{Binding Description, ElementName=Root}" TextWrapping="Wrap" />
+			<TextBlock Text="游戏目录" />
+			<Grid ColumnDefinitions="*,Auto">
+				<TextBox Grid.Column="0" Text="{Binding SelectedPath, ElementName=Root, Mode=TwoWay}" Watermark="选择或输入 Stardew Valley 安装目录" />
+				<Button Grid.Column="1" Margin="8,0,0,0" Content="浏览" Command="{Binding BrowseCommand, ElementName=Root}" />
+			</Grid>
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+				<Button Content="取消" Command="{Binding CancelCommand, ElementName=Root}" />
+				<Button Content="确认" Command="{Binding ConfirmCommand, ElementName=Root}" CommandParameter="{Binding SelectedPath, ElementName=Root}" />
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

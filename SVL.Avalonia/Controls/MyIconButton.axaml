@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Controls.MyIconButton"
+						 x:Name="Root">
+	<Button Command="{Binding Command, ElementName=Root}"
+					CommandParameter="{Binding CommandParameter, ElementName=Root}"
+					IsEnabled="{Binding IsButtonEnabled, ElementName=Root}"
+					HorizontalAlignment="{Binding HorizontalButtonAlignment, ElementName=Root}">
+		<StackPanel Orientation="Horizontal" Spacing="6">
+			<TextBlock Text="{Binding Icon, ElementName=Root}" />
+			<TextBlock Text="{Binding Text, ElementName=Root}" />
+		</StackPanel>
+	</Button>
+</UserControl>

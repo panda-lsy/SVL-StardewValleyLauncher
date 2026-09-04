@@ -1,0 +1,11 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 x:Class="SVL.Avalonia.Views.VersionSettingsContentView">
+	<Border Classes="panel">
+		<StackPanel Spacing="8">
+			<TextBlock Text="版本设置内容" Classes="heroTitle" />
+			<TextBlock Text="该区域展示启动模式、安全启动策略与游戏路径探测结果。" TextWrapping="Wrap" />
+			<TextBlock Text="请在版本设置页面进行保存以应用到后续启动流程。" TextWrapping="Wrap" Opacity="0.75" />
+		</StackPanel>
+	</Border>
+</UserControl>
