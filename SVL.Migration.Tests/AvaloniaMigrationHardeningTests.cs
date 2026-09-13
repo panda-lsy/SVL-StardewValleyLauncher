@@ -42,6 +42,13 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void CacheManagement_ShouldExposeSharedRemoteImageCacheWithoutChangingLegacyPath()
+    {
+        Assert.AreEqual("图片/图标缓存", CacheManagementService.GetCategoryDisplayName(CacheCategory.Images));
+        Assert.AreEqual("smapi-icon-cache", Path.GetFileName(CacheManagementService.GetCachePath(CacheCategory.Images)));
+    }
+
+    [TestMethod]
     public void SearchPages_ShouldExposeWpfFiltersAndConfiguredDefaultSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-search-page-filter-test-" + Guid.NewGuid().ToString("N"));
