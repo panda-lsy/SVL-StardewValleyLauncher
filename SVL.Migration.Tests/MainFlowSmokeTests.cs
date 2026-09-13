@@ -129,6 +129,41 @@ public class MainFlowSmokeTests
     }
 
     [TestMethod]
+    public void CollectionModProgress_ShouldRefreshWhenChildStateChangesThroughSync()
+    {
+        var task = new DownloadTaskItem
+        {
+            Name = "进度刷新 Collection",
+            TaskAction = DownloadTaskAction.InstallCollection
+        };
+        var changedProperties = new List<string>();
+        task.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName ?? string.Empty);
+
+        task.SyncCollectionModProgress(
+            "可选 Mod",
+            phase: 1,
+            optional: true,
+            state: CollectionModTaskState.NeedsDecision,
+            message: "等待选择",
+            requiresManualAction: true);
+
+        changedProperties.Clear();
+        task.SyncCollectionModProgress(
+            "可选 Mod",
+            phase: 1,
+            optional: true,
+            state: CollectionModTaskState.Skipped,
+            message: "用户已选择跳过此可选 Mod",
+            requiresManualAction: false);
+
+        Assert.AreEqual(1, task.CollectionModFinishedCount);
+        Assert.AreEqual("1/1 个 Mod 已处理", task.CollectionModProgressText);
+        Assert.AreEqual(100, task.CollectionModProgress);
+        CollectionAssert.Contains(changedProperties, nameof(DownloadTaskItem.CollectionModFinishedCount));
+        CollectionAssert.Contains(changedProperties, nameof(DownloadTaskItem.CollectionModProgressText));
+    }
+
+    [TestMethod]
     public void TaskStatus_ShouldExposeExplicitSkipActionForOptionalCollectionMod()
     {
         var taskStatus = new TaskStatusPageViewModel();

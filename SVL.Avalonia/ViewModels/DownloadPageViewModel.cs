@@ -6523,9 +6523,17 @@ public partial class DownloadPageViewModel : ObservableObject
             return;
         }
 
-        item.State = CollectionModTaskState.Skipped;
-        item.RequiresManualAction = false;
-        item.Message = "用户已选择跳过此可选 Mod";
+        // 通过任务同步入口更新子项，确保任务页上的汇总进度、已处理数量
+        // 和当前操作提示都能收到 PropertyChanged；不要直接改子项属性后
+        // 只保存状态，否则 UI 可能仍显示旧的 0/N 进度。
+        task.SyncCollectionModProgress(
+            item.Name,
+            item.Phase,
+            item.Optional,
+            CollectionModTaskState.Skipped,
+            "用户已选择跳过此可选 Mod",
+            item.SourceUrl,
+            requiresManualAction: false);
 
         var unresolvedItems = task.CollectionModItems
             .Where(candidate => candidate.State is CollectionModTaskState.Failed or CollectionModTaskState.NeedsDecision)
