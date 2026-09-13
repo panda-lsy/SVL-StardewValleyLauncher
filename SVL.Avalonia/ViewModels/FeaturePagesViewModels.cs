@@ -8996,16 +8996,31 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return true;
         }
 
-        if (string.Equals(credential.SourceKind, "parent-inherited", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(credential.SourceKind, "modpack-parent-inherited", StringComparison.OrdinalIgnoreCase))
+        var sourceKind = credential.SourceKind?.Trim() ?? string.Empty;
+        if (string.Equals(sourceKind, "parent-inherited", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(sourceKind, "modpack-parent-inherited", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
-        // 兼容更早的导入格式：只有在没有明确 sourceKind、没有下载文件名/URL，
-        // 并且 manifest 明确是 ContentPack 时，才把它视为没有独立来源的
-        // 嵌套子 Mod。不能再仅凭 sourceKind=modpack 或 project/file ID 判断。
-        if (!string.IsNullOrWhiteSpace(credential.SourceKind))
+        // 兼容一类已经落盘的旧整合包数据：旧版本会把每个 ContentPack
+        // 逐条写成 sourceKind=modpack-entry，并复制父整合包的 project/file
+        // ID，但不会保存自己的 fileName/downloadUrl。此时 manifest 才是
+        // 判断“它是否为嵌套子 Mod”的可靠依据；不能因为 sourceKind 已有值
+        // 就继续把它当成独立更新源。真实的独立 Mod 条目仍要求有文件名或
+        // 下载地址，或者使用非 ContentPack 的 manifest。
+        if (string.Equals(sourceKind, "modpack-entry", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(credential.FileName) &&
+            string.IsNullOrWhiteSpace(credential.DownloadUrl) &&
+            HasContentPackManifest(modDirectory))
+        {
+            return true;
+        }
+
+        // 更早的导入格式没有 sourceKind，也没有下载文件名/URL；同样只在
+        // manifest 明确为 ContentPack 时认定为父级继承，不能仅凭 project/file
+        // ID 或一个模糊的 sourceKind=modpack 推断。
+        if (!string.IsNullOrWhiteSpace(sourceKind))
         {
             return false;
         }
@@ -9017,6 +9032,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return false;
         }
 
+        return HasContentPackManifest(modDirectory);
+    }
+
+    private static bool HasContentPackManifest(string modDirectory)
+    {
         var manifestPath = FindManifestPath(modDirectory);
         if (string.IsNullOrWhiteSpace(manifestPath))
         {
@@ -9026,12 +9046,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         try
         {
             using var document = TryReadManifestDocument(manifestPath);
-            if (document == null || document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return false;
-            }
-
-            if (!TryGetJsonPropertyIgnoreCase(document.RootElement, "ContentPackFor", out var contentPackFor))
+            if (document == null || document.RootElement.ValueKind != JsonValueKind.Object ||
+                !TryGetJsonPropertyIgnoreCase(document.RootElement, "ContentPackFor", out var contentPackFor))
             {
                 return false;
             }

@@ -132,3 +132,9 @@ Unix 主机对应的 `scripts/package-avalonia.sh` 入口也已补齐，统一�
 本轮补充：嵌套 ContentPack 的父级来源识别已与平台解耦；单独检查更新时同样显示“继承父 Mod 来源”，并新增 Nexus 来源回归测试。
 本轮验证统计更新：跨平台嵌套子 Mod 来源回归加入后，迁移测试为 **294 总计，其中 292 通过、2 跳过**。
 本轮冲突检测收敛：旧分析入口不再读取 Mod 文件，用户界面只依据社区 `hardConflicts`/`functionalOverlaps` 字段，`svl-source.json` 不会再制造文件冲突。
+
+本轮实际目录兼容修复：针对旧数据中 ContentPack 被错误写成
+`sourceKind=modpack-entry`、同时复制父整合包 project/file ID 且没有独立
+`fileName/downloadUrl` 的情况，更新检查现在会结合 manifest 的
+`ContentPackFor` 判定为父 Mod 的继承来源，不再把整合包版本误报成子 Mod
+的可更新版本；对应旧 `MarketTown` 目录形态已加入回归测试。

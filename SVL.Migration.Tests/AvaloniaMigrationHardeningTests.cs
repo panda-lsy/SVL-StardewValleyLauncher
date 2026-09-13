@@ -1822,6 +1822,49 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void VersionSettings_ShouldTreatLegacyModpackEntryContentPackAsInherited()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-legacy-modpack-entry-content-pack-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            // 这对应实际旧数据：子 Mod 误写成 modpack-entry，并复制了整合包
+            // 的 project/file ID，但没有自己的文件名或下载地址。
+            File.WriteAllText(
+                Path.Combine(root, "manifest.json"),
+                "{\n" +
+                "  \"Name\": \"MarketTown - Cloned NPC RSV\",\n" +
+                "  \"UniqueID\": \"d5a1lamdtd.MarketTown.CloneNPC_RSV\",\n" +
+                "  \"Version\": \"5.0.0\",\n" +
+                "  \"ContentPackFor\": { \"UniqueID\": \"Pathoschild.ContentPatcher\" },\n" +
+                "}");
+            File.WriteAllText(
+                Path.Combine(root, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"5276101\",\"sourceKind\":\"modpack-entry\",\"hasUpdate\":true,\"latestVersion\":\"6.7.1\"}");
+
+            var reader = typeof(VersionSettingsPageViewModel).GetMethod(
+                "TryReadSourceCredential",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var guard = typeof(VersionSettingsPageViewModel).GetMethod(
+                "IsInheritedModpackSource",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(reader);
+            Assert.IsNotNull(guard);
+
+            var credential = reader!.Invoke(null, [root]);
+            Assert.IsNotNull(credential);
+            Assert.IsTrue((bool)guard!.Invoke(null, [root, credential])!);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void VersionSettings_ShouldRecognizeInheritedNestedModRegardlessOfPlatform()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-nested-source-platform-test-" + Guid.NewGuid().ToString("N"));
