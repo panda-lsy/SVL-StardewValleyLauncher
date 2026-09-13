@@ -44,16 +44,24 @@ public sealed class CollectionInstallResult
     public string RuntimePath { get; init; } = string.Empty;
     public string VersionRootPath { get; init; } = string.Empty;
     public List<string> FailedMods { get; init; } = [];
+    /// <summary>可选 Mod 自动安装失败，等待用户明确选择跳过或补装。</summary>
+    public List<string> PendingOptionalMods { get; init; } = [];
     public List<string> InstalledMods { get; init; } = [];
 
-    public static CollectionInstallResult Success(string runtimePath, string versionRootPath, List<string> installedMods, List<string>? failedMods = null) => new()
+    public static CollectionInstallResult Success(
+        string runtimePath,
+        string versionRootPath,
+        List<string> installedMods,
+        List<string>? failedMods = null,
+        List<string>? pendingOptionalMods = null) => new()
     {
         IsSuccess = true,
         Message = "Collection 安装完成",
         RuntimePath = runtimePath,
         VersionRootPath = versionRootPath,
         InstalledMods = installedMods,
-        FailedMods = failedMods ?? []
+        FailedMods = failedMods ?? [],
+        PendingOptionalMods = pendingOptionalMods ?? []
     };
 
     public static CollectionInstallResult Failed(string message, List<string>? failedMods = null) => new()
@@ -157,6 +165,7 @@ public sealed class CollectionInstallService
     /// <param name="gameBasePath">用户选择的游戏 Base 路径。</param>
     /// <param name="updateExisting">目标实例已存在时是否更新原实例。</param>
     /// <param name="resumeInstalledModNames">显式重试时允许复用的已完成条目名称。</param>
+    /// <param name="skipOptionalModNames">用户已明确跳过的可选条目名称。</param>
     public async Task<CollectionInstallResult> InstallCollectionAsync(
         string collectionSlug,
         int revision,
@@ -165,7 +174,8 @@ public sealed class CollectionInstallService
         CancellationToken cancellationToken = default,
         string? gameBasePath = null,
         bool updateExisting = false,
-        IReadOnlySet<string>? resumeInstalledModNames = null)
+        IReadOnlySet<string>? resumeInstalledModNames = null,
+        IReadOnlySet<string>? skipOptionalModNames = null)
     {
         if (string.IsNullOrWhiteSpace(collectionSlug))
         {
@@ -223,7 +233,8 @@ public sealed class CollectionInstallService
                     cancellationToken,
                     null,
                     updateExisting,
-                    resumeInstalledModNames);
+                    resumeInstalledModNames,
+                    skipOptionalModNames);
             }
 
             var settings = _settingsStore.Load();
@@ -285,7 +296,8 @@ public sealed class CollectionInstallService
                 cancellationToken,
                 null,
                 updateExisting: updateExisting,
-                resumeInstalledModNames: resumeInstalledModNames);
+                resumeInstalledModNames: resumeInstalledModNames,
+                skipOptionalModNames: skipOptionalModNames);
         }
         catch (OperationCanceledException)
         {
@@ -342,6 +354,7 @@ public sealed class CollectionInstallService
     /// <param name="gameBasePath">用户选择的游戏 Base 路径。</param>
     /// <param name="customIconPath">Collection 旁路图标路径，优先于压缩包内图标。</param>
     /// <param name="resumeInstalledModNames">显式重试时允许复用的已完成条目名称。</param>
+    /// <param name="skipOptionalModNames">用户已明确跳过的可选条目名称。</param>
     public async Task<CollectionInstallResult> InstallCollectionFromArchiveAsync(
         string archivePath,
         string instanceName,
@@ -350,7 +363,8 @@ public sealed class CollectionInstallService
         string? gameBasePath = null,
         string? customIconPath = null,
         bool updateExisting = false,
-        IReadOnlySet<string>? resumeInstalledModNames = null)
+        IReadOnlySet<string>? resumeInstalledModNames = null,
+        IReadOnlySet<string>? skipOptionalModNames = null)
     {
         if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
         {
@@ -396,7 +410,8 @@ public sealed class CollectionInstallService
                 cancellationToken,
                 customIconPath,
                 updateExisting,
-                resumeInstalledModNames);
+                resumeInstalledModNames,
+                skipOptionalModNames);
         }
         catch (OperationCanceledException)
         {
@@ -427,10 +442,12 @@ public sealed class CollectionInstallService
         CancellationToken cancellationToken,
         string? customIconPath,
         bool updateExisting,
-        IReadOnlySet<string>? resumeInstalledModNames)
+        IReadOnlySet<string>? resumeInstalledModNames,
+        IReadOnlySet<string>? skipOptionalModNames)
     {
         var installedMods = new List<string>();
         var failedMods = new List<string>();
+        var pendingOptionalMods = new List<string>();
 
         try
         {
@@ -560,7 +577,7 @@ public sealed class CollectionInstallService
             var modsToDownload = modGroups.SelectMany(g => g).ToList();
             var completedMods = 0;
             var totalToDownload = modsToDownload.Count;
-            var skippedOptionalMods = 0;
+            var pendingOptionalCount = 0;
 
             onProgress?.Invoke(new CollectionInstallProgress
             {
@@ -589,6 +606,25 @@ public sealed class CollectionInstallService
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var modName = mod.Name ?? $"mod-{mod.Source?.ModId}";
+
+                    if (mod.Optional &&
+                        skipOptionalModNames?.Contains(modName) == true)
+                    {
+                        ReportCollectionModProgress(
+                            onProgress,
+                            mod,
+                            CollectionModTaskState.Skipped,
+                            "此前已由用户选择跳过");
+                        completedMods++;
+                        onProgress?.Invoke(new CollectionInstallProgress
+                        {
+                            Percent = 17 + (int)(60.0 * completedMods / Math.Max(1, totalToDownload)),
+                            StepText = $"阶段 {phaseGroup.Key}: 跳过可选 Mod",
+                            SubProgress = CalculateCompletionPercent(completedMods, totalToDownload),
+                            SubProgressText = $"{completedMods}/{totalToDownload} 已处理"
+                        });
+                        continue;
+                    }
 
                     // 显式重试时，失败通常只是一两个来源暂时不可用；已经成功的
                     // 条目不应再次下载或覆盖。任务状态只是候选信号，必须再校验
@@ -639,12 +675,14 @@ public sealed class CollectionInstallService
                                 var message = patchResult.Message;
                                 if (mod.Optional)
                                 {
-                                    skippedOptionalMods++;
+                                    pendingOptionalCount++;
+                                    pendingOptionalMods.Add($"{modName}: {message}");
                                     ReportCollectionModProgress(
                                         onProgress,
                                         mod,
-                                        CollectionModTaskState.Skipped,
-                                        $"可选 Mod，已跳过：{message}");
+                                        CollectionModTaskState.NeedsDecision,
+                                        $"可选 Mod 安装失败，请选择跳过或补装：{message}",
+                                        requiresManualAction: true);
                                 }
                                 else
                                 {
@@ -679,12 +717,14 @@ public sealed class CollectionInstallService
                         {
                             if (mod.Optional)
                             {
-                                skippedOptionalMods++;
+                                pendingOptionalCount++;
+                                pendingOptionalMods.Add($"{modName}: {modResult.Message}");
                                 ReportCollectionModProgress(
                                     onProgress,
                                     mod,
-                                    CollectionModTaskState.Skipped,
-                                    $"可选 Mod，已跳过：{modResult.Message}");
+                                    CollectionModTaskState.NeedsDecision,
+                                    $"可选 Mod 安装失败，请选择跳过或补装：{modResult.Message}",
+                                    requiresManualAction: true);
                             }
                             else
                             {
@@ -702,12 +742,14 @@ public sealed class CollectionInstallService
                     {
                         if (mod.Optional)
                         {
-                            skippedOptionalMods++;
+                            pendingOptionalCount++;
+                            pendingOptionalMods.Add($"{modName}: {ex.Message}");
                             ReportCollectionModProgress(
                                 onProgress,
                                 mod,
-                                CollectionModTaskState.Skipped,
-                                $"可选 Mod，已跳过：{ex.Message}");
+                                CollectionModTaskState.NeedsDecision,
+                                $"可选 Mod 安装失败，请选择跳过或补装：{ex.Message}",
+                                requiresManualAction: true);
                         }
                         else
                         {
@@ -741,8 +783,8 @@ public sealed class CollectionInstallService
             onProgress?.Invoke(new CollectionInstallProgress
             {
                 Percent = 78,
-                StepText = skippedOptionalMods > 0
-                    ? $"Mod 下载安装完成（{failedMods.Count} 个失败，跳过 {skippedOptionalMods} 个可选 Mod）"
+                StepText = pendingOptionalCount > 0
+                    ? $"Mod 下载安装完成（{failedMods.Count} 个失败，{pendingOptionalCount} 个可选 Mod 待处理）"
                     : $"Mod 下载安装完成（{failedMods.Count} 个失败）",
                 SubProgress = -1
             });
@@ -799,16 +841,16 @@ public sealed class CollectionInstallService
             ExtractCollectionIcon(collectionRoot, versionRoot, customIconPath, extractDir);
             SaveInstanceRecord(instanceName, runtimePath);
 
-            var finalPercent = failedMods.Count > 0 ? 99 : 100;
+            var finalPercent = failedMods.Count > 0 || pendingOptionalMods.Count > 0 ? 99 : 100;
             onProgress?.Invoke(new CollectionInstallProgress
             {
                 Percent = finalPercent,
-                StepText = failedMods.Count > 0
-                    ? $"Collection 安装完成（{failedMods.Count} 个 Mod 失败，可重试）"
+                StepText = failedMods.Count > 0 || pendingOptionalMods.Count > 0
+                    ? $"Collection 安装完成（{failedMods.Count} 个 Mod 失败，{pendingOptionalMods.Count} 个可选 Mod 待处理）"
                     : "Collection 安装完成"
             });
 
-            return CollectionInstallResult.Success(runtimePath, versionRoot, installedMods, failedMods);
+            return CollectionInstallResult.Success(runtimePath, versionRoot, installedMods, failedMods, pendingOptionalMods);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -886,7 +928,8 @@ public sealed class CollectionInstallService
         Action<CollectionInstallProgress>? onProgress,
         NexusCollectionJsonMod mod,
         CollectionModTaskState state,
-        string message)
+        string message,
+        bool requiresManualAction = false)
     {
         onProgress?.Invoke(new CollectionInstallProgress
         {
@@ -896,7 +939,7 @@ public sealed class CollectionInstallService
             ModState = state,
             ModMessage = message,
             ModSourceUrl = mod.Source?.Url ?? string.Empty,
-            ModRequiresManualAction = IsManualSourceRequiringUserAction(mod.Source)
+            ModRequiresManualAction = requiresManualAction || IsManualSourceRequiringUserAction(mod.Source)
         });
     }
 

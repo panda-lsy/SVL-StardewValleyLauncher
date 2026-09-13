@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`1868923`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`eff73b9`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -25,7 +25,7 @@
 | --- | --- | --- |
 | `manifest.json` 的 `UpdateKeys=GitHub:...` 自动检查更新 | WPF/Core 的 `ModManager` 仍明确记录为 TODO；Avalonia 已补齐 GitHub 仓库/release 解析、稳定版本比较、Release 压缩包选择、任务状态/导出/整合包来源持久化，并覆盖回归测试 | 后续只需在真实 GitHub 仓库做一次端到端 UI 验收；无 Release 压缩包时会明确提示，不把源码包误当 Mod 安装包 |
 | Nexus Collection 的 `manual` 来源 | WPF 安装器仍是 TODO；Avalonia 已覆盖 NXM、API、浏览器回调及 HTTP 直链，并将 `manual` 网页/无来源条目标记为需手动处理；只有明确归档直链才自动下载 | 任务页保留来源地址并提供“打开来源”，用户完成下载后可拖入当前实例 Mods 页面；不把网页地址当压缩包 |
-| Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 已改为统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；仍未提供旧向导的人工逐页导航/手动跳过交互 | 保持统一队列作为默认路径；若真实用户仍需要逐页决策，再在任务详情增加“不安装此可选项/继续下一项”，并复用现有来源凭证、备份和状态模型，不恢复旧任务类型 |
+| Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 继续使用统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；可选 Mod 自动失败现在进入“待处理”，用户可明确选择“选择文件并安装”或“跳过可选 Mod”，选择会持久化并在重试时生效；仍未提供旧向导的人工逐页导航 | 保持统一队列作为默认路径；若真实用户仍需要逐页决策，再在任务详情增加“继续下一项”等导航，不恢复旧任务类型 |
 | 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，代码未发现实际消费逻辑；Avalonia 目前实现的是启动时自动检查和用户确认后下载安装 | 暂不视为已存在但漏迁移的完成特性；若确定需要，再单独定义自动下载/通知策略 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
@@ -163,3 +163,8 @@ WPF/Core 业务功能；Avalonia 设置页已将实际共用的远程图片缓�
 本轮继续补齐旧图片缓存迁移：读取、统计、过期清理和全量清理同时兼容 WPF 的
 `%LocalAppData%\\SVL\\cache\\images`；新下载仍写入 Avalonia 缓存目录，并保留旧版
 按原始 URL 计算 SHA-256 的文件名规则，升级后无需重新下载已有远程图片。
+
+本轮继续补齐 Collection 可选项决策：自动安装失败的可选 Mod 不再静默记为
+Skipped，而是持久化为 NeedsDecision；任务详情提供“选择文件并安装”和
+“跳过可选 Mod”，用户确认后的跳过列表会传入所有 Collection 安装/重试入口，
+避免重试时再次下载已经明确跳过的条目。剩余必需 Mod 失败仍保持可重试状态。

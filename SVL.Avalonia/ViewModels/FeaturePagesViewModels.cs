@@ -155,6 +155,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     public event Action<DownloadTaskItem>? OpenRetryReportRequested;
     public event Action<DownloadTaskItem>? OpenBrowserRequested;
     public event Func<DownloadTaskItem, CollectionModTaskItem, Task>? InstallCollectionModFromFileRequested;
+    public event Action<DownloadTaskItem, CollectionModTaskItem>? SkipCollectionModRequested;
     public event Action? ClearCompletedRequested;
     public event Action? RetryFailedItemsRequested;
     public event Action? NavigateToDownloadRequested;
@@ -448,7 +449,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
 
         return SelectedTask?.CollectionModItems.Any(item =>
             item.RequiresManualAction &&
-            item.State is CollectionModTaskState.Failed or CollectionModTaskState.Skipped) == true;
+            item.State is CollectionModTaskState.Failed or CollectionModTaskState.Skipped or CollectionModTaskState.NeedsDecision) == true;
     }
 
     [RelayCommand]
@@ -615,6 +616,18 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
         {
             await handler(SelectedTask, item);
         }
+    }
+
+    [RelayCommand]
+    private void SkipCollectionMod(CollectionModTaskItem? item)
+    {
+        if (item == null || SelectedTask == null || !item.CanSkipOptional)
+        {
+            return;
+        }
+
+        SkipCollectionModRequested?.Invoke(SelectedTask, item);
+        AddLog($"已请求跳过可选 Mod: {item.Name}");
     }
 
     [RelayCommand]

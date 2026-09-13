@@ -6186,6 +6186,7 @@ public partial class DownloadPageViewModel : ObservableObject
         var resumeInstalledModNames = task.CollectionModsToResume.Count > 0
             ? task.CollectionModsToResume.ToHashSet(StringComparer.OrdinalIgnoreCase)
             : null;
+        var skipOptionalModNames = GetSkippedOptionalCollectionModNames(task);
         task.CollectionModsToResume.Clear();
         task.ResetCollectionModProgress();
         task.CanRetry = false;
@@ -6218,28 +6219,35 @@ public partial class DownloadPageViewModel : ObservableObject
                 gameBasePath: task.TargetGamePath,
                 customIconPath: task.CustomIconPath,
                 updateExisting: updateExisting,
-                resumeInstalledModNames: resumeInstalledModNames);
+                resumeInstalledModNames: resumeInstalledModNames,
+                skipOptionalModNames: skipOptionalModNames);
 
             if (result.IsSuccess)
             {
                 task.InstalledPath = result.RuntimePath;
                 task.InstalledDirectory = result.VersionRootPath;
                 var hasFailedMods = result.FailedMods.Count > 0;
-                task.Progress = hasFailedMods ? 99 : 100;
+                var hasPendingOptionalMods = result.PendingOptionalMods.Count > 0;
+                var hasUnresolvedMods = hasFailedMods || hasPendingOptionalMods;
+                task.Progress = hasUnresolvedMods ? 99 : 100;
                 var failText = hasFailedMods
                     ? $"（{result.FailedMods.Count} 个 Mod 下载失败，可重试）"
-                    : string.Empty;
+                    : hasPendingOptionalMods
+                        ? $"（{result.PendingOptionalMods.Count} 个可选 Mod 待处理）"
+                        : string.Empty;
                 task.SetState(
-                    hasFailedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
-                    hasFailedMods ? $"部分完成{failText}" : "已完成");
+                    hasUnresolvedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
+                    hasUnresolvedMods ? $"部分完成{failText}" : "已完成");
                 task.CanRetry = hasFailedMods;
-                Status = hasFailedMods
+                Status = hasUnresolvedMods
                     ? $"Collection 安装部分完成: {task.Name}"
                     : $"Collection 安装完成: {task.Name}";
-                EmitLog($"Collection 安装{(hasFailedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {result.RuntimePath}, 安装 {result.InstalledMods.Count} 个, 失败 {result.FailedMods.Count} 个");
-                if (result.FailedMods.Count > 0)
+                task.FailedDetails = string.Join(
+                    "\n",
+                    result.FailedMods.Concat(result.PendingOptionalMods));
+                EmitLog($"Collection 安装{(hasUnresolvedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {result.RuntimePath}, 安装 {result.InstalledMods.Count} 个, 失败 {result.FailedMods.Count} 个，可选待处理 {result.PendingOptionalMods.Count} 个");
+                if (hasUnresolvedMods)
                 {
-                    task.FailedDetails = string.Join("\n", result.FailedMods);
                     EmitLog($"失败 Mod 列表:\n{task.FailedDetails}");
                 }
                 // 通知 MainWindowViewModel 刷新 LaunchPage/InstancesPage 实例列表
@@ -6440,8 +6448,8 @@ public partial class DownloadPageViewModel : ObservableObject
                 EmitLog($"Collection Mod 来源凭证写入失败（不影响安装）: {item.Name}, 错误: {sourceException.Message}");
             }
 
-            var remainingFailedCount = task.CollectionModItems.Count(candidate =>
-                candidate.State == CollectionModTaskState.Failed &&
+            var remainingUnresolvedCount = task.CollectionModItems.Count(candidate =>
+                (candidate.State is CollectionModTaskState.Failed or CollectionModTaskState.NeedsDecision) &&
                 !string.Equals(candidate.Name, item.Name, StringComparison.OrdinalIgnoreCase));
             task.SyncCollectionModProgress(
                 item.Name,
@@ -6454,16 +6462,17 @@ public partial class DownloadPageViewModel : ObservableObject
             task.FailedDetails = string.Join(
                 Environment.NewLine,
                 task.CollectionModItems
-                    .Where(candidate => candidate.State == CollectionModTaskState.Failed)
+                    .Where(candidate => candidate.State is CollectionModTaskState.Failed or CollectionModTaskState.NeedsDecision)
                     .Select(candidate => $"{candidate.Name}: {candidate.Message}"));
-            task.Progress = remainingFailedCount > 0 ? 99 : 100;
+            task.Progress = remainingUnresolvedCount > 0 ? 99 : 100;
             task.SetState(
-                remainingFailedCount > 0 ? DownloadTaskState.Failed : DownloadTaskState.Completed,
-                remainingFailedCount > 0
-                    ? $"部分完成（仍有 {remainingFailedCount} 个 Mod 失败）"
+                remainingUnresolvedCount > 0 ? DownloadTaskState.Failed : DownloadTaskState.Completed,
+                remainingUnresolvedCount > 0
+                    ? $"部分完成（仍有 {remainingUnresolvedCount} 个 Mod 待处理）"
                     : "已完成");
-            task.CanRetry = remainingFailedCount > 0;
-            Status = remainingFailedCount > 0
+            task.CanRetry = task.CollectionModItems.Any(candidate =>
+                candidate.State == CollectionModTaskState.Failed && !candidate.Optional);
+            Status = remainingUnresolvedCount > 0
                 ? $"Collection Mod 已补装: {item.Name}"
                 : $"Collection 安装完成: {task.Name}";
             EmitLog($"Collection Mod 已从本地归档安装: {item.Name}, 目录: {string.Join(", ", installedNames)}");
@@ -6483,7 +6492,7 @@ public partial class DownloadPageViewModel : ObservableObject
             task.FailedDetails = string.Join(
                 Environment.NewLine,
                 task.CollectionModItems
-                    .Where(candidate => candidate.State == CollectionModTaskState.Failed)
+                    .Where(candidate => candidate.State is CollectionModTaskState.Failed or CollectionModTaskState.NeedsDecision)
                     .Select(candidate => $"{candidate.Name}: {candidate.Message}"));
             task.Progress = 99;
             task.SetState(DownloadTaskState.Failed, "本地 Mod 补装失败（可重试）");
@@ -6496,6 +6505,63 @@ public partial class DownloadPageViewModel : ObservableObject
             TaskStateChanged?.Invoke(task);
             SaveTaskState();
         }
+    }
+
+    /// <summary>
+    /// 明确跳过一个安装失败的可选 Collection Mod。
+    /// 不能在安装器内部静默把失败项标记为完成；用户确认后才写入
+    /// Skipped，重试时也会把该选择传回安装器，避免再次下载同一条目。
+    /// </summary>
+    public void SkipCollectionMod(DownloadTaskItem task, CollectionModTaskItem item)
+    {
+        if (task == null ||
+            item == null ||
+            task.TaskAction != DownloadTaskAction.InstallCollection ||
+            !item.CanSkipOptional ||
+            task.IsRunning)
+        {
+            return;
+        }
+
+        item.State = CollectionModTaskState.Skipped;
+        item.RequiresManualAction = false;
+        item.Message = "用户已选择跳过此可选 Mod";
+
+        var unresolvedItems = task.CollectionModItems
+            .Where(candidate => candidate.State is CollectionModTaskState.Failed or CollectionModTaskState.NeedsDecision)
+            .ToList();
+        var requiredFailures = unresolvedItems
+            .Where(candidate => !candidate.Optional)
+            .ToList();
+        task.FailedDetails = string.Join(
+            Environment.NewLine,
+            unresolvedItems.Select(candidate => $"{candidate.Name}: {candidate.Message}"));
+        task.Progress = unresolvedItems.Count == 0 ? 100 : 99;
+        task.SetState(
+            unresolvedItems.Count == 0 ? DownloadTaskState.Completed : DownloadTaskState.Failed,
+            unresolvedItems.Count == 0
+                ? "已完成"
+                : $"部分完成（仍有 {unresolvedItems.Count} 个 Mod 待处理）");
+        task.CanRetry = requiredFailures.Count > 0;
+        Status = unresolvedItems.Count == 0
+            ? $"Collection 安装完成: {task.Name}"
+            : $"已跳过可选 Collection Mod: {item.Name}";
+        EmitLog($"用户选择跳过可选 Collection Mod: {item.Name}");
+        TaskStateChanged?.Invoke(task);
+        SaveTaskState();
+    }
+
+    private static IReadOnlySet<string>? GetSkippedOptionalCollectionModNames(DownloadTaskItem task)
+    {
+        var names = task.CollectionModItems
+            .Where(item =>
+                item.Optional &&
+                item.State == CollectionModTaskState.Skipped &&
+                !string.IsNullOrWhiteSpace(item.Name))
+            .Select(item => item.Name.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return names.Count == 0 ? null : names;
     }
 
     private static string ResolveCollectionTaskModsPath(DownloadTaskItem task)
@@ -6950,6 +7016,7 @@ public partial class DownloadPageViewModel : ObservableObject
                 var resumeInstalledModNames = task.CollectionModsToResume.Count > 0
                     ? task.CollectionModsToResume.ToHashSet(StringComparer.OrdinalIgnoreCase)
                     : null;
+                var skipOptionalModNames = GetSkippedOptionalCollectionModNames(task);
                 task.CollectionModsToResume.Clear();
 
                 var collectionResult = await _collectionInstallService.InstallCollectionFromArchiveAsync(
@@ -6960,28 +7027,35 @@ public partial class DownloadPageViewModel : ObservableObject
                     gameBasePath: task.TargetGamePath,
                     customIconPath: task.CustomIconPath,
                     updateExisting: updateExisting,
-                    resumeInstalledModNames: resumeInstalledModNames);
+                    resumeInstalledModNames: resumeInstalledModNames,
+                    skipOptionalModNames: skipOptionalModNames);
 
                 if (collectionResult.IsSuccess)
                 {
                     task.InstalledPath = collectionResult.RuntimePath;
                     task.InstalledDirectory = collectionResult.VersionRootPath;
                     var hasFailedMods = collectionResult.FailedMods.Count > 0;
-                    task.Progress = hasFailedMods ? 99 : 100;
+                    var hasPendingOptionalMods = collectionResult.PendingOptionalMods.Count > 0;
+                    var hasUnresolvedMods = hasFailedMods || hasPendingOptionalMods;
+                    task.Progress = hasUnresolvedMods ? 99 : 100;
                     var failText = hasFailedMods
                         ? $"（{collectionResult.FailedMods.Count} 个 Mod 下载失败，可重试）"
-                        : string.Empty;
+                        : hasPendingOptionalMods
+                            ? $"（{collectionResult.PendingOptionalMods.Count} 个可选 Mod 待处理）"
+                            : string.Empty;
                     task.SetState(
-                        hasFailedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
-                        hasFailedMods ? $"部分完成{failText}" : "已完成");
+                        hasUnresolvedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
+                        hasUnresolvedMods ? $"部分完成{failText}" : "已完成");
                     task.CanRetry = hasFailedMods;
-                    Status = hasFailedMods
+                    Status = hasUnresolvedMods
                         ? $"Collection 安装部分完成: {task.Name}"
                         : $"Collection 安装完成: {task.Name}";
-                    EmitLog($"Collection 安装{(hasFailedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {collectionResult.RuntimePath}, 安装 {collectionResult.InstalledMods.Count} 个, 失败 {collectionResult.FailedMods.Count} 个");
-                    if (collectionResult.FailedMods.Count > 0)
+                    task.FailedDetails = string.Join(
+                        "\n",
+                        collectionResult.FailedMods.Concat(collectionResult.PendingOptionalMods));
+                    EmitLog($"Collection 安装{(hasUnresolvedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {collectionResult.RuntimePath}, 安装 {collectionResult.InstalledMods.Count} 个, 失败 {collectionResult.FailedMods.Count} 个，可选待处理 {collectionResult.PendingOptionalMods.Count} 个");
+                    if (hasUnresolvedMods)
                     {
-                        task.FailedDetails = string.Join("\n", collectionResult.FailedMods);
                         EmitLog($"失败 Mod 列表:\n{task.FailedDetails}");
                     }
                     // 通知 MainWindowViewModel 刷新 LaunchPage/InstancesPage 实例列表
@@ -7505,6 +7579,7 @@ public partial class DownloadPageViewModel : ObservableObject
             var resumeInstalledModNames = task.CollectionModsToResume.Count > 0
                 ? task.CollectionModsToResume.ToHashSet(StringComparer.OrdinalIgnoreCase)
                 : null;
+            var skipOptionalModNames = GetSkippedOptionalCollectionModNames(task);
             task.CollectionModsToResume.Clear();
             task.ResetCollectionModProgress();
             var collectionResult = await _collectionInstallService.InstallCollectionFromArchiveAsync(
@@ -7515,29 +7590,34 @@ public partial class DownloadPageViewModel : ObservableObject
                 gameBasePath: task.TargetGamePath,
                 customIconPath: task.CustomIconPath,
                 updateExisting: updateExisting,
-                resumeInstalledModNames: resumeInstalledModNames);
+                resumeInstalledModNames: resumeInstalledModNames,
+                skipOptionalModNames: skipOptionalModNames);
 
             if (collectionResult.IsSuccess)
             {
                 task.InstalledPath = collectionResult.RuntimePath;
                 task.InstalledDirectory = collectionResult.VersionRootPath;
                 var hasFailedMods = collectionResult.FailedMods.Count > 0;
-                task.Progress = hasFailedMods ? 99 : 100;
-                task.FailedDetails = hasFailedMods
-                    ? string.Join("\n", collectionResult.FailedMods)
-                    : string.Empty;
+                var hasPendingOptionalMods = collectionResult.PendingOptionalMods.Count > 0;
+                var hasUnresolvedMods = hasFailedMods || hasPendingOptionalMods;
+                task.Progress = hasUnresolvedMods ? 99 : 100;
+                task.FailedDetails = string.Join(
+                    "\n",
+                    collectionResult.FailedMods.Concat(collectionResult.PendingOptionalMods));
                 task.FailedDownloadUrls.Clear();
                 task.SetState(
-                    hasFailedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
-                    hasFailedMods
-                        ? $"部分完成（{collectionResult.FailedMods.Count} 个 Mod 下载失败，可重试）"
+                    hasUnresolvedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
+                    hasUnresolvedMods
+                        ? hasFailedMods
+                            ? $"部分完成（{collectionResult.FailedMods.Count} 个 Mod 下载失败，可重试）"
+                            : $"部分完成（{collectionResult.PendingOptionalMods.Count} 个可选 Mod 待处理）"
                         : "已完成");
                 task.CanRetry = hasFailedMods;
-                Status = hasFailedMods
+                Status = hasUnresolvedMods
                     ? $"Collection 安装部分完成: {task.Name}"
                     : $"Collection 安装完成: {task.Name}";
-                EmitLog($"Collection 安装{(hasFailedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {collectionResult.RuntimePath}, 安装 {collectionResult.InstalledMods.Count} 个, 失败 {collectionResult.FailedMods.Count} 个");
-                if (hasFailedMods)
+                EmitLog($"Collection 安装{(hasUnresolvedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {collectionResult.RuntimePath}, 安装 {collectionResult.InstalledMods.Count} 个, 失败 {collectionResult.FailedMods.Count} 个，可选待处理 {collectionResult.PendingOptionalMods.Count} 个");
+                if (hasUnresolvedMods)
                 {
                     EmitLog($"失败 Mod 列表:\n{task.FailedDetails}");
                 }

@@ -69,6 +69,101 @@ public class MainFlowSmokeTests
     }
 
     [TestMethod]
+    public void CollectionOptionalFailure_ShouldRequireExplicitDecisionAndPersistState()
+    {
+        var item = new CollectionModTaskItem
+        {
+            Name = "可选但下载失败的 Mod",
+            Optional = true,
+            RequiresManualAction = true,
+            State = CollectionModTaskState.NeedsDecision,
+            Message = "请补充来源"
+        };
+
+        Assert.IsFalse(item.IsFinished);
+        Assert.IsTrue(item.CanInstallFromLocal);
+        Assert.IsTrue(item.CanSkipOptional);
+        Assert.AreEqual("待处理", item.DisplayStateText);
+
+        var statePath = Path.Combine(
+            Path.GetTempPath(),
+            "svl-collection-decision-" + Guid.NewGuid().ToString("N") + ".json.gz");
+        var task = new DownloadTaskItem
+        {
+            Name = "待处理 Collection",
+            TaskKind = DownloadTaskKind.NexusCollection,
+            TaskAction = DownloadTaskAction.InstallCollection
+        };
+        task.CollectionModItems.Add(item);
+        var store = new DownloadTaskStateStore();
+
+        try
+        {
+            store.Save(statePath, [task]);
+            var records = store.Load(statePath, out var corruptedBackupPath);
+
+            Assert.AreEqual(string.Empty, corruptedBackupPath);
+            Assert.AreEqual(1, records.Count);
+            Assert.AreEqual(CollectionModTaskState.NeedsDecision, records[0].CollectionModItems[0].State);
+            Assert.IsTrue(records[0].CollectionModItems[0].Optional);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(statePath))
+                {
+                    File.Delete(statePath);
+                }
+            }
+            catch
+            {
+                // 测试清理失败不应覆盖状态持久化断言结果。
+            }
+        }
+
+        item.State = CollectionModTaskState.Skipped;
+        item.RequiresManualAction = false;
+        Assert.IsTrue(item.IsFinished);
+        Assert.IsFalse(item.CanSkipOptional);
+    }
+
+    [TestMethod]
+    public void TaskStatus_ShouldExposeExplicitSkipActionForOptionalCollectionMod()
+    {
+        var taskStatus = new TaskStatusPageViewModel();
+        var task = new DownloadTaskItem
+        {
+            Name = "需要处理可选项的 Collection",
+            TaskAction = DownloadTaskAction.InstallCollection,
+            TaskState = DownloadTaskState.Failed,
+            Status = "部分完成"
+        };
+        var item = new CollectionModTaskItem
+        {
+            Name = "待确认可选 Mod",
+            Optional = true,
+            RequiresManualAction = true,
+            State = CollectionModTaskState.NeedsDecision
+        };
+        task.CollectionModItems.Add(item);
+        taskStatus.SetCurrentTask(task);
+
+        DownloadTaskItem requestedTask = task;
+        CollectionModTaskItem requestedItem = item;
+        taskStatus.SkipCollectionModRequested += (receivedTask, receivedItem) =>
+        {
+            requestedTask = receivedTask;
+            requestedItem = receivedItem;
+        };
+
+        taskStatus.SkipCollectionModCommand.Execute(item);
+
+        Assert.AreSame(task, requestedTask);
+        Assert.AreSame(item, requestedItem);
+    }
+
+    [TestMethod]
     public async Task MainFlow_ShouldNavigateThroughCorePages_AndQueueTask()
     {
         var settingsStore = new AppUserSettingsStore();

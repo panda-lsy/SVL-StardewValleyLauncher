@@ -57,7 +57,9 @@ public enum CollectionModTaskState
     Downloading,
     Installed,
     Failed,
-    Skipped
+    Skipped,
+    /// <summary>可选 Mod 失败后等待用户选择跳过或补装，不应被静默吞掉。</summary>
+    NeedsDecision
 }
 
 /// <summary>任务详情中展示的整合包 Mod 子任务。</summary>
@@ -99,10 +101,14 @@ public partial class CollectionModTaskItem : ObservableObject
         Uri.TryCreate(SourceUrl, UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
-    /// <summary>失败或跳过的手动来源条目可从本地选择归档继续安装。</summary>
+    /// <summary>失败、待处理或跳过的手动来源条目可从本地选择归档继续安装。</summary>
     public bool CanInstallFromLocal =>
         RequiresManualAction &&
-        State is CollectionModTaskState.Failed or CollectionModTaskState.Skipped;
+        State is CollectionModTaskState.Failed or CollectionModTaskState.Skipped or CollectionModTaskState.NeedsDecision;
+
+    /// <summary>可选 Mod 未能自动安装时，允许用户明确选择跳过。</summary>
+    public bool CanSkipOptional =>
+        Optional && State == CollectionModTaskState.NeedsDecision;
 
     public string DisplayStateText => State switch
     {
@@ -111,6 +117,7 @@ public partial class CollectionModTaskItem : ObservableObject
         CollectionModTaskState.Installed => "已安装",
         CollectionModTaskState.Failed => "失败",
         CollectionModTaskState.Skipped => "已跳过",
+        CollectionModTaskState.NeedsDecision => "待处理",
         _ => "未知"
     };
 
@@ -119,6 +126,7 @@ public partial class CollectionModTaskItem : ObservableObject
         OnPropertyChanged(nameof(IsFinished));
         OnPropertyChanged(nameof(IsCurrent));
         OnPropertyChanged(nameof(CanInstallFromLocal));
+        OnPropertyChanged(nameof(CanSkipOptional));
         OnPropertyChanged(nameof(DisplayStateText));
     }
 

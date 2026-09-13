@@ -210,6 +210,11 @@
                                   CommandParameter="{Binding}"
                                   IsVisible="{Binding CanInstallFromLocal}"
                                   MinWidth="104" Margin="6,0,0,0" Padding="8,2" />
+                          <Button Content="跳过可选 Mod"
+                                  Command="{Binding DataContext.SkipCollectionModCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  CommandParameter="{Binding}"
+                                  IsVisible="{Binding CanSkipOptional}"
+                                  MinWidth="104" Margin="6,0,0,0" Padding="8,2" />
                         </WrapPanel>
                         <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
                                    Text="{Binding Message}" FontSize="11" Opacity="0.65"
