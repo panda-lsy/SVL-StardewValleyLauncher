@@ -10,6 +10,40 @@ namespace SVL.Migration.Tests;
 public class MainFlowSmokeTests
 {
     [TestMethod]
+    public void CollectionTaskStatus_ShouldExposeCurrentModAndClearItAfterCompletion()
+    {
+        var taskStatus = new TaskStatusPageViewModel();
+        var task = new DownloadTaskItem
+        {
+            Name = "测试 Collection",
+            TaskState = DownloadTaskState.Installing,
+            Status = "Collection 安装中"
+        };
+
+        taskStatus.SetCurrentTask(task);
+        task.SyncCollectionModProgress(
+            "测试 Mod",
+            phase: 2,
+            optional: true,
+            state: CollectionModTaskState.Downloading,
+            message: "正在处理");
+
+        Assert.IsTrue(taskStatus.SelectedTaskHasCurrentCollectionMod);
+        StringAssert.Contains(taskStatus.SelectedTaskCurrentCollectionModText, "测试 Mod");
+        StringAssert.Contains(taskStatus.SelectedTaskCurrentCollectionModText, "Phase 2");
+        StringAssert.Contains(taskStatus.SelectedTaskCurrentCollectionModText, "可选");
+
+        task.SyncCollectionModProgress(
+            "测试 Mod",
+            phase: 2,
+            optional: true,
+            state: CollectionModTaskState.Installed,
+            message: "安装成功");
+
+        Assert.IsFalse(taskStatus.SelectedTaskHasCurrentCollectionMod);
+    }
+
+    [TestMethod]
     public async Task MainFlow_ShouldNavigateThroughCorePages_AndQueueTask()
     {
         var settingsStore = new AppUserSettingsStore();
