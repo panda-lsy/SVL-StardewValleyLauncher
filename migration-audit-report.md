@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`40de42f`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`9085025`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -26,7 +26,7 @@
 | `manifest.json` 的 `UpdateKeys=GitHub:...` 自动检查更新 | WPF/Core 的 `ModManager` 仍明确记录为 TODO；Avalonia 已补齐 GitHub 仓库/release 解析、稳定版本比较、Release 压缩包选择、任务状态/导出/整合包来源持久化，并覆盖回归测试 | 后续只需在真实 GitHub 仓库做一次端到端 UI 验收；无 Release 压缩包时会明确提示，不把源码包误当 Mod 安装包 |
 | Nexus Collection 的 `manual` 来源 | WPF 安装器仍是 TODO；Avalonia 已覆盖 NXM、API、浏览器回调及 HTTP 直链，并将 `manual` 网页/无来源条目标记为需手动处理；只有明确归档直链才自动下载 | 任务页保留来源地址并提供“打开来源”，用户完成下载后可拖入当前实例 Mods 页面；不把网页地址当压缩包 |
 | Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 继续使用统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；可选 Mod 自动失败现在进入“待处理”，用户可明确选择“选择文件并安装”或“跳过可选 Mod”，选择会持久化并在重试时生效；任务详情现已补齐 Collection Mod 列表分页、上一页/下一页导航，不改变统一队列的实际安装顺序 | 保持统一队列作为默认路径；后续仅需进行真实 Collection 的可见 UI 验收，不恢复旧任务类型 |
-| 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，代码未发现实际消费逻辑；Avalonia 目前实现的是启动时自动检查和用户确认后下载安装 | 暂不视为已存在但漏迁移的完成特性；若确定需要，再单独定义自动下载/通知策略 |
+| 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，旧启动流程未消费；Avalonia 已迁移该设置并接入更新弹窗 | 发现新版本后可自动下载首个发布资产；下载完成仍需用户点击“安装并重启”，不会静默执行安装 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
 | 完整线上/可见 UI 验收 | 不是分支迁移代码缺口；当前主要剩真实 Nexus/CurseForge 网络和 Windows Avalonia 窗口冒烟 | 作为发布前验收项继续执行 |
@@ -85,6 +85,8 @@ Collection 单 Mod 下载也复用同一失败重试策略：瞬时 CDN/网络/�
 本轮继续补齐 CurseForge URL 级来源恢复：导入描述符和导出页现在都能从 `api.curse.tools/.../mods/<ProjectID>/files/<FileID>`、CurseForge 文件页及 Forge CDN 路径恢复数字 ID；仅含 CDN 的条目至少保留完整 FileID，避免再次导出时把稳定来源降级为未知。详情页、导出页与整合包安装器共用下载项 FileID 解析器，兼容 Nexus `File <FileID>_...`、URL 编码文件名、`file-id` 查询参数和 `cf-<ProjectID>-<FileID>` 标识。
 新增回归覆盖 SVL 来源条目仅含 CurseForge ProjectID/FileID，以及同时带过期直链的缓存安装；均验证实际 Mod 文件及来源凭证。SVL/Collection 现在在在线解析之前复用 CurseForge 缓存，SVL 直链成功安装后补写平台缓存；Collection 旧入口也统一读取新旧两种 Nexus 缓存文件名，历史 WPF 缓存命中后能继续回写 FileID。配置、实例列表和任务状态保存采用唯一临时文件并刷新到磁盘后替换。
 断点续传的 `.part.json` 及迁移完成标记也采用相同的原子写入，进程中断时不会以半截 JSON 覆盖可恢复状态。
+
+本轮补齐启动器更新设置迁移：新增 `AutoDownloadUpdate` 的 Avalonia 持久化字段、WPF 旧配置导入和设置页开关；启动检查或手动检查发现更新时，可让更新弹窗自动下载发布资产，下载完成后仍由用户确认安装并重启。
 
 另存为任务恢复时不再强制按 Mod manifest 校验最终文件；只要目标文件已完整落盘且不存在 `.part`/`.part.json`，即可跳过重复下载，仍在写入的半成品不会被误复用。
 Nexus/CurseForge 下载解析、HTTP Range 探测及缓存命中复制会保留取消异常，取消不会被误判为普通解析失败或继续触发回退下载；Mod 来源凭证也使用原子写入，避免进程中断留下半截 JSON。
