@@ -27,6 +27,16 @@ public sealed class AssetImageConverter : IValueConverter
         "smapi-icon-cache");
 
     /// <summary>
+    /// WPF 旧版图片缓存目录。只读兼容该目录，新的下载仍写入 Avalonia 目录；
+    /// 这样升级后首次显示旧搜索结果时不会重新下载全部图片。
+    /// </summary>
+    public static readonly string LegacyIconCacheDirectory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "SVL",
+        "cache",
+        "images");
+
+    /// <summary>
     /// Computes the local cache file path for a remote icon URL. The hash is computed over
     /// the Uri-normalized form of the URL so the converter and the ViewModel always agree
     /// on the cache location for the same remote icon.
@@ -51,6 +61,45 @@ public sealed class AssetImageConverter : IValueConverter
         }
 
         return Path.Combine(IconCacheDirectory, hash + extension);
+    }
+
+    /// <summary>
+    /// 按 WPF 旧版规则计算图片缓存路径。旧版使用原始 URL（不是 Uri 规范化后的文本）
+    /// 计算 SHA-256，因此必须保留独立方法，不能直接复用新的路径算法。
+    /// </summary>
+    public static string GetLegacyIconCachePath(string? remoteUrl)
+    {
+        if (string.IsNullOrWhiteSpace(remoteUrl) ||
+            !Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
+        {
+            return string.Empty;
+        }
+
+        using var sha256 = SHA256.Create();
+        var hash = System.Convert.ToHexString(
+                sha256.ComputeHash(Encoding.UTF8.GetBytes(remoteUrl)))
+            .ToLowerInvariant();
+        var extension = Path.GetExtension(uri.AbsolutePath);
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            extension = ".jpg";
+        }
+
+        return Path.Combine(LegacyIconCacheDirectory, hash + extension);
+    }
+
+    private static string FindExistingRemoteIconCachePath(string remoteUrl)
+    {
+        var currentPath = GetIconCachePath(remoteUrl);
+        if (!string.IsNullOrWhiteSpace(currentPath) && File.Exists(currentPath))
+        {
+            return currentPath;
+        }
+
+        var legacyPath = GetLegacyIconCachePath(remoteUrl);
+        return !string.IsNullOrWhiteSpace(legacyPath) && File.Exists(legacyPath)
+            ? legacyPath
+            : string.Empty;
     }
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -151,7 +200,7 @@ public sealed class AssetImageConverter : IValueConverter
                     // it. If not cached yet, return null; the ViewModel's async icon resolver
                     // (ResolveRemoteIconToLocalAsync) will download the icon, update IconSource
                     // to the local cache path, and re-trigger this converter with that path.
-                    var cachePath = GetIconCachePath(path);
+                    var cachePath = FindExistingRemoteIconCachePath(path);
                     if (!string.IsNullOrEmpty(cachePath) && File.Exists(cachePath))
                     {
                         return LoadCached(BuildLocalFileCacheKey(cachePath), () => LoadLocalBitmap(cachePath));
@@ -184,7 +233,7 @@ public sealed class AssetImageConverter : IValueConverter
                 {
                     // Same disk-cache fast path as above. Use the original (non-stripped) URL
                     // so the computed cache path matches what the ViewModel hashed.
-                    var cachePath = GetIconCachePath(path);
+                    var cachePath = FindExistingRemoteIconCachePath(path);
                     if (!string.IsNullOrEmpty(cachePath) && File.Exists(cachePath))
                     {
                         return LoadCached(BuildLocalFileCacheKey(cachePath), () => LoadLocalBitmap(cachePath));

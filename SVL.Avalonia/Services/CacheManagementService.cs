@@ -1,4 +1,5 @@
 using System.IO;
+using SVL.Avalonia.Converters;
 
 namespace SVL.Avalonia.Services;
 
@@ -60,6 +61,13 @@ public static class CacheManagementService
                 CalculateDirectoryStats(CurseforgeDownloadCache.Root));
         }
 
+        if (category == CacheCategory.Images)
+        {
+            return Add(
+                CalculateDirectoryStats(GetCachePath(category)),
+                CalculateDirectoryStats(AssetImageConverter.LegacyIconCacheDirectory));
+        }
+
         var path = GetCachePath(category);
         return CalculateDirectoryStats(path);
     }
@@ -93,6 +101,13 @@ public static class CacheManagementService
         {
             DeleteDirectory(GetCachePath(category));
             CurseforgeDownloadCache.Clear();
+            return;
+        }
+
+        if (category == CacheCategory.Images)
+        {
+            DeleteDirectory(GetCachePath(category));
+            DeleteDirectory(AssetImageConverter.LegacyIconCacheDirectory);
             return;
         }
 
@@ -260,6 +275,11 @@ public static class CacheManagementService
             {
                 yield return GetCachePath(category);
                 yield return CurseforgeDownloadCache.Root;
+            }
+            else if (category == CacheCategory.Images)
+            {
+                yield return GetCachePath(category);
+                yield return AssetImageConverter.LegacyIconCacheDirectory;
             }
             else
             {

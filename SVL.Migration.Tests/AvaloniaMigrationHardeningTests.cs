@@ -46,6 +46,10 @@ public sealed class AvaloniaMigrationHardeningTests
     {
         Assert.AreEqual("图片/图标缓存", CacheManagementService.GetCategoryDisplayName(CacheCategory.Images));
         Assert.AreEqual("smapi-icon-cache", Path.GetFileName(CacheManagementService.GetCachePath(CacheCategory.Images)));
+
+        var legacyPath = SVL.Avalonia.Converters.AssetImageConverter.GetLegacyIconCachePath(
+            "https://example.com/icon.png");
+        Assert.AreEqual("images", Path.GetFileName(Path.GetDirectoryName(legacyPath)));
     }
 
     [TestMethod]

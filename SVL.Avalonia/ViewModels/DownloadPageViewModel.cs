@@ -5070,6 +5070,18 @@ public partial class DownloadPageViewModel : ObservableObject
             return;
         }
 
+        var legacyIconPath = AssetImageConverter.GetLegacyIconCachePath(remoteUrl);
+        if (File.Exists(legacyIconPath))
+        {
+            _smapiIconDiskCache[remoteUrl] = legacyIconPath;
+            if (loadToken == Volatile.Read(ref _catalogLoadToken))
+            {
+                item.IconSource = legacyIconPath;
+            }
+
+            return;
+        }
+
         try
         {
             using var response = await GetIconHttpClient().GetAsync(iconUri, HttpCompletionOption.ResponseHeadersRead);
@@ -5218,6 +5230,12 @@ public partial class DownloadPageViewModel : ObservableObject
             if (File.Exists(cachePath) && new FileInfo(cachePath).Length > 0)
             {
                 return cachePath;
+            }
+
+            var legacyCachePath = AssetImageConverter.GetLegacyIconCachePath(remoteUrl);
+            if (File.Exists(legacyCachePath) && new FileInfo(legacyCachePath).Length > 0)
+            {
+                return legacyCachePath;
             }
 
             var cacheDirectory = Path.GetDirectoryName(cachePath);
