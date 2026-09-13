@@ -3491,6 +3491,7 @@ public sealed class DownloadProgressAndNexusCacheTests
             Assert.AreEqual("Curseforge", credential.RootElement.GetProperty("platform").GetString());
             Assert.AreEqual(projectId.ToString(), credential.RootElement.GetProperty("projectId").GetString());
             Assert.AreEqual(fileId.ToString(), credential.RootElement.GetProperty("fileId").GetString());
+
         }
         finally
         {
@@ -3730,6 +3731,32 @@ public sealed class DownloadProgressAndNexusCacheTests
             Assert.AreEqual("Curseforge", credential.RootElement.GetProperty("platform").GetString());
             Assert.AreEqual(projectId.ToString(), credential.RootElement.GetProperty("projectId").GetString());
             Assert.AreEqual(fileId.ToString(), credential.RootElement.GetProperty("fileId").GetString());
+
+            // 模拟整合包只有后续条目失败后的显式重试：已安装 Mod 中的用户修改
+            // 不应因重试而被缓存归档再次覆盖。服务必须先校验来源凭证/manifest，
+            // 再把该条目标记为“复用”，而不是仅相信任务状态。
+            var installedContentPath = Path.Combine(installedPath, "content.json");
+            File.WriteAllText(installedContentPath, "user-edit");
+            var resumedProgress = new List<CollectionInstallProgress>();
+            var resumedResult = await service.InstallCollectionFromArchiveAsync(
+                archivePath,
+                instanceName,
+                resumedProgress.Add,
+                gameBasePath: gamePath,
+                updateExisting: true,
+                resumeInstalledModNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "Content Patcher"
+                });
+
+            Assert.IsTrue(resumedResult.IsSuccess, resumedResult.Message);
+            Assert.AreEqual("user-edit", File.ReadAllText(installedContentPath));
+            Assert.IsTrue(
+                resumedProgress.Any(progress =>
+                    string.Equals(progress.ModName, "Content Patcher", StringComparison.OrdinalIgnoreCase) &&
+                    progress.ModState == CollectionModTaskState.Installed &&
+                    progress.ModMessage.Contains("重试时跳过", StringComparison.Ordinal)),
+                "已安装 Collection Mod 重试时应复用现有目录并留下可观察的跳过状态");
         }
         finally
         {

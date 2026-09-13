@@ -1,7 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace SVL.Avalonia.Models;
 
@@ -273,6 +275,14 @@ public partial class DownloadTaskItem : ObservableObject
 
     /// <summary>整合包逐 Mod 状态。该集合随任务状态文件一起保存，重启后仍可查看失败项。</summary>
     public ObservableCollection<CollectionModTaskItem> CollectionModItems { get; } = [];
+
+    /// <summary>
+    /// 本次显式重试中允许复用的已完成 Collection 条目。
+    /// 这是一次性的运行上下文，不写入任务状态文件；任务重启后仍会从持久化
+    /// 的 CollectionModItems 重新生成，避免旧的“已安装”标记跨归档变更误复用。
+    /// </summary>
+    [JsonIgnore]
+    public HashSet<string> CollectionModsToResume { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public bool HasCollectionModItems => CollectionModItems.Count > 0;
 

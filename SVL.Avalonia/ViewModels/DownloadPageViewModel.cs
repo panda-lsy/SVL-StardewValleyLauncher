@@ -2189,6 +2189,21 @@ public partial class DownloadPageViewModel : ObservableObject
             return;
         }
 
+        // Collection 可能已经成功安装了部分 Mod，失败的只是剩余条目。
+        // 先记录已完成条目，安装执行器会在清空 UI 状态前把这份一次性上下文
+        // 传给 CollectionInstallService；服务仍会重新校验来源凭证/manifest，
+        // 不会仅凭任务状态跳过残缺目录。
+        task.CollectionModsToResume.Clear();
+        if (task.TaskAction == DownloadTaskAction.InstallCollection)
+        {
+            foreach (var item in task.CollectionModItems.Where(item =>
+                         item.State == CollectionModTaskState.Installed &&
+                         !string.IsNullOrWhiteSpace(item.Name)))
+            {
+                task.CollectionModsToResume.Add(item.Name.Trim());
+            }
+        }
+
         if (HasFailedCollectionDownloads(task))
         {
             var retryUrls = task.FailedDownloadUrls
@@ -6150,6 +6165,10 @@ public partial class DownloadPageViewModel : ObservableObject
         DownloadTaskItem task,
         string archivePath)
     {
+        var resumeInstalledModNames = task.CollectionModsToResume.Count > 0
+            ? task.CollectionModsToResume.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : null;
+        task.CollectionModsToResume.Clear();
         task.ResetCollectionModProgress();
         task.CanRetry = false;
         task.CanCancel = true;
@@ -6180,7 +6199,8 @@ public partial class DownloadPageViewModel : ObservableObject
                 cts.Token,
                 gameBasePath: task.TargetGamePath,
                 customIconPath: task.CustomIconPath,
-                updateExisting: updateExisting);
+                updateExisting: updateExisting,
+                resumeInstalledModNames: resumeInstalledModNames);
 
             if (result.IsSuccess)
             {
@@ -6909,6 +6929,10 @@ public partial class DownloadPageViewModel : ObservableObject
                     ? Path.GetFileNameWithoutExtension(task.OutputFilePath)
                     : task.TargetInstanceName;
                 var updateExisting = HasPreviouslyInstalledPackageRuntime(task);
+                var resumeInstalledModNames = task.CollectionModsToResume.Count > 0
+                    ? task.CollectionModsToResume.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    : null;
+                task.CollectionModsToResume.Clear();
 
                 var collectionResult = await _collectionInstallService.InstallCollectionFromArchiveAsync(
                     task.OutputFilePath,
@@ -6917,7 +6941,8 @@ public partial class DownloadPageViewModel : ObservableObject
                     collectionCts.Token,
                     gameBasePath: task.TargetGamePath,
                     customIconPath: task.CustomIconPath,
-                    updateExisting: updateExisting);
+                    updateExisting: updateExisting,
+                    resumeInstalledModNames: resumeInstalledModNames);
 
                 if (collectionResult.IsSuccess)
                 {
@@ -7459,6 +7484,10 @@ public partial class DownloadPageViewModel : ObservableObject
                 ? Path.GetFileNameWithoutExtension(archivePath)
                 : task.TargetInstanceName;
             var updateExisting = HasPreviouslyInstalledPackageRuntime(task);
+            var resumeInstalledModNames = task.CollectionModsToResume.Count > 0
+                ? task.CollectionModsToResume.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : null;
+            task.CollectionModsToResume.Clear();
             task.ResetCollectionModProgress();
             var collectionResult = await _collectionInstallService.InstallCollectionFromArchiveAsync(
                 archivePath,
@@ -7467,7 +7496,8 @@ public partial class DownloadPageViewModel : ObservableObject
                 cts.Token,
                 gameBasePath: task.TargetGamePath,
                 customIconPath: task.CustomIconPath,
-                updateExisting: updateExisting);
+                updateExisting: updateExisting,
+                resumeInstalledModNames: resumeInstalledModNames);
 
             if (collectionResult.IsSuccess)
             {

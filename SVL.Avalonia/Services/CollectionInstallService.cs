@@ -156,6 +156,7 @@ public sealed class CollectionInstallService
     /// <param name="cancellationToken">取消令牌。</param>
     /// <param name="gameBasePath">用户选择的游戏 Base 路径。</param>
     /// <param name="updateExisting">目标实例已存在时是否更新原实例。</param>
+    /// <param name="resumeInstalledModNames">显式重试时允许复用的已完成条目名称。</param>
     public async Task<CollectionInstallResult> InstallCollectionAsync(
         string collectionSlug,
         int revision,
@@ -163,7 +164,8 @@ public sealed class CollectionInstallService
         Action<CollectionInstallProgress>? onProgress,
         CancellationToken cancellationToken = default,
         string? gameBasePath = null,
-        bool updateExisting = false)
+        bool updateExisting = false,
+        IReadOnlySet<string>? resumeInstalledModNames = null)
     {
         if (string.IsNullOrWhiteSpace(collectionSlug))
         {
@@ -220,7 +222,8 @@ public sealed class CollectionInstallService
                     onProgress,
                     cancellationToken,
                     null,
-                    updateExisting);
+                    updateExisting,
+                    resumeInstalledModNames);
             }
 
             var settings = _settingsStore.Load();
@@ -281,7 +284,8 @@ public sealed class CollectionInstallService
                 onProgress,
                 cancellationToken,
                 null,
-                updateExisting: updateExisting);
+                updateExisting: updateExisting,
+                resumeInstalledModNames: resumeInstalledModNames);
         }
         catch (OperationCanceledException)
         {
@@ -337,6 +341,7 @@ public sealed class CollectionInstallService
     /// <param name="cancellationToken">取消令牌。</param>
     /// <param name="gameBasePath">用户选择的游戏 Base 路径。</param>
     /// <param name="customIconPath">Collection 旁路图标路径，优先于压缩包内图标。</param>
+    /// <param name="resumeInstalledModNames">显式重试时允许复用的已完成条目名称。</param>
     public async Task<CollectionInstallResult> InstallCollectionFromArchiveAsync(
         string archivePath,
         string instanceName,
@@ -344,7 +349,8 @@ public sealed class CollectionInstallService
         CancellationToken cancellationToken = default,
         string? gameBasePath = null,
         string? customIconPath = null,
-        bool updateExisting = false)
+        bool updateExisting = false,
+        IReadOnlySet<string>? resumeInstalledModNames = null)
     {
         if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
         {
@@ -389,7 +395,8 @@ public sealed class CollectionInstallService
                 onProgress,
                 cancellationToken,
                 customIconPath,
-                updateExisting);
+                updateExisting,
+                resumeInstalledModNames);
         }
         catch (OperationCanceledException)
         {
@@ -419,7 +426,8 @@ public sealed class CollectionInstallService
         Action<CollectionInstallProgress>? onProgress,
         CancellationToken cancellationToken,
         string? customIconPath,
-        bool updateExisting)
+        bool updateExisting,
+        IReadOnlySet<string>? resumeInstalledModNames)
     {
         var installedMods = new List<string>();
         var failedMods = new List<string>();
@@ -581,6 +589,30 @@ public sealed class CollectionInstallService
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var modName = mod.Name ?? $"mod-{mod.Source?.ModId}";
+
+                    // 显式重试时，失败通常只是一两个来源暂时不可用；已经成功的
+                    // 条目不应再次下载或覆盖。任务状态只是候选信号，必须再校验
+                    // 当前 Mods 目录中的来源凭证或有效 manifest，防止残缺目录被
+                    // 错误地当成已完成安装。
+                    if (resumeInstalledModNames?.Contains(modName) == true &&
+                        IsCollectionModAlreadyInstalled(mod, modsPath))
+                    {
+                        installedMods.Add(modName);
+                        ReportCollectionModProgress(
+                            onProgress,
+                            mod,
+                            CollectionModTaskState.Installed,
+                            "此前已安装，重试时跳过");
+                        completedMods++;
+                        onProgress?.Invoke(new CollectionInstallProgress
+                        {
+                            Percent = 17 + (int)(60.0 * completedMods / Math.Max(1, totalToDownload)),
+                            StepText = $"阶段 {phaseGroup.Key}: 复用已安装 Mod",
+                            SubProgress = CalculateCompletionPercent(completedMods, totalToDownload),
+                            SubProgressText = $"{completedMods}/{totalToDownload} 已处理"
+                        });
+                        continue;
+                    }
 
                     ReportCollectionModProgress(
                         onProgress,
@@ -866,6 +898,103 @@ public sealed class CollectionInstallService
             ModSourceUrl = mod.Source?.Url ?? string.Empty,
             ModRequiresManualAction = IsManualSourceRequiringUserAction(mod.Source)
         });
+    }
+
+    private static bool IsCollectionModAlreadyInstalled(
+        NexusCollectionJsonMod mod,
+        string modsPath)
+    {
+        if (string.IsNullOrWhiteSpace(modsPath) || !Directory.Exists(modsPath))
+        {
+            return false;
+        }
+
+        var source = mod.Source;
+        if (source != null)
+        {
+            var platform = ResolveCollectionSourcePlatform(source);
+            var projectId = source.ModId;
+            var fileId = source.FileId;
+
+            if (!string.IsNullOrWhiteSpace(source.Url) &&
+                TryParseNexusPageIds(source.Url, out var pageModId, out var pageFileId))
+            {
+                projectId = projectId > 0 ? projectId : pageModId;
+                fileId = fileId > 0 ? fileId : pageFileId;
+            }
+
+            if (fileId <= 0 &&
+                DownloadOptionIdentityParser.TryExtractFileId(
+                    source.LogicalFilename,
+                    out var logicalFileId))
+            {
+                fileId = logicalFileId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(platform) && projectId > 0 && fileId > 0 &&
+                ModpackInstallService.FindInstalledModDirectoriesBySource(
+                    modsPath,
+                    platform,
+                    projectId,
+                    fileId).Count > 0)
+            {
+                return true;
+            }
+        }
+
+        // 旧 Collection 可能没有完整的来源 ID。仅在目标目录中找到有效
+        // manifest 且 Name 与清单条目一致时才允许名称回退，避免空目录/外层
+        // 包装目录被误判为已安装。
+        var expectedName = mod.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(expectedName))
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var directory in Directory.GetDirectories(modsPath))
+            {
+                var leaf = Path.GetFileName(directory);
+                if (string.Equals(leaf, "_downloads", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(leaf, "_staging", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var manifestPath = Directory
+                    .EnumerateFiles(directory, "manifest.json", SearchOption.AllDirectories)
+                    .FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(manifestPath))
+                {
+                    continue;
+                }
+
+                using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var manifestName = document.RootElement.TryGetProperty("Name", out var nameValue)
+                    ? nameValue.GetString()
+                    : document.RootElement.TryGetProperty("name", out var lowerNameValue)
+                        ? lowerNameValue.GetString()
+                        : null;
+                if (string.Equals(leaf, expectedName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(manifestName?.Trim(), expectedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // 单个目录被占用或 manifest 损坏时，不影响重试其它条目；
+            // 未能确认完整安装就继续正常下载流程。
+        }
+
+        return false;
     }
 
     private static bool IsManualSourceRequiringUserAction(NexusCollectionJsonModSource? source)
