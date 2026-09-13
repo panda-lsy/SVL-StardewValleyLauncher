@@ -2,6 +2,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Text.Json.Serialization;
 
@@ -153,6 +155,15 @@ public partial class CollectionModTaskItem : ObservableObject
 
 public partial class DownloadTaskItem : ObservableObject
 {
+    private bool _suppressCollectionModNotifications;
+
+    public DownloadTaskItem()
+    {
+        // Collection 子项除了安装器外，还可能被任务页的补装/跳过操作直接更新。
+        // 订阅父子变化，避免某个入口漏掉任务汇总进度或当前条目提示的刷新。
+        CollectionModItems.CollectionChanged += OnCollectionModItemsChanged;
+    }
+
     [ObservableProperty]
     private string _name = string.Empty;
 
@@ -323,26 +334,30 @@ public partial class DownloadTaskItem : ObservableObject
             return;
         }
 
-        var item = CollectionModItems.FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (item == null)
+        _suppressCollectionModNotifications = true;
+        try
         {
-            item = new CollectionModTaskItem { Name = name.Trim() };
-            CollectionModItems.Add(item);
+            var item = CollectionModItems.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (item == null)
+            {
+                item = new CollectionModTaskItem { Name = name.Trim() };
+                CollectionModItems.Add(item);
+            }
+
+            item.Phase = phase > 0 ? phase : 1;
+            item.Optional = optional;
+            item.State = state;
+            item.Message = message?.Trim() ?? string.Empty;
+            item.SourceUrl = sourceUrl?.Trim() ?? string.Empty;
+            item.RequiresManualAction = requiresManualAction;
+        }
+        finally
+        {
+            _suppressCollectionModNotifications = false;
         }
 
-        item.Phase = phase > 0 ? phase : 1;
-        item.Optional = optional;
-        item.State = state;
-        item.Message = message?.Trim() ?? string.Empty;
-        item.SourceUrl = sourceUrl?.Trim() ?? string.Empty;
-        item.RequiresManualAction = requiresManualAction;
-        OnPropertyChanged(nameof(HasCollectionModItems));
-        OnPropertyChanged(nameof(CollectionModTotalCount));
-        OnPropertyChanged(nameof(CollectionModFinishedCount));
-        OnPropertyChanged(nameof(CollectionModFailedCount));
-        OnPropertyChanged(nameof(CollectionModProgress));
-        OnPropertyChanged(nameof(CollectionModProgressText));
+        RefreshCollectionModAggregateProperties();
     }
 
     /// <summary>重试整合包前清空上一次的逐 Mod 运行状态。</summary>
@@ -353,7 +368,53 @@ public partial class DownloadTaskItem : ObservableObject
             return;
         }
 
-        CollectionModItems.Clear();
+        _suppressCollectionModNotifications = true;
+        try
+        {
+            CollectionModItems.Clear();
+        }
+        finally
+        {
+            _suppressCollectionModNotifications = false;
+        }
+
+        RefreshCollectionModAggregateProperties();
+    }
+
+    private void OnCollectionModItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems != null)
+        {
+            foreach (var item in e.OldItems.OfType<CollectionModTaskItem>())
+            {
+                item.PropertyChanged -= OnCollectionModItemPropertyChanged;
+            }
+        }
+
+        if (e.NewItems != null)
+        {
+            foreach (var item in e.NewItems.OfType<CollectionModTaskItem>())
+            {
+                item.PropertyChanged += OnCollectionModItemPropertyChanged;
+            }
+        }
+
+        if (!_suppressCollectionModNotifications)
+        {
+            RefreshCollectionModAggregateProperties();
+        }
+    }
+
+    private void OnCollectionModItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!_suppressCollectionModNotifications)
+        {
+            RefreshCollectionModAggregateProperties();
+        }
+    }
+
+    private void RefreshCollectionModAggregateProperties()
+    {
         OnPropertyChanged(nameof(HasCollectionModItems));
         OnPropertyChanged(nameof(CollectionModTotalCount));
         OnPropertyChanged(nameof(CollectionModFinishedCount));

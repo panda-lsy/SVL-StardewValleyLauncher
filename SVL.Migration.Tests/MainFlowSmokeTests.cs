@@ -148,13 +148,11 @@ public class MainFlowSmokeTests
             requiresManualAction: true);
 
         changedProperties.Clear();
-        task.SyncCollectionModProgress(
-            "可选 Mod",
-            phase: 1,
-            optional: true,
-            state: CollectionModTaskState.Skipped,
-            message: "用户已选择跳过此可选 Mod",
-            requiresManualAction: false);
+        // 即使某个未来入口直接修改子项，父任务也必须同步刷新汇总属性。
+        var item = task.CollectionModItems.Single();
+        item.State = CollectionModTaskState.Skipped;
+        item.RequiresManualAction = false;
+        item.Message = "用户已选择跳过此可选 Mod";
 
         Assert.AreEqual(1, task.CollectionModFinishedCount);
         Assert.AreEqual("1/1 个 Mod 已处理", task.CollectionModProgressText);
