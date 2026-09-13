@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`98d359a`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`11eebe7`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -173,3 +173,7 @@ Skipped，而是持久化为 NeedsDecision；任务详情提供“选择文件�
 本轮修复 Collection 子项的即时进度刷新：用户明确跳过可选 Mod 时统一经由
 `SyncCollectionModProgress` 更新，而不是直接修改子项属性，确保任务详情的
 “已处理数量/百分比”与持久化状态同步更新。
+
+本轮继续收口 Collection 父子状态联动：任务会订阅逐 Mod 子项及集合本身的变化，
+即使补装、跳过或后续入口直接修改子项，也会同步刷新任务汇总进度、当前条目和
+任务详情绑定；清空/重建子项时会解除旧订阅，避免重复通知。
