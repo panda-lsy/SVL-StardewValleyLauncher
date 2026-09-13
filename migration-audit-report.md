@@ -138,3 +138,6 @@ Unix 主机对应的 `scripts/package-avalonia.sh` 入口也已补齐，统一�
 `fileName/downloadUrl` 的情况，更新检查现在会结合 manifest 的
 `ContentPackFor` 判定为父 Mod 的继承来源，不再把整合包版本误报成子 Mod
 的可更新版本；对应旧 `MarketTown` 目录形态已加入回归测试。
+
+本轮验证统计更正：加入旧 `modpack-entry` ContentPack 兼容回归后，迁移测试为
+**295 总计，其中 293 通过、2 跳过**。
