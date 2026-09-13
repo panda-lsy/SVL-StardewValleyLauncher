@@ -189,8 +189,21 @@
               <TextBlock Text="{Binding SelectedTaskCurrentCollectionModText}"
                          IsVisible="{Binding SelectedTaskHasCurrentCollectionMod}"
                          Opacity="0.82" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,2">
+                <Button Grid.Column="0" Content="上一页"
+                        Command="{Binding PreviousCollectionModPageCommand}"
+                        IsEnabled="{Binding CanGoToPreviousCollectionModPage}"
+                        MinWidth="68" Padding="8,2" />
+                <TextBlock Grid.Column="1" Text="{Binding SelectedTaskCollectionModPageInfo}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Opacity="0.7" />
+                <Button Grid.Column="2" Content="下一页"
+                        Command="{Binding NextCollectionModPageCommand}"
+                        IsEnabled="{Binding CanGoToNextCollectionModPage}"
+                        MinWidth="68" Padding="8,2" />
+              </Grid>
               <ScrollViewer MaxHeight="240">
-                <ItemsControl ItemsSource="{Binding SelectedTaskCollectionModItems}">
+                <ItemsControl ItemsSource="{Binding SelectedTaskCollectionModPageItems}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="models:CollectionModTaskItem">
                       <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,7">

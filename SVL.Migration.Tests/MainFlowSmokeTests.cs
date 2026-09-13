@@ -197,6 +197,48 @@ public class MainFlowSmokeTests
     }
 
     [TestMethod]
+    public void TaskStatus_ShouldPageCollectionModsWithoutChangingInstallStates()
+    {
+        var taskStatus = new TaskStatusPageViewModel();
+        var task = new DownloadTaskItem
+        {
+            Name = "分页 Collection",
+            TaskAction = DownloadTaskAction.InstallCollection,
+            TaskState = DownloadTaskState.Installing
+        };
+
+        for (var index = 1; index <= TaskStatusPageViewModel.CollectionModPageSize + 1; index++)
+        {
+            task.SyncCollectionModProgress(
+                $"Mod {index}",
+                phase: index % 2 + 1,
+                optional: index % 2 == 0,
+                state: index == 1 ? CollectionModTaskState.Installed : CollectionModTaskState.Pending);
+        }
+
+        taskStatus.SetCurrentTask(task);
+
+        Assert.AreEqual(2, taskStatus.SelectedTaskCollectionModTotalPages);
+        Assert.AreEqual("第 1/2 页", taskStatus.SelectedTaskCollectionModPageInfo);
+        Assert.AreEqual(TaskStatusPageViewModel.CollectionModPageSize,
+            taskStatus.SelectedTaskCollectionModPageItems.Count());
+        Assert.IsFalse(taskStatus.CanGoToPreviousCollectionModPage);
+        Assert.IsTrue(taskStatus.CanGoToNextCollectionModPage);
+        Assert.AreEqual(1, task.CollectionModFinishedCount);
+
+        taskStatus.NextCollectionModPageCommand.Execute(null);
+
+        Assert.AreEqual("第 2/2 页", taskStatus.SelectedTaskCollectionModPageInfo);
+        Assert.AreEqual(1, taskStatus.SelectedTaskCollectionModPageItems.Count());
+        Assert.IsTrue(taskStatus.CanGoToPreviousCollectionModPage);
+        Assert.IsFalse(taskStatus.CanGoToNextCollectionModPage);
+        Assert.AreEqual(1, task.CollectionModFinishedCount);
+
+        taskStatus.PreviousCollectionModPageCommand.Execute(null);
+        Assert.AreEqual("第 1/2 页", taskStatus.SelectedTaskCollectionModPageInfo);
+    }
+
+    [TestMethod]
     public async Task MainFlow_ShouldNavigateThroughCorePages_AndQueueTask()
     {
         var settingsStore = new AppUserSettingsStore();

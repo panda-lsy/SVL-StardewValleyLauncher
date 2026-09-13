@@ -120,6 +120,32 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     public bool SelectedTaskCanOpenBrowserPage => SelectedTask?.CanOpenBrowserPage ?? false;
     public IEnumerable<CollectionModTaskItem> SelectedTaskCollectionModItems =>
         SelectedTask == null ? Array.Empty<CollectionModTaskItem>() : SelectedTask.CollectionModItems;
+    /// <summary>Collection 详情分页大小，与旧 WPF 任务详情保持相同的逐页浏览体验。</summary>
+    public const int CollectionModPageSize = 8;
+
+    [ObservableProperty]
+    private int _selectedCollectionModPage = 1;
+
+    public IEnumerable<CollectionModTaskItem> SelectedTaskCollectionModPageItems =>
+        SelectedTask == null
+            ? Array.Empty<CollectionModTaskItem>()
+            : SelectedTask.CollectionModItems
+                .Skip((SelectedCollectionModPage - 1) * CollectionModPageSize)
+                .Take(CollectionModPageSize);
+
+    public int SelectedTaskCollectionModTotalPages =>
+        SelectedTask == null || SelectedTask.CollectionModItems.Count == 0
+            ? 0
+            : (SelectedTask.CollectionModItems.Count + CollectionModPageSize - 1) / CollectionModPageSize;
+
+    public string SelectedTaskCollectionModPageInfo =>
+        SelectedTaskCollectionModTotalPages == 0
+            ? "第 0/0 页"
+            : $"第 {SelectedCollectionModPage}/{SelectedTaskCollectionModTotalPages} 页";
+
+    public bool CanGoToPreviousCollectionModPage => SelectedCollectionModPage > 1;
+    public bool CanGoToNextCollectionModPage => SelectedCollectionModPage < SelectedTaskCollectionModTotalPages;
+
     public bool SelectedTaskHasCollectionMods => SelectedTask?.HasCollectionModItems ?? false;
     public string SelectedTaskCollectionModProgressText => SelectedTask?.CollectionModProgressText ?? string.Empty;
     public int SelectedTaskCollectionModFailedCount => SelectedTask?.CollectionModFailedCount ?? 0;
@@ -631,6 +657,24 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     }
 
     [RelayCommand]
+    private void PreviousCollectionModPage()
+    {
+        if (CanGoToPreviousCollectionModPage)
+        {
+            SelectedCollectionModPage--;
+        }
+    }
+
+    [RelayCommand]
+    private void NextCollectionModPage()
+    {
+        if (CanGoToNextCollectionModPage)
+        {
+            SelectedCollectionModPage++;
+        }
+    }
+
+    [RelayCommand]
     private void ClearCompleted()
     {
         ClearCompletedRequested?.Invoke();
@@ -691,6 +735,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
         OnPropertyChanged(nameof(SelectedTaskHasRetryReportPath));
         OnPropertyChanged(nameof(SelectedTaskCanOpenBrowserPage));
         OnPropertyChanged(nameof(SelectedTaskCollectionModItems));
+        RefreshCollectionModPaging(resetPage: true);
         OnPropertyChanged(nameof(SelectedTaskHasCollectionMods));
         OnPropertyChanged(nameof(SelectedTaskCollectionModProgressText));
         OnPropertyChanged(nameof(SelectedTaskCollectionModFailedCount));
@@ -758,6 +803,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
             case nameof(DownloadTaskItem.CollectionModProgress):
             case nameof(DownloadTaskItem.CollectionModProgressText):
                 OnPropertyChanged(nameof(SelectedTaskCollectionModItems));
+                RefreshCollectionModPaging();
                 OnPropertyChanged(nameof(SelectedTaskHasCollectionMods));
                 OnPropertyChanged(nameof(SelectedTaskCollectionModProgressText));
                 OnPropertyChanged(nameof(SelectedTaskCollectionModFailedCount));
@@ -788,6 +834,34 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     partial void OnFinishedTasksCountChanged(int value)
     {
         OnPropertyChanged(nameof(CanClearCompleted));
+    }
+
+    partial void OnSelectedCollectionModPageChanged(int value)
+    {
+        OnPropertyChanged(nameof(SelectedTaskCollectionModPageItems));
+        OnPropertyChanged(nameof(SelectedTaskCollectionModPageInfo));
+        OnPropertyChanged(nameof(CanGoToPreviousCollectionModPage));
+        OnPropertyChanged(nameof(CanGoToNextCollectionModPage));
+    }
+
+    private void RefreshCollectionModPaging(bool resetPage = false)
+    {
+        var totalPages = SelectedTaskCollectionModTotalPages;
+        var targetPage = resetPage
+            ? 1
+            : Math.Clamp(SelectedCollectionModPage, 1, Math.Max(1, totalPages));
+
+        if (SelectedCollectionModPage != targetPage)
+        {
+            SelectedCollectionModPage = targetPage;
+            return;
+        }
+
+        OnPropertyChanged(nameof(SelectedTaskCollectionModPageItems));
+        OnPropertyChanged(nameof(SelectedTaskCollectionModTotalPages));
+        OnPropertyChanged(nameof(SelectedTaskCollectionModPageInfo));
+        OnPropertyChanged(nameof(CanGoToPreviousCollectionModPage));
+        OnPropertyChanged(nameof(CanGoToNextCollectionModPage));
     }
 }
 
