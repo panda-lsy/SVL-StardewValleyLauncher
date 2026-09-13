@@ -6246,6 +6246,285 @@ public partial class DownloadPageViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 为 Collection 任务中的手动来源条目补装本地归档。
+    ///
+    /// Collection 的网页/NXM 来源不能安全地当作压缩包下载；用户在浏览器
+    /// 中完成下载后，任务详情可以直接选择该归档。这里仍使用统一的 Mod
+    /// 归档整理器、覆盖前备份和来源凭证写入逻辑，因此父 Mod/ContentPack
+    /// 的来源树不会因为人工补装而丢失。
+    /// </summary>
+    public async Task InstallCollectionModFromFileAsync(
+        DownloadTaskItem task,
+        CollectionModTaskItem item)
+    {
+        if (task == null || item == null || !item.CanInstallFromLocal ||
+            task.TaskAction != DownloadTaskAction.InstallCollection)
+        {
+            return;
+        }
+
+        var archivePath = await _dialogService.BrowseFilePathAsync(
+            "选择已下载的 Mod 压缩包",
+            [
+                new global::Avalonia.Platform.Storage.FilePickerFileType("Mod 压缩包")
+                {
+                    Patterns = ["*.zip", "*.7z"]
+                },
+                new global::Avalonia.Platform.Storage.FilePickerFileType("所有文件")
+                {
+                    Patterns = ["*.*"]
+                }
+            ]);
+        if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
+        {
+            return;
+        }
+
+        var modsPath = ResolveCollectionTaskModsPath(task);
+        if (string.IsNullOrWhiteSpace(modsPath))
+        {
+            await ShowMessageOnUiThreadAsync(
+                "无法安装 Mod",
+                "找不到该 Collection 的实际 Mods 目录，请先完成整合包安装或重新打开任务。");
+            return;
+        }
+
+        var isValidArchive = await Task.Run(() =>
+            ModpackInstallService.IsValidModArchiveFile(archivePath));
+        if (!isValidArchive)
+        {
+            await ShowMessageOnUiThreadAsync(
+                "无法安装 Mod",
+                "所选文件不是包含有效 manifest.json 的 Mod 压缩包。请确认选择的是 Mod 文件，而不是网页或整合包本体。");
+            return;
+        }
+
+        var targetNames = (await Task.Run(() =>
+                ModpackInstallService.GetInstallTargetNames(archivePath, item.Name, modsPath)))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (targetNames.Count == 0)
+        {
+            await ShowMessageOnUiThreadAsync(
+                "无法安装 Mod",
+                "没有从所选归档中解析出可安装的 Mod 目录。请确认压缩包内包含 manifest.json。");
+            return;
+        }
+
+        var existingPaths = targetNames
+            .Select(name => Path.Combine(modsPath, name))
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (existingPaths.Count > 0)
+        {
+            var summary = $"检测到 {existingPaths.Count} 个现有 Mod 将被覆盖：\n" +
+                          string.Join("\n", existingPaths.Select(path => $"• {Path.GetFileName(path)}"));
+            var resolution = await ShowConflictResolutionOnUiThreadAsync(
+                "补装 Mod 时发现更新/冲突",
+                "所选归档会替换已有 Mod。是否覆盖？系统会在覆盖前自动备份原有 Mod。",
+                archivePath,
+                existingPaths[0],
+                summary,
+                "打开待安装文件",
+                "打开原有 Mod 文件夹",
+                "覆盖（先备份原有 Mod）");
+            if (resolution != ConflictResolutionDialogAction.Replace)
+            {
+                return;
+            }
+
+            var backupResult = await BackupExistingModPathsAsync(
+                modsPath,
+                existingPaths,
+                targetNames,
+                $"{task.Name}-{item.Name}");
+            if (!backupResult.Success)
+            {
+                await ShowMessageOnUiThreadAsync(
+                    "无法覆盖 Mod",
+                    $"原有 Mod“{Path.GetFileName(backupResult.FailedPath ?? existingPaths[0])}”备份失败，已取消本次补装。");
+                return;
+            }
+
+            task.BackupPath = backupResult.BackupPath ?? string.Empty;
+        }
+
+        // 只有确认冲突并完成备份后才将条目标记为处理中；取消或失败会保留
+        // RequiresManualAction，用户仍可重新选择归档。
+        task.SyncCollectionModProgress(
+            item.Name,
+            item.Phase,
+            item.Optional,
+            CollectionModTaskState.Downloading,
+            "正在安装已选择的本地归档",
+            item.SourceUrl,
+            requiresManualAction: true);
+        task.SetState(DownloadTaskState.Installing, $"正在补装 Collection Mod: {item.Name}");
+        task.CanRetry = false;
+        task.CanCancel = false;
+        TaskStateChanged?.Invoke(task);
+        SaveTaskState();
+
+        try
+        {
+            var installedNames = new List<string>();
+            var installed = await Task.Run(() =>
+                ModpackInstallService.InstallDownloadedModArchive(
+                    archivePath,
+                    modsPath,
+                    item.Name,
+                    out installedNames));
+            if (!installed || installedNames.Count == 0)
+            {
+                throw new InvalidDataException("所选归档安装失败，未生成有效 Mod 目录");
+            }
+
+            var source = InferManualCollectionSource(item.SourceUrl, archivePath);
+            try
+            {
+                ModpackInstallService.WriteSourceCredentialForInstalledModWithRepository(
+                    modsPath,
+                    installedNames,
+                    source.Platform,
+                    source.ProjectId,
+                    source.FileId,
+                    item.SourceUrl,
+                    Path.GetFileName(archivePath),
+                    repository: null);
+            }
+            catch (Exception sourceException)
+            {
+                // 来源凭证是后续更新/回滚的增强信息；归档已经安装成功时，
+                // 单个凭证文件被占用不应把整项再次标记为安装失败。
+                EmitLog($"Collection Mod 来源凭证写入失败（不影响安装）: {item.Name}, 错误: {sourceException.Message}");
+            }
+
+            var remainingFailedCount = task.CollectionModItems.Count(candidate =>
+                candidate.State == CollectionModTaskState.Failed &&
+                !string.Equals(candidate.Name, item.Name, StringComparison.OrdinalIgnoreCase));
+            task.SyncCollectionModProgress(
+                item.Name,
+                item.Phase,
+                item.Optional,
+                CollectionModTaskState.Installed,
+                "已从本地归档安装",
+                item.SourceUrl,
+                requiresManualAction: false);
+            task.FailedDetails = string.Join(
+                Environment.NewLine,
+                task.CollectionModItems
+                    .Where(candidate => candidate.State == CollectionModTaskState.Failed)
+                    .Select(candidate => $"{candidate.Name}: {candidate.Message}"));
+            task.Progress = remainingFailedCount > 0 ? 99 : 100;
+            task.SetState(
+                remainingFailedCount > 0 ? DownloadTaskState.Failed : DownloadTaskState.Completed,
+                remainingFailedCount > 0
+                    ? $"部分完成（仍有 {remainingFailedCount} 个 Mod 失败）"
+                    : "已完成");
+            task.CanRetry = remainingFailedCount > 0;
+            Status = remainingFailedCount > 0
+                ? $"Collection Mod 已补装: {item.Name}"
+                : $"Collection 安装完成: {task.Name}";
+            EmitLog($"Collection Mod 已从本地归档安装: {item.Name}, 目录: {string.Join(", ", installedNames)}");
+            ModInstallationCompleted?.Invoke();
+            Dispatcher.UIThread.Post(() => InstanceContextChanged?.Invoke());
+        }
+        catch (Exception ex)
+        {
+            task.SyncCollectionModProgress(
+                item.Name,
+                item.Phase,
+                item.Optional,
+                CollectionModTaskState.Failed,
+                $"本地归档安装失败：{ex.Message}",
+                item.SourceUrl,
+                requiresManualAction: true);
+            task.FailedDetails = string.Join(
+                Environment.NewLine,
+                task.CollectionModItems
+                    .Where(candidate => candidate.State == CollectionModTaskState.Failed)
+                    .Select(candidate => $"{candidate.Name}: {candidate.Message}"));
+            task.Progress = 99;
+            task.SetState(DownloadTaskState.Failed, "本地 Mod 补装失败（可重试）");
+            task.CanRetry = true;
+            Status = $"Collection Mod 补装失败: {item.Name}";
+            EmitLog($"Collection Mod 本地补装失败: {item.Name}, 错误: {ex.Message}");
+        }
+        finally
+        {
+            TaskStateChanged?.Invoke(task);
+            SaveTaskState();
+        }
+    }
+
+    private static string ResolveCollectionTaskModsPath(DownloadTaskItem task)
+    {
+        var runtimePath = !string.IsNullOrWhiteSpace(task.InstalledPath)
+            ? task.InstalledPath
+            : !string.IsNullOrWhiteSpace(task.InstalledDirectory)
+                ? InstanceRuntimePathResolver.Resolve(task.InstalledDirectory)
+                : string.Empty;
+
+        if (string.IsNullOrWhiteSpace(runtimePath) &&
+            !string.IsNullOrWhiteSpace(task.TargetGamePath) &&
+            !string.IsNullOrWhiteSpace(task.TargetInstanceName))
+        {
+            var basePath = InstanceRuntimePathResolver.ResolveBasePath(task.TargetGamePath);
+            var safeName = InstanceRuntimePathResolver.SanitizeFileNameComponent(
+                task.TargetInstanceName,
+                string.Empty);
+            if (!string.IsNullOrWhiteSpace(basePath) && !string.IsNullOrWhiteSpace(safeName))
+            {
+                runtimePath = InstanceRuntimePathResolver.Resolve(
+                    Path.Combine(basePath, "versions", safeName));
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(runtimePath)
+            ? string.Empty
+            : Path.Combine(runtimePath, "Mods");
+    }
+
+    private static (string? Platform, long? ProjectId, long? FileId) InferManualCollectionSource(
+        string? sourceUrl,
+        string archivePath)
+    {
+        if (ModpackInstallService.TryParseCurseforgeIdsFromUrl(
+                sourceUrl,
+                out var curseforgeProjectId,
+                out var curseforgeFileId))
+        {
+            return ("Curseforge", curseforgeProjectId, curseforgeFileId);
+        }
+
+        if (ModpackInstallService.TryParseCurseforgeFileIdFromCdnUrl(
+                sourceUrl,
+                out var cdnFileId))
+        {
+            return ("Curseforge", null, cdnFileId);
+        }
+
+        if (NexusSourceParser.TryParsePageIds(sourceUrl, out var nexusModId, out var nexusFileId))
+        {
+            return ("NexusMods", nexusModId, nexusFileId > 0 ? nexusFileId : null);
+        }
+
+        if (NexusSourceParser.TryParseModId(sourceUrl, out var nexusOnlyModId))
+        {
+            var fileId = DownloadOptionIdentityParser.TryExtractFileId(
+                Path.GetFileName(archivePath),
+                out var parsedFileId)
+                ? parsedFileId
+                : 0;
+            return ("NexusMods", nexusOnlyModId, fileId > 0 ? fileId : null);
+        }
+
+        return (null, null, null);
+    }
+
     private async Task ExecuteRealDownloadTaskAsync(DownloadTaskItem task)
     {
         task.CanRetry = false;

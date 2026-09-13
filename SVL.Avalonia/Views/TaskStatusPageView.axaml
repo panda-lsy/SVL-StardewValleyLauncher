@@ -198,12 +198,19 @@
                         <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding RequirementText}" Opacity="0.65" Margin="8,0,0,0" />
                         <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding DisplayStateText}" Opacity="0.75" Margin="10,0,0,0" />
-                        <Button Grid.Row="0" Grid.Column="4" Content="打开来源"
-                                Command="{Binding DataContext.OpenCollectionModSourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                CommandParameter="{Binding}"
-                                IsVisible="{Binding RequiresManualAction}"
-                                IsEnabled="{Binding HasOpenableSourceUrl}"
-                                MinWidth="76" Margin="10,0,0,0" Padding="8,2" />
+                        <WrapPanel Grid.Row="0" Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="10,0,0,0">
+                          <Button Content="打开来源"
+                                  Command="{Binding DataContext.OpenCollectionModSourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  CommandParameter="{Binding}"
+                                  IsVisible="{Binding RequiresManualAction}"
+                                  IsEnabled="{Binding HasOpenableSourceUrl}"
+                                  MinWidth="76" Padding="8,2" />
+                          <Button Content="选择文件并安装"
+                                  Command="{Binding DataContext.InstallCollectionModFromFileCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  CommandParameter="{Binding}"
+                                  IsVisible="{Binding CanInstallFromLocal}"
+                                  MinWidth="104" Margin="6,0,0,0" Padding="8,2" />
+                        </WrapPanel>
                         <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="5"
                                    Text="{Binding Message}" FontSize="11" Opacity="0.65"
                                    TextWrapping="Wrap" />

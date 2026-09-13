@@ -154,6 +154,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     public event Action<DownloadTaskItem>? OpenReportRequested;
     public event Action<DownloadTaskItem>? OpenRetryReportRequested;
     public event Action<DownloadTaskItem>? OpenBrowserRequested;
+    public event Func<DownloadTaskItem, CollectionModTaskItem, Task>? InstallCollectionModFromFileRequested;
     public event Action? ClearCompletedRequested;
     public event Action? RetryFailedItemsRequested;
     public event Action? NavigateToDownloadRequested;
@@ -360,7 +361,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
             {
                 AdviceTitle = "需要手动处理部分 Mod";
                 SuggestedActions.Add("Collection 清单中的部分 Mod 被标记为手动来源，SVL 不会把网页或 NXM 入口当成压缩包下载。");
-                SuggestedActions.Add("点击整合包 Mod 进度中的“打开来源”，完成下载后将压缩包拖入当前实例的 Mods 页面安装。");
+                SuggestedActions.Add("点击整合包 Mod 进度中的“选择文件并安装”，可直接将已下载压缩包补装到该 Collection 实例。");
                 if (SelectedTask?.CanRetry == true)
                 {
                     SuggestedActions.Add("其余自动下载失败项可在来源补齐或登录后点击右栏“重试”。");
@@ -599,6 +600,21 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
 
         OpenPath(item.SourceUrl);
         AddLog($"已打开手动 Mod 来源: {item.Name}");
+    }
+
+    [RelayCommand]
+    private async Task InstallCollectionModFromFileAsync(CollectionModTaskItem? item)
+    {
+        if (item == null || SelectedTask == null || !item.CanInstallFromLocal)
+        {
+            return;
+        }
+
+        var handler = InstallCollectionModFromFileRequested;
+        if (handler != null)
+        {
+            await handler(SelectedTask, item);
+        }
     }
 
     [RelayCommand]

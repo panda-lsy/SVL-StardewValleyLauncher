@@ -97,6 +97,11 @@ public partial class CollectionModTaskItem : ObservableObject
         Uri.TryCreate(SourceUrl, UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 
+    /// <summary>失败或跳过的手动来源条目可从本地选择归档继续安装。</summary>
+    public bool CanInstallFromLocal =>
+        RequiresManualAction &&
+        State is CollectionModTaskState.Failed or CollectionModTaskState.Skipped;
+
     public string DisplayStateText => State switch
     {
         CollectionModTaskState.Pending => "等待中",
@@ -111,6 +116,7 @@ public partial class CollectionModTaskItem : ObservableObject
     {
         OnPropertyChanged(nameof(IsFinished));
         OnPropertyChanged(nameof(IsCurrent));
+        OnPropertyChanged(nameof(CanInstallFromLocal));
         OnPropertyChanged(nameof(DisplayStateText));
     }
 
@@ -127,6 +133,11 @@ public partial class CollectionModTaskItem : ObservableObject
     partial void OnSourceUrlChanged(string value)
     {
         OnPropertyChanged(nameof(HasOpenableSourceUrl));
+    }
+
+    partial void OnRequiresManualActionChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanInstallFromLocal));
     }
 }
 

@@ -44,6 +44,31 @@ public class MainFlowSmokeTests
     }
 
     [TestMethod]
+    public void CollectionManualSource_ShouldOfferLocalArchiveRecoveryOnlyForFailedOrSkippedItems()
+    {
+        var item = new CollectionModTaskItem
+        {
+            Name = "手动来源 Mod",
+            RequiresManualAction = true,
+            SourceUrl = "https://www.nexusmods.com/stardewvalley/mods/123"
+        };
+
+        Assert.IsFalse(item.CanInstallFromLocal);
+
+        item.State = CollectionModTaskState.Failed;
+        Assert.IsTrue(item.CanInstallFromLocal);
+
+        item.State = CollectionModTaskState.Installed;
+        Assert.IsFalse(item.CanInstallFromLocal);
+
+        item.State = CollectionModTaskState.Skipped;
+        Assert.IsTrue(item.CanInstallFromLocal);
+
+        item.RequiresManualAction = false;
+        Assert.IsFalse(item.CanInstallFromLocal);
+    }
+
+    [TestMethod]
     public async Task MainFlow_ShouldNavigateThroughCorePages_AndQueueTask()
     {
         var settingsStore = new AppUserSettingsStore();

@@ -328,6 +328,7 @@ public partial class MainWindowViewModel : ObservableObject
         TaskStatusPage.OpenReportRequested += HandleOpenReportRequested;
         TaskStatusPage.OpenRetryReportRequested += HandleOpenRetryReportRequested;
         TaskStatusPage.OpenBrowserRequested += HandleOpenBrowserRequested;
+        TaskStatusPage.InstallCollectionModFromFileRequested += HandleInstallCollectionModFromFileRequested;
         TaskStatusPage.ClearCompletedRequested += HandleClearCompletedRequested;
         ModSearchPage.OpenDetailsRequested += HandleOpenDetailsFromSearch;
         ModpackSearchPage.OpenDetailsRequested += HandleOpenDetailsFromSearch;
@@ -665,6 +666,13 @@ public partial class MainWindowViewModel : ObservableObject
     private void HandleOpenBrowserRequested(Models.DownloadTaskItem task)
     {
         DownloadPage.OpenTaskBrowser(task);
+    }
+
+    private Task HandleInstallCollectionModFromFileRequested(
+        Models.DownloadTaskItem task,
+        Models.CollectionModTaskItem item)
+    {
+        return DownloadPage.InstallCollectionModFromFileAsync(task, item);
     }
 
     private void HandleClearCompletedRequested()
