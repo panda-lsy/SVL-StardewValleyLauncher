@@ -1723,27 +1723,36 @@ public sealed class AvaloniaMigrationHardeningTests
         var root = Path.Combine(Path.GetTempPath(), "svl-existing-composite-repair-test-" + Guid.NewGuid().ToString("N"));
         var modsPath = Path.Combine(root, "Mods");
         var parentPath = Path.Combine(modsPath, "Parent Mod");
-        var childOnePath = Path.Combine(modsPath, "Child One");
-        var childTwoPath = Path.Combine(modsPath, "Child Two");
+        var childPaths = new[]
+        {
+            Path.Combine(modsPath, "Child One"),
+            Path.Combine(modsPath, "Child Two"),
+            Path.Combine(modsPath, "Child Three"),
+            Path.Combine(modsPath, "Child Four"),
+            Path.Combine(modsPath, "Child Five"),
+            Path.Combine(modsPath, "Child Six")
+        };
         try
         {
             Directory.CreateDirectory(parentPath);
-            Directory.CreateDirectory(childOnePath);
-            Directory.CreateDirectory(childTwoPath);
+            foreach (var childPath in childPaths)
+            {
+                Directory.CreateDirectory(childPath);
+            }
             File.WriteAllText(
                 Path.Combine(parentPath, "manifest.json"),
                 "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\",\"EntryDll\":\"Parent.dll\"}");
-            File.WriteAllText(
-                Path.Combine(childOnePath, "manifest.json"),
-                "{\"Name\":\"Child One\",\"UniqueID\":\"Example.ChildOne\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
-            File.WriteAllText(
-                Path.Combine(childTwoPath, "manifest.json"),
-                "{\"Name\":\"Child Two\",\"UniqueID\":\"Example.ChildTwo\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+            for (var index = 0; index < childPaths.Length; index++)
+            {
+                File.WriteAllText(
+                    Path.Combine(childPaths[index], "manifest.json"),
+                    $"{{\"Name\":\"Child {index + 1}\",\"UniqueID\":\"Example.Child{index + 1}\",\"ContentPackFor\":{{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}}}");
+            }
 
             File.WriteAllText(
                 Path.Combine(parentPath, "svl-source.json"),
                 "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"sourceKind\":\"modpack-entry\"}");
-            foreach (var childPath in new[] { childOnePath, childTwoPath })
+            foreach (var childPath in childPaths)
             {
                 File.WriteAllText(
                     Path.Combine(childPath, "svl-source.json"),
@@ -1761,9 +1770,9 @@ public sealed class AvaloniaMigrationHardeningTests
             var parent = parentDocument.RootElement;
             Assert.AreEqual("modpack-entry", parent.GetProperty("sourceKind").GetString());
             Assert.IsTrue(parent.GetProperty("isParentMod").GetBoolean());
-            Assert.AreEqual(2, parent.GetProperty("childMods").GetArrayLength());
+            Assert.AreEqual(childPaths.Length, parent.GetProperty("childMods").GetArrayLength());
 
-            foreach (var childPath in new[] { childOnePath, childTwoPath })
+            foreach (var childPath in childPaths)
             {
                 using var childDocument = JsonDocument.Parse(
                     File.ReadAllText(Path.Combine(childPath, "svl-source.json")));
