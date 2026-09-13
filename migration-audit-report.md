@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`11eebe7`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`35fa88c`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -25,7 +25,7 @@
 | --- | --- | --- |
 | `manifest.json` 的 `UpdateKeys=GitHub:...` 自动检查更新 | WPF/Core 的 `ModManager` 仍明确记录为 TODO；Avalonia 已补齐 GitHub 仓库/release 解析、稳定版本比较、Release 压缩包选择、任务状态/导出/整合包来源持久化，并覆盖回归测试 | 后续只需在真实 GitHub 仓库做一次端到端 UI 验收；无 Release 压缩包时会明确提示，不把源码包误当 Mod 安装包 |
 | Nexus Collection 的 `manual` 来源 | WPF 安装器仍是 TODO；Avalonia 已覆盖 NXM、API、浏览器回调及 HTTP 直链，并将 `manual` 网页/无来源条目标记为需手动处理；只有明确归档直链才自动下载 | 任务页保留来源地址并提供“打开来源”，用户完成下载后可拖入当前实例 Mods 页面；不把网页地址当压缩包 |
-| Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 继续使用统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；可选 Mod 自动失败现在进入“待处理”，用户可明确选择“选择文件并安装”或“跳过可选 Mod”，选择会持久化并在重试时生效；仍未提供旧向导的人工逐页导航 | 保持统一队列作为默认路径；若真实用户仍需要逐页决策，再在任务详情增加“继续下一项”等导航，不恢复旧任务类型 |
+| Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 继续使用统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；可选 Mod 自动失败现在进入“待处理”，用户可明确选择“选择文件并安装”或“跳过可选 Mod”，选择会持久化并在重试时生效；任务详情现已补齐 Collection Mod 列表分页、上一页/下一页导航，不改变统一队列的实际安装顺序 | 保持统一队列作为默认路径；后续仅需进行真实 Collection 的可见 UI 验收，不恢复旧任务类型 |
 | 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，代码未发现实际消费逻辑；Avalonia 目前实现的是启动时自动检查和用户确认后下载安装 | 暂不视为已存在但漏迁移的完成特性；若确定需要，再单独定义自动下载/通知策略 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
@@ -72,7 +72,7 @@
 
 下面的 293 条统计是早期审计快照；本轮最新总数见紧接着的更新统计。
 当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **293 总计，其中 291 通过、2 跳过**。冲突检测还覆盖了同一循环依赖只生成一条链路结果；线上目录新增了可替换 HTTP fixture，已验证 CurseForge 搜索、详情文件列表、无文件提示和 FileID/直链保留，以及 Nexus GraphQL 搜索/详情和凭据传递；GitHub Mod 更新现在覆盖仓库规范化、稳定 Release 选择、预发布过滤、版本比较、任务状态持久化和压缩包来源写回；SMAPI GitHub 发布目录还覆盖了标准 releases 为空时回退 `releases/latest`、大小写不敏感字段和安装包地址选择；多线程最终快照和分片进度生命周期、窗口控件等宽布局及 Popup 菜单主题也有回归覆盖；窗口控制区已改为共享 24×24 矢量画布，最小化/最大化/关闭图形不再受不同 PNG 透明边界影响；CurseForge manifest 指定的 SMAPI FileID 现在会在版本目录不可用时优先从稳定缓存/直链安装，在线 CurseForge SMAPI 版本列表也会把 FileID 传递到稳定缓存；详情下载项统一兼容 Nexus `File <FileID>_...`、URL 编码文件名、`file-id` 查询参数和 `cf-<ProjectID>-<FileID>` 标识；WPF/Core 旧 `svl-source.json` 的 `modId/project_id/file_id/download_url` 别名也会被迁移读取；另存为任务也会清理生成式 FileID 前缀，只有直链时会从 URL 提取可读文件名，保证实际建议文件名可直接使用；Nexus 页面解析还兼容连字符和 URL 编码的查询键；CurseForge 整合包本体命中稳定缓存时会跳过 CDN 解析并入队，缓存被清理后任务会按 ProjectID/FileID 刷新地址；稳定缓存来源也有任务执行分支回归覆盖；SVL 来源下载现在对被包装成失败结果的瞬时 CDN/网络/归档错误进行有限重试，同时明确跳过来源缺失、登录、取消和浏览器回调失败；SVL/Collection 的旧来源现在还会从 `logicalFilename` 恢复 Nexus FileID，旧 Collection 多文件入口会将 `cf-项目ID-文件ID` 临时目录名还原为 manifest 名称，安装预览与实际落盘名称保持一致；Collection 完整导入链路也已覆盖“页面 URL + logicalFilename + Nexus 缓存”场景，验证安装过程不会错误打开浏览器；Collection 旧缓存解析也覆盖 `mod_<ModID>_<FileID>.zip` 命名；Collection 7z 导入还新增了真实解压、嵌套清单定位和 bundled Mod 去外层目录回归；本轮新增压缩包父 Mod + 兄弟目录 ContentPack 的来源树回归，并覆盖普通 Mod 在线安装路径，确认父级保留整合包/归档来源、子级写入 `parent-inherited`、旧更新状态清理且导出不会重复列出子级；新增加载期旧来源修复回归，确认同一项目混用旧/新 FileID 时会自动重建父子来源树；旧 Core 分支的改动仍受本机缺少 .NET Framework 4.8 Developer Pack 影响，无法进行完整项目编译。
-最新测试统计（含本轮 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容及 Collection 子项进度刷新回归）：迁移测试 **301 总计，其中 299 通过、2 跳过**。
+最新测试统计（含本轮 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归）：迁移测试 **302 总计，其中 300 通过、2 跳过**。
 本轮界面回退：撤销此前生成式 PNG 图标替换，恢复 `Resources/Icons.axaml` 中的原有矢量资源及动态颜色绑定；标题栏仍保留统一 24×24 画布和等宽控制列，避免回退图标后重新引入三个窗口按钮的对齐问题，并新增回归断言禁止视图重新引用 `Assets/Icons/Generated`。
 本轮修复：Modpack/Collection 的游戏版本只接受 API 明确字段，不再从整合包名称、摘要或文件名推断版本；普通 Mod 仍保留文本兜底。
 本轮下载链路修复：HTTP 层对响应提前结束、连接重置和瞬时 408/429/5xx 做最多 3 次有限重试；403/404/416 等确定性错误仍交由来源刷新或上层处理，并新增半包恢复回归。
