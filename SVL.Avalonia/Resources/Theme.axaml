@@ -418,6 +418,30 @@
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBrushGray4}" />
   </Style>
 
+  <!-- 下载页左栏使用窄型主题滚动条，避免系统滚动条在浅/深色模式下
+       与左栏面板颜色脱节；只作用于下载类别、任务列表所在的左栏。 -->
+  <Style Selector="ScrollViewer.downloadSidebar ScrollBar:vertical">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="ScrollViewer.downloadSidebar ScrollBar:vertical /template/ Thumb">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="MinHeight" Value="34" />
+  </Style>
+
+  <Style Selector="ScrollViewer.downloadSidebar ScrollBar:vertical /template/ Thumb:pointerover">
+    <Setter Property="Background" Value="{DynamicResource ColorBrush2}" />
+  </Style>
+
+  <Style Selector="ScrollViewer.downloadSidebar ScrollBar:vertical /template/ RepeatButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+
   <Style Selector="Button.launchPrimary">
     <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
     <Setter Property="Foreground" Value="White" />

@@ -18,6 +18,12 @@ public static class DownloadOptionIdentityParser
         @"\bcf[-_\s](?<project>\d+)[-_\s](?<file>\d+)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    // CurseForge 的 CDN 会把完整 FileID 拆成 /files/<前段>/<后 3 位>/。
+    // 必须在通用的 files/<数字> 规则之前解析，否则 5357471 会被截成 5357。
+    private static readonly Regex CurseForgeCdnFilePattern = new(
+        @"[/\\]files[/\\](?<prefix>\d+)[/\\](?<suffix>\d{1,3})(?:[/\\]|$)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static readonly Regex FilePrefixPattern = new(
         @"^file\s+\d+\s*(?:[:#|_-]\s*)?",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -42,6 +48,27 @@ public static class DownloadOptionIdentityParser
         catch (UriFormatException)
         {
             // 保留原始文本继续解析，畸形的百分号编码不应使整个下载项失效。
+        }
+
+        var curseForgeCdnMatch = CurseForgeCdnFilePattern.Match(normalized);
+        if (curseForgeCdnMatch.Success &&
+            long.TryParse(curseForgeCdnMatch.Groups["prefix"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var prefix) &&
+            long.TryParse(curseForgeCdnMatch.Groups["suffix"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var suffix) &&
+            prefix > 0 &&
+            suffix is >= 0 and <= 999)
+        {
+            try
+            {
+                fileId = checked(prefix * 1000 + suffix);
+                if (fileId > 0)
+                {
+                    return true;
+                }
+            }
+            catch (OverflowException)
+            {
+                // 继续尝试其它历史格式，避免异常影响下载项解析。
+            }
         }
 
         var match = FileIdPattern.Match(normalized);

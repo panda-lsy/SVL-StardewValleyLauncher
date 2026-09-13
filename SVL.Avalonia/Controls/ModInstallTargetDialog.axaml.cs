@@ -7,7 +7,7 @@ namespace SVL.Avalonia.Controls;
 
 /// <summary>
 /// 在线 Mod 安装前的实例选择对话框。
-/// 在没有主页选中版本时，同时提供 SMAPI 实例列表、安装、另存为和取消操作。
+/// 提供 SMAPI/Base 实例列表、安装、另存为和取消操作。
 /// </summary>
 public partial class ModInstallTargetDialog : UserControl
 {

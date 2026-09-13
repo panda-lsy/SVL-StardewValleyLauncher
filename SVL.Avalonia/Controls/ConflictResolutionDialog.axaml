@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SVL.Avalonia.Controls.ConflictResolutionDialog"
+        Classes="conflictDialog"
+        SizeToContent="WidthAndHeight"
+        MinWidth="560"
+        MaxWidth="760"
+        MaxHeight="560"
+        WindowStartupLocation="CenterOwner"
+        Title="处理冲突"
+        Background="{DynamicResource WindowBackgroundBrush}">
+  <Border Padding="22"
+          Background="{DynamicResource CardBrush}"
+          BorderBrush="{DynamicResource BorderBrush}"
+          BorderThickness="1"
+          CornerRadius="12">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+      <TextBlock Grid.Row="0"
+                 Margin="0,0,0,12"
+                 Text="{Binding Title}"
+                 FontSize="22"
+                 FontWeight="SemiBold"
+                 Foreground="{DynamicResource TextPrimaryBrush}" />
+      <TextBlock Grid.Row="1"
+                 Margin="0,0,0,12"
+                 Text="{Binding Message}"
+                 MaxWidth="700"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource TextPrimaryBrush}" />
+      <Border Grid.Row="2"
+              Margin="0,0,0,12"
+              Padding="12"
+              Background="{DynamicResource SurfaceBrush}"
+              BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="1"
+              CornerRadius="8">
+        <StackPanel Spacing="8">
+          <TextBlock Text="文件比对结果" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding ComparisonSummary}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextSecondaryBrush}" />
+          <TextBlock Text="{Binding IncomingPathText}"
+                     TextWrapping="Wrap"
+                     MaxWidth="700"
+                     FontSize="12"
+                     Foreground="{DynamicResource TextSecondaryBrush}" />
+          <TextBlock Text="{Binding ExistingPathText}"
+                     TextWrapping="Wrap"
+                     MaxWidth="700"
+                     FontSize="12"
+                     Foreground="{DynamicResource TextSecondaryBrush}" />
+        </StackPanel>
+      </Border>
+      <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
+        <Button Content="{Binding OpenIncomingText}" Command="{Binding OpenIncomingCommand}" />
+        <Button Content="{Binding OpenExistingText}" Command="{Binding OpenExistingCommand}" />
+      </StackPanel>
+      <TextBlock Grid.Row="4"
+                 Margin="0,12,0,12"
+                 Text="{Binding BackupNotice}"
+                 TextWrapping="Wrap"
+                 MaxWidth="700"
+                 Foreground="{DynamicResource ColorBrushInfoDark}" />
+      <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Content="取消" Command="{Binding CancelCommand}" />
+        <Button Content="{Binding ReplaceButtonText}"
+                Command="{Binding ReplaceCommand}"
+                Classes="launchPrimary" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

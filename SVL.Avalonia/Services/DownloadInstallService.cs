@@ -18,6 +18,206 @@ public sealed class DownloadInstallService
     /// </summary>
     public Func<string?>? CurrentModsPathResolver { get; set; }
 
+    /// <summary>
+    /// 在在线 Mod 安装覆盖现有目录前创建一个可被 Mod 管理页识别的备份。
+    /// 备份放在目标实例根目录的 ModsBackup，而不是临时下载目录，便于用户
+    /// 后续从“备份”标签页恢复。
+    /// </summary>
+    public bool TryBackupExistingModDirectory(
+        string targetModsPath,
+        string existingModPath,
+        out string backupPath)
+    {
+        return TryBackupExistingModDirectory(
+            targetModsPath,
+            existingModPath,
+            replacementFolderNames: null,
+            sourceArchiveName: null,
+            out backupPath);
+    }
+
+    /// <summary>
+    /// 备份覆盖更新前的 Mod，并在原目录和备份目录中写入更新链。
+    /// 旧重载保留给已有调用方；更新任务使用此重载记录新归档的目标目录名，
+    /// 这样即使旧目录名和新目录名不同，恢复时也能找到并处理新目录。
+    /// </summary>
+    public bool TryBackupExistingModDirectory(
+        string targetModsPath,
+        string existingModPath,
+        IReadOnlyList<string>? replacementFolderNames,
+        string? sourceArchiveName,
+        out string backupPath)
+    {
+        backupPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(targetModsPath) ||
+            string.IsNullOrWhiteSpace(existingModPath) ||
+            !Directory.Exists(targetModsPath) ||
+            !Directory.Exists(existingModPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var modsRoot = Path.GetFullPath(targetModsPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var source = Path.GetFullPath(existingModPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var sourceParent = Path.GetDirectoryName(source);
+            if (!string.Equals(sourceParent, modsRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var originalFolderName = Path.GetFileName(source);
+            TryReadManifestIdentity(source, out var originalDisplayName, out var originalUniqueId);
+            var backupRoot = Path.Combine(
+                Directory.GetParent(modsRoot)?.FullName ?? modsRoot,
+                "ModsBackup");
+            Directory.CreateDirectory(backupRoot);
+            var snapshotName = $"{DateTime.Now:yyyyMMdd_HHmmss}_{
+                CreateSafeFolderName(originalFolderName)}_{Guid.NewGuid():N}";
+            backupPath = Path.Combine(backupRoot, snapshotName);
+
+            var updateChain = replacementFolderNames == null
+                ? null
+                : BuildUpdateChain(
+                    originalFolderName,
+                    replacementFolderNames,
+                    sourceArchiveName,
+                    originalUniqueId);
+            if (updateChain != null)
+            {
+                var chainPath = Path.Combine(source, ".svl-update-chain.json");
+                File.WriteAllText(
+                    chainPath,
+                    JsonSerializer.Serialize(updateChain, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            if (updateChain != null && replacementFolderNames is { Count: > 0 })
+            {
+                // 更新链已经落盘后，优先在同一文件系统内直接移动旧目录。
+                // 这样新归档可以使用自己的目录名（旧 A、新 BCD），恢复时
+                // 再根据链路移除 BCD 并还原 A。跨卷/特殊文件系统不支持移动时，
+                // 回退为复制，仍保证更新前有完整备份。
+                try
+                {
+                    Directory.Move(source, backupPath);
+                }
+                catch (IOException)
+                {
+                    CopyDirectory(source, backupPath, overwrite: true);
+                }
+            }
+            else
+            {
+                CopyDirectory(source, backupPath, overwrite: true);
+            }
+
+            var metadata = new
+            {
+                OriginalFolderName = originalFolderName,
+                DisplayName = string.IsNullOrWhiteSpace(originalDisplayName)
+                    ? originalFolderName
+                    : originalDisplayName,
+                Version = "未知版本",
+                Author = string.Empty,
+                Description = "在线安装覆盖前自动备份",
+                UniqueId = originalUniqueId,
+                CreatedAt = DateTime.Now,
+                UpdateChain = updateChain
+            };
+            File.WriteAllText(
+                Path.Combine(backupPath, ".svl-backup.json"),
+                JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true }));
+            return true;
+        }
+        catch
+        {
+            if (!string.IsNullOrWhiteSpace(backupPath) && Directory.Exists(backupPath))
+            {
+                try
+                {
+                    // 移动成功后保留备份，避免元数据写入失败反而丢失用户的
+                    // 原版本；下次刷新/手动恢复仍可找回它。
+                    if (!File.Exists(Path.Combine(backupPath, ".svl-update-chain.json")))
+                    {
+                        Directory.Delete(backupPath, true);
+                    }
+                }
+                catch
+                {
+                    // 部分复制失败时，尽量清理不可恢复的半成品备份。
+                }
+            }
+            backupPath = string.Empty;
+            return false;
+        }
+    }
+
+    private static ModUpdateChainMetadata BuildUpdateChain(
+        string originalFolderName,
+        IReadOnlyList<string>? replacementFolderNames,
+        string? sourceArchiveName,
+        string originalUniqueId)
+    {
+        return new ModUpdateChainMetadata
+        {
+            OperationId = Guid.NewGuid().ToString("N"),
+            OriginalFolderName = originalFolderName,
+            OriginalUniqueId = originalUniqueId,
+            ReplacementFolderNames = (replacementFolderNames ?? [])
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => Path.GetFileName(name.Trim()))
+                .Where(name => !string.IsNullOrWhiteSpace(name) && name is not "." and not "..")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            SourceArchiveName = sourceArchiveName ?? string.Empty,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+    }
+
+    private static bool TryReadManifestIdentity(
+        string modDirectory,
+        out string name,
+        out string uniqueId)
+    {
+        name = string.Empty;
+        uniqueId = string.Empty;
+        try
+        {
+            var manifestPath = Directory
+                .EnumerateFiles(modDirectory, "manifest.json", SearchOption.AllDirectories)
+                .FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                return false;
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var root = document.RootElement;
+            name = GetJsonString(root, "Name", "name");
+            uniqueId = GetJsonString(root, "UniqueID", "UniqueId", "unique_id");
+            return !string.IsNullOrWhiteSpace(name) || !string.IsNullOrWhiteSpace(uniqueId);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string GetJsonString(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString()?.Trim() ?? string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
+
     public DownloadInstallService(IGameInstallPathLocator gameInstallPathLocator)
     {
         _gameInstallPathLocator = gameInstallPathLocator;
@@ -46,7 +246,8 @@ public sealed class DownloadInstallService
         long? sourceProjectId = null,
         long? sourceFileId = null,
         string? sourceDownloadUrl = null,
-        string? sourceFileName = null)
+        string? sourceFileName = null,
+        string? sourceRepository = null)
     {
         if (string.IsNullOrWhiteSpace(downloadedFilePath) || !File.Exists(downloadedFilePath))
         {
@@ -83,11 +284,14 @@ public sealed class DownloadInstallService
                 }
 
                 // 压缩包安装由 ModpackInstallService 负责事务式替换。
-                // 只有普通文件安装才在复制前清理同名目录，避免损坏压缩包
-                // 先删掉旧 Mod，导致新包安装失败后无法恢复。
+                // 只有普通文件安装才在复制前处理同名目录，避免损坏压缩包
+                // 替换前误删旧 Mod，导致新包安装失败后无法恢复。
                 if (Directory.Exists(installPath))
                 {
-                    Directory.Delete(installPath, true);
+                    if (!RecycleBinService.TryMoveToRecycleBin(installPath, out var recycleError))
+                    {
+                        throw new IOException($"无法将原有 Mod 移入回收站：{recycleError}");
+                    }
                 }
 
                 Directory.CreateDirectory(installPath);
@@ -112,7 +316,8 @@ public sealed class DownloadInstallService
             sourceProjectId,
             sourceFileId,
             sourceDownloadUrl,
-            sourceFileName);
+            sourceFileName,
+            sourceRepository);
 
         var primaryName = installedNames.FirstOrDefault() ?? safeName;
         return DownloadInstallResult.Success(Path.Combine(targetModsPath, primaryName), installedNames);
@@ -226,7 +431,10 @@ public sealed class DownloadInstallService
                                 continue;
                             }
 
-                            Directory.Delete(targetModDir, true);
+                            if (!RecycleBinService.TryMoveToRecycleBin(targetModDir, out var recycleError))
+                            {
+                                throw new IOException($"无法将原有 Mod 移入回收站：{recycleError}");
+                            }
                             replacedModNames.Add(modName);
                         }
                         else
@@ -510,7 +718,11 @@ public sealed class DownloadInstallService
 
                 if (Directory.Exists(targetModDir))
                 {
-                    Directory.Delete(targetModDir, true);
+                    if (!RecycleBinService.TryMoveToRecycleBin(targetModDir, out var recycleError))
+                    {
+                        errors.Add($"清理恢复中的 {modName} 失败：{recycleError}");
+                        continue;
+                    }
                 }
 
                 CopyDirectory(backupDir, targetModDir, true);
@@ -528,7 +740,10 @@ public sealed class DownloadInstallService
                 var targetModDir = Path.Combine(targetModsPath, modName);
                 if (Directory.Exists(targetModDir))
                 {
-                    Directory.Delete(targetModDir, true);
+                    if (!RecycleBinService.TryMoveToRecycleBin(targetModDir, out var recycleError))
+                    {
+                        errors.Add($"清理新增 {modName} 失败：{recycleError}");
+                    }
                 }
             }
             catch (Exception ex)
@@ -758,98 +973,21 @@ public sealed class DownloadInstallService
         long? sourceProjectId,
         long? sourceFileId,
         string? sourceDownloadUrl,
-        string? sourceFileName)
+        string? sourceFileName,
+        string? sourceRepository)
     {
-        if ((string.IsNullOrWhiteSpace(sourcePlatform) &&
-             string.IsNullOrWhiteSpace(sourceDownloadUrl)) ||
-            installedNames == null ||
-            installedNames.Count == 0)
-        {
-            return;
-        }
-
-        var normalizedPlatform = string.Equals(sourcePlatform, "curseforge", StringComparison.OrdinalIgnoreCase)
-            ? "Curseforge"
-            : string.Equals(sourcePlatform, "nexus", StringComparison.OrdinalIgnoreCase)
-                ? "NexusMods"
-                : sourcePlatform?.Trim() ?? string.Empty;
-
-        foreach (var installedName in installedNames.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(installedName))
-            {
-                continue;
-            }
-
-            try
-            {
-                var modDirectory = Path.Combine(modsPath, installedName);
-                if (!Directory.Exists(modDirectory))
-                {
-                    continue;
-                }
-
-                var sourcePath = Path.Combine(modDirectory, "svl-source.json");
-                var values = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-                if (File.Exists(sourcePath))
-                {
-                    try
-                    {
-                        using var document = JsonDocument.Parse(ReadTextFileWithBom(sourcePath));
-                        if (document.RootElement.ValueKind == JsonValueKind.Object)
-                        {
-                            foreach (var property in document.RootElement.EnumerateObject())
-                            {
-                                values[property.Name] = property.Value.Clone();
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        // 现有来源文件损坏时重建核心来源字段。
-                    }
-                }
-
-                if (!string.IsNullOrWhiteSpace(normalizedPlatform))
-                {
-                    values["platform"] = JsonSerializer.SerializeToElement(normalizedPlatform);
-                }
-
-                if (sourceProjectId is > 0)
-                {
-                    values["projectId"] = JsonSerializer.SerializeToElement(
-                        sourceProjectId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-
-                if (sourceFileId is > 0)
-                {
-                    values["fileId"] = JsonSerializer.SerializeToElement(
-                        sourceFileId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-                else if (!values.ContainsKey("fileId") && !values.ContainsKey("file_id"))
-                {
-                    values["fileId"] = JsonSerializer.SerializeToElement(string.Empty);
-                }
-
-                if (!string.IsNullOrWhiteSpace(sourceDownloadUrl))
-                {
-                    values["downloadUrl"] = JsonSerializer.SerializeToElement(sourceDownloadUrl.Trim());
-                }
-
-                if (!string.IsNullOrWhiteSpace(sourceFileName))
-                {
-                    values["fileName"] = JsonSerializer.SerializeToElement(sourceFileName.Trim());
-                }
-
-                AtomicFileWriter.WriteUtf8(
-                    sourcePath,
-                    JsonSerializer.Serialize(values, new JsonSerializerOptions { WriteIndented = true }));
-            }
-            catch
-            {
-                // 来源信息写入失败不应让已经完成的 Mod 安装变成失败。
-            }
-        }
+        // 普通在线 Mod、Modpack 和 Collection 可能使用相同的“父 Mod +
+        // 多个 ContentPack”归档结构。统一交给来源树写入器，避免普通
+        // Mod 下载路径仍把兄弟子 Mod 写成独立来源。
+        ModpackInstallService.WriteSourceCredentialForInstalledModWithRepository(
+            modsPath,
+            installedNames,
+            sourcePlatform,
+            sourceProjectId,
+            sourceFileId,
+            sourceDownloadUrl,
+            sourceFileName,
+            sourceRepository);
     }
 
     private static string CreateSafeFolderName(string name)

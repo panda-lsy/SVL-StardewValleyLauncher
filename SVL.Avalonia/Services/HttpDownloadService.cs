@@ -17,6 +17,8 @@ namespace SVL.Avalonia.Services;
 /// </summary>
 public sealed class HttpDownloadService
 {
+    private const int TransientDownloadRetryAttempts = 3;
+
     private readonly AppUserSettingsStore _settingsStore;
     private readonly object _httpClientLock = new();
     private HttpClient? _httpClient;
@@ -58,6 +60,11 @@ public sealed class HttpDownloadService
         {
             throw new ArgumentException("目标文件路径不能为空", nameof(targetPath));
         }
+
+        // edge.forgecdn.net 通常还会 302 到 mediafilez.forgecdn.net。部分网络环境
+        // 在这个跳转链上会丢失 Range 或提前断流；直接使用最终 CDN 主机仍保持同一
+        // 文件路径和缓存语义，但可以避免一次不稳定的重定向。
+        url = NormalizeDownloadUrl(url);
 
         // 即使命中本地缓存，也必须尊重已经发出的取消请求；否则取消按钮在
         // 缓存复制路径上不会生效，任务会被错误地标记为完成。
@@ -106,7 +113,13 @@ public sealed class HttpDownloadService
                 log?.Invoke("下载缓存校验失败，已清理后重新下载");
             }
 
-            await DownloadCoreAsync(url, targetPath, threadCount, onProgress, cancellationToken);
+            await DownloadCoreWithRetryAsync(
+                url,
+                targetPath,
+                threadCount,
+                onProgress,
+                cancellationToken,
+                log);
 
             if (!IsCacheArtifactValid(targetPath, cacheValidator))
             {
@@ -119,7 +132,86 @@ public sealed class HttpDownloadService
             return;
         }
 
-        await DownloadCoreAsync(url, targetPath, threadCount, onProgress, cancellationToken);
+        await DownloadCoreWithRetryAsync(
+            url,
+            targetPath,
+            threadCount,
+            onProgress,
+            cancellationToken,
+            log);
+    }
+
+    /// <summary>
+    /// 对响应提前结束、连接重置和有限的 HTTP 服务端错误做短暂重试。
+    /// CDN 偶发会返回完整 Content-Length 后中途断流；这类错误不应立刻
+    /// 触发上层更换来源，也不应把半成品当作最终失败。断点元数据由底层
+    /// DownloadSingle/DownloadMultiPart 保留，下一次尝试会继续或安全重启。
+    /// </summary>
+    private async Task DownloadCoreWithRetryAsync(
+        string url,
+        string targetPath,
+        int threadCount,
+        Action<DownloadProgressSnapshot>? onProgress,
+        CancellationToken cancellationToken,
+        Action<string>? log)
+    {
+        for (var attempt = 1; attempt <= TransientDownloadRetryAttempts; attempt++)
+        {
+            try
+            {
+                await DownloadCoreAsync(
+                    url,
+                    targetPath,
+                    threadCount,
+                    onProgress,
+                    cancellationToken);
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (
+                attempt < TransientDownloadRetryAttempts &&
+                IsTransientDownloadFailure(ex))
+            {
+                log?.Invoke(
+                    $"下载响应中断，自动重试 {attempt}/{TransientDownloadRetryAttempts - 1}: {ex.Message}");
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(250 * attempt),
+                    cancellationToken);
+            }
+        }
+
+        // The final attempt either returned successfully or re-threw its original
+        // exception, so this line is unreachable but keeps the method total for
+        // the compiler and future changes to the loop.
+        throw new InvalidOperationException("下载重试流程异常结束");
+    }
+
+    private static bool IsTransientDownloadFailure(Exception exception)
+    {
+        if (exception is EndOfStreamException or IOException)
+        {
+            return true;
+        }
+
+        if (exception is not HttpRequestException httpException)
+        {
+            return false;
+        }
+
+        // StatusCode == null means transport failure (connection reset, EOF, TLS
+        // interruption, etc.). Retry only transient server responses when a status
+        // code is available; deterministic authorization/not-found/range errors
+        // should immediately return to the caller for source-specific handling.
+        return httpException.StatusCode is null or
+            HttpStatusCode.RequestTimeout or
+            HttpStatusCode.TooManyRequests or
+            HttpStatusCode.InternalServerError or
+            HttpStatusCode.BadGateway or
+            HttpStatusCode.ServiceUnavailable or
+            HttpStatusCode.GatewayTimeout;
     }
 
     private static bool IsCacheArtifactValid(string path, Func<string, bool>? cacheValidator)
@@ -136,6 +228,30 @@ public sealed class HttpDownloadService
         catch
         {
             return false;
+        }
+    }
+
+    private static string NormalizeDownloadUrl(string value)
+    {
+        var trimmed = value.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            !uri.Host.Equals("edge.forgecdn.net", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed;
+        }
+
+        try
+        {
+            var builder = new UriBuilder(uri)
+            {
+                Host = "mediafilez.forgecdn.net"
+            };
+            return builder.Uri.AbsoluteUri;
+        }
+        catch
+        {
+            return uri.AbsoluteUri;
         }
     }
 
@@ -588,14 +704,14 @@ public sealed class HttpDownloadService
                 // 每个分片在 UI 中占据一格，因此显示该分片自身的完成度；
                 // 若按总文件大小计算，多个分片会重复缩小视觉进度。
                 var segmentLength = segmentRanges[i].End - segmentRanges[i].Start + 1;
-                segmentPercents[i] = segmentLength > 0
+                var rawSegmentPercent = segmentLength > 0
                     ? Math.Min(100, segmentDownloaded[i] * 100d / segmentLength)
                     : 0;
-                if (!completed && segmentPercents[i] >= 100)
-                {
-                    // 分块进度条会替代总进度条，同样不能在 await WhenAll 前填满。
-                    segmentPercents[i] = 99;
-                }
+                // 分块条使用整数百分比，与任务列表/详情中的总进度保持同一
+                // 显示口径。只有 DownloadAsync 正常返回后的最终快照才允许 100。
+                segmentPercents[i] = completed
+                    ? rawSegmentPercent
+                    : Math.Min(99, Math.Floor(rawSegmentPercent));
             }
         }
 
@@ -898,6 +1014,11 @@ public static class DownloadProgressCalculator
             return 0;
         }
 
-        return Math.Clamp((int)Math.Floor(Math.Clamp(percent, 0, 100)), 0, 99);
+        // 进度条的权威数据是已写入字节数，而不是回调中可能被截断/滞后的
+        // Percent 字段。这样文本、普通进度条和多线程分片条不会各算一遍。
+        var actualPercent = totalBytes > 0
+            ? downloadedBytes * 100d / totalBytes
+            : percent;
+        return Math.Clamp((int)Math.Floor(Math.Clamp(actualPercent, 0, 100)), 0, 99);
     }
 }

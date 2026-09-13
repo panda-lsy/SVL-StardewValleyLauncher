@@ -31,6 +31,7 @@ public sealed class DownloadTaskStateStore
             SourceModId = task.SourceModId,
             SourceFileId = task.SourceFileId,
             SourcePlatform = task.SourcePlatform,
+            SourceRepository = task.SourceRepository,
             CollectionSlug = task.CollectionSlug,
             CollectionRevision = task.CollectionRevision,
             SourceUrl = task.SourceUrl,
@@ -44,12 +45,23 @@ public sealed class DownloadTaskStateStore
             TargetGamePath = task.TargetGamePath,
             TargetInstanceName = task.TargetInstanceName,
             CustomIconPath = task.CustomIconPath,
+            SkipConflictPrompt = task.SkipConflictPrompt,
             SpeedText = task.SpeedText,
             EtaText = task.EtaText,
             TotalSizeText = task.TotalSizeText,
             DownloadedSizeText = task.DownloadedSizeText,
             SubProgressText = task.SubProgressText,
             SubProgress = task.SubProgress,
+            CollectionModItems = task.CollectionModItems.Select(item => new CollectionModTaskStateRecord
+            {
+                Name = item.Name,
+                Phase = item.Phase,
+                Optional = item.Optional,
+                State = item.State,
+                Message = item.Message,
+                SourceUrl = item.SourceUrl,
+                RequiresManualAction = item.RequiresManualAction
+            }).ToList(),
             DependencyUrls = task.DependencyUrls.ToList(),
             FailedDownloadUrls = task.FailedDownloadUrls.ToList(),
             ConflictPreviewItems = task.ConflictPreviewItems.ToList()
@@ -57,7 +69,7 @@ public sealed class DownloadTaskStateStore
 
         var envelope = new DownloadTaskStateEnvelope
         {
-            Version = 4,
+            Version = 5,
             Tasks = records
         };
 
@@ -207,6 +219,8 @@ public sealed class DownloadTaskStateRecord
 
     public string SourcePlatform { get; set; } = string.Empty;
 
+    public string SourceRepository { get; set; } = string.Empty;
+
     public string CollectionSlug { get; set; } = string.Empty;
 
     public int CollectionRevision { get; set; } = -1;
@@ -234,6 +248,9 @@ public sealed class DownloadTaskStateRecord
 
     public string CustomIconPath { get; set; } = string.Empty;
 
+    /// <summary>批量更新任务恢复后仍需跳过冲突弹窗，并在覆盖前自动备份。</summary>
+    public bool SkipConflictPrompt { get; set; }
+
     /// <summary>下载展示字段。旧状态文件没有这些属性时使用默认空值，不影响恢复。</summary>
     public string SpeedText { get; set; } = string.Empty;
 
@@ -247,11 +264,31 @@ public sealed class DownloadTaskStateRecord
 
     public int SubProgress { get; set; } = -1;
 
+    /// <summary>整合包逐 Mod 状态。旧版本没有此字段时按空集合兼容。</summary>
+    public List<CollectionModTaskStateRecord> CollectionModItems { get; set; } = [];
+
     public List<string> DependencyUrls { get; set; } = [];
 
     public List<string> FailedDownloadUrls { get; set; } = [];
 
     public List<string> ConflictPreviewItems { get; set; } = [];
+}
+
+public sealed class CollectionModTaskStateRecord
+{
+    public string Name { get; set; } = string.Empty;
+
+    public int Phase { get; set; } = 1;
+
+    public bool Optional { get; set; }
+
+    public CollectionModTaskState State { get; set; } = CollectionModTaskState.Pending;
+
+    public string Message { get; set; } = string.Empty;
+
+    public string SourceUrl { get; set; } = string.Empty;
+
+    public bool RequiresManualAction { get; set; }
 }
 
 internal sealed class DownloadTaskStateEnvelope

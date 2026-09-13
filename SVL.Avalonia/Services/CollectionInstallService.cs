@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using SVL.Avalonia.Models;
 using SVL.Core.Platform.Abstractions;
 using SVL.Core.Platform.IO;
 using SVL.Core.Platform.Modpack;
@@ -15,6 +16,23 @@ public sealed class CollectionInstallProgress
     public string StepText { get; set; } = string.Empty;
     public string SubProgressText { get; set; } = string.Empty;
     public int SubProgress { get; set; } = -1;
+
+    /// <summary>逐 Mod 进度；为空表示这是普通阶段进度。</summary>
+    public string ModName { get; set; } = string.Empty;
+
+    public int ModPhase { get; set; } = 1;
+
+    public bool ModOptional { get; set; }
+
+    public CollectionModTaskState? ModState { get; set; }
+
+    public string ModMessage { get; set; } = string.Empty;
+
+    /// <summary>Collection 清单为当前 Mod 提供的手动来源地址。</summary>
+    public string ModSourceUrl { get; set; } = string.Empty;
+
+    /// <summary>当前 Mod 需要用户手动下载或补充来源。</summary>
+    public bool ModRequiresManualAction { get; set; }
 }
 
 /// <summary>Collection 安装结果。</summary>
@@ -54,11 +72,18 @@ public sealed class CollectionInstallResult
 }
 
 /// <summary>Collection 单个 Mod 的安装结果，保留可展示给用户的失败原因。</summary>
-internal readonly record struct CollectionModInstallResult(bool IsSuccess, string Message)
+internal readonly record struct CollectionModInstallResult(
+    bool IsSuccess,
+    string Message,
+    IReadOnlyList<string> InstalledNames)
 {
-    public static CollectionModInstallResult Success(string message = "安装成功") => new(true, message);
+    public static CollectionModInstallResult Success(
+        string message = "安装成功",
+        IReadOnlyList<string>? installedNames = null) =>
+        new(true, message, installedNames ?? Array.Empty<string>());
 
-    public static CollectionModInstallResult Failed(string message) => new(false, message);
+    public static CollectionModInstallResult Failed(string message) =>
+        new(false, message, Array.Empty<string>());
 }
 
 /// <summary>
@@ -527,6 +552,7 @@ public sealed class CollectionInstallService
             var modsToDownload = modGroups.SelectMany(g => g).ToList();
             var completedMods = 0;
             var totalToDownload = modsToDownload.Count;
+            var skippedOptionalMods = 0;
 
             onProgress?.Invoke(new CollectionInstallProgress
             {
@@ -538,12 +564,29 @@ public sealed class CollectionInstallService
                     : "没有待下载安装的 Mod"
             });
 
+            // 先把完整清单推送给任务页，用户可以在安装开始时就看到所有
+            // Mod 的等待状态；后续状态事件只更新对应条目，不再靠总进度猜测。
+            foreach (var pendingMod in modsToDownload)
+            {
+                ReportCollectionModProgress(
+                    onProgress,
+                    pendingMod,
+                    CollectionModTaskState.Pending,
+                    "等待所属 Phase");
+            }
+
             foreach (var phaseGroup in modGroups)
             {
                 foreach (var mod in phaseGroup.OrderBy(m => m.Name ?? string.Empty))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var modName = mod.Name ?? $"mod-{mod.Source?.ModId}";
+
+                    ReportCollectionModProgress(
+                        onProgress,
+                        mod,
+                        CollectionModTaskState.Downloading,
+                        $"正在处理 Phase {phaseGroup.Key}");
 
                     try
                     {
@@ -554,17 +597,95 @@ public sealed class CollectionInstallService
                             onProgress);
                         if (modResult.IsSuccess)
                         {
-                            installedMods.Add(modName);
+                            var patchResult = ApplyCollectionPatches(
+                                collectionRoot,
+                                modsPath,
+                                mod,
+                                modResult.InstalledNames);
+                            if (!patchResult.IsSuccess && mod.Patches is { Count: > 0 })
+                            {
+                                var message = patchResult.Message;
+                                if (mod.Optional)
+                                {
+                                    skippedOptionalMods++;
+                                    ReportCollectionModProgress(
+                                        onProgress,
+                                        mod,
+                                        CollectionModTaskState.Skipped,
+                                        $"可选 Mod，已跳过：{message}");
+                                }
+                                else
+                                {
+                                    failedMods.Add($"{modName}: {message}");
+                                    ReportCollectionModProgress(
+                                        onProgress,
+                                        mod,
+                                        CollectionModTaskState.Failed,
+                                        message);
+                                }
+                                onProgress?.Invoke(new CollectionInstallProgress
+                                {
+                                    Percent = 17 + (int)(60.0 * completedMods / Math.Max(1, totalToDownload)),
+                                    StepText = $"阶段 {phaseGroup.Key}: 补丁应用失败",
+                                    SubProgress = CalculateCompletionPercent(completedMods, totalToDownload),
+                                    SubProgressText = $"{modName}: {message}"
+                                });
+                            }
+                            else
+                            {
+                                installedMods.Add(modName);
+                                ReportCollectionModProgress(
+                                    onProgress,
+                                    mod,
+                                    CollectionModTaskState.Installed,
+                                    patchResult.AppliedCount > 0
+                                        ? $"已安装，已应用 {patchResult.AppliedCount} 个补丁"
+                                        : "安装成功");
+                            }
                         }
                         else
                         {
-                            failedMods.Add($"{modName}: {modResult.Message}");
+                            if (mod.Optional)
+                            {
+                                skippedOptionalMods++;
+                                ReportCollectionModProgress(
+                                    onProgress,
+                                    mod,
+                                    CollectionModTaskState.Skipped,
+                                    $"可选 Mod，已跳过：{modResult.Message}");
+                            }
+                            else
+                            {
+                                failedMods.Add($"{modName}: {modResult.Message}");
+                                ReportCollectionModProgress(
+                                    onProgress,
+                                    mod,
+                                    CollectionModTaskState.Failed,
+                                    modResult.Message);
+                            }
                         }
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
                     {
-                        failedMods.Add($"{modName}: {ex.Message}");
+                        if (mod.Optional)
+                        {
+                            skippedOptionalMods++;
+                            ReportCollectionModProgress(
+                                onProgress,
+                                mod,
+                                CollectionModTaskState.Skipped,
+                                $"可选 Mod，已跳过：{ex.Message}");
+                        }
+                        else
+                        {
+                            failedMods.Add($"{modName}: {ex.Message}");
+                            ReportCollectionModProgress(
+                                onProgress,
+                                mod,
+                                CollectionModTaskState.Failed,
+                                ex.Message);
+                        }
                         onProgress?.Invoke(new CollectionInstallProgress
                         {
                             Percent = 17 + (int)(60.0 * completedMods / Math.Max(1, totalToDownload)),
@@ -588,7 +709,9 @@ public sealed class CollectionInstallService
             onProgress?.Invoke(new CollectionInstallProgress
             {
                 Percent = 78,
-                StepText = $"Mod 下载安装完成（{failedMods.Count} 个失败）",
+                StepText = skippedOptionalMods > 0
+                    ? $"Mod 下载安装完成（{failedMods.Count} 个失败，跳过 {skippedOptionalMods} 个可选 Mod）"
+                    : $"Mod 下载安装完成（{failedMods.Count} 个失败）",
                 SubProgress = -1
             });
 
@@ -665,6 +788,92 @@ public sealed class CollectionInstallService
     // ================================================================
     // 内部方法
     // ================================================================
+
+    private static CollectionPatchResult ApplyCollectionPatches(
+        string collectionRoot,
+        string modsPath,
+        NexusCollectionJsonMod mod,
+        IReadOnlyList<string> installedNames)
+    {
+        if (mod.Patches is not { Count: > 0 })
+        {
+            return new CollectionPatchResult(true, 0, 0, "没有需要应用的补丁");
+        }
+
+        var candidateNames = installedNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // 少数缓存命中路径只返回成功状态，来源凭证仍能提供真实安装目录。
+        if (candidateNames.Count == 0 && mod.Source is { ModId: > 0, FileId: > 0 } source)
+        {
+            candidateNames.AddRange(
+                ModpackInstallService.FindInstalledModDirectoriesBySource(
+                        modsPath,
+                        ResolveCollectionSourcePlatform(source) ?? string.Empty,
+                        source.ModId,
+                        source.FileId)
+                    .Select(Path.GetFileName)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Cast<string>());
+        }
+
+        if (candidateNames.Count == 0)
+        {
+            return new CollectionPatchResult(false, 0, mod.Patches.Count, "补丁对应的已安装 Mod 目录未找到");
+        }
+
+        var applied = 0;
+        var skipped = 0;
+        var messages = new List<string>();
+        foreach (var name in candidateNames)
+        {
+            var modPath = Path.Combine(modsPath, name);
+            var result = CollectionPatchService.ApplyPatches(
+                collectionRoot,
+                modPath,
+                mod.Name ?? name,
+                mod.Patches);
+            applied += result.AppliedCount;
+            skipped += result.SkippedCount;
+            if (!string.IsNullOrWhiteSpace(result.Message))
+            {
+                messages.Add(result.Message);
+            }
+        }
+
+        return new CollectionPatchResult(
+            applied > 0,
+            applied,
+            skipped,
+            string.Join("；", messages.Distinct(StringComparer.Ordinal)));
+    }
+
+    private static void ReportCollectionModProgress(
+        Action<CollectionInstallProgress>? onProgress,
+        NexusCollectionJsonMod mod,
+        CollectionModTaskState state,
+        string message)
+    {
+        onProgress?.Invoke(new CollectionInstallProgress
+        {
+            ModName = mod.Name ?? $"mod-{mod.Source?.ModId}",
+            ModPhase = mod.Phase > 0 ? mod.Phase : 1,
+            ModOptional = mod.Optional,
+            ModState = state,
+            ModMessage = message,
+            ModSourceUrl = mod.Source?.Url ?? string.Empty,
+            ModRequiresManualAction = IsManualSourceRequiringUserAction(mod.Source)
+        });
+    }
+
+    private static bool IsManualSourceRequiringUserAction(NexusCollectionJsonModSource? source)
+    {
+        return source != null &&
+               string.Equals(source.Type, "manual", StringComparison.OrdinalIgnoreCase) &&
+               !ModpackInstallService.IsLikelyDirectDownloadUrl(source.Url);
+    }
 
     private async Task<CollectionModInstallResult> DownloadAndInstallCollectionModWithRetryAsync(
         NexusCollectionJsonMod mod,
@@ -891,6 +1100,15 @@ public sealed class CollectionInstallService
             return CollectionModInstallResult.Failed("缺少来源信息");
         }
 
+        // manual 是 Collection 作者明确要求用户手动处理的来源。
+        // 只有明确的归档直链才安全交给下载器；网页地址、NXM 入口和只有
+        // 数字 ID 的条目不能当成压缩包下载，否则会把 HTML/登录页写入
+        // 临时文件并掩盖真正原因。
+        if (IsManualSourceRequiringUserAction(source))
+        {
+            return CollectionModInstallResult.Failed(BuildManualSourceMessage(mod, source));
+        }
+
         var sourcePlatform = ResolveCollectionSourcePlatform(source);
         NxmLinkInfo? parsedNxm = null;
 
@@ -938,9 +1156,15 @@ public sealed class CollectionInstallService
         {
             if (resolvedModId > 0 && resolvedFileId > 0 &&
                 ModpackInstallService.TryInstallCachedCurseforgeMod(
-                    resolvedModId, resolvedFileId, modsPath, mod.Name ?? "unknown"))
+                    resolvedModId,
+                    resolvedFileId,
+                    modsPath,
+                    mod.Name ?? "unknown",
+                    out var cachedCurseforgeNames))
             {
-                return CollectionModInstallResult.Success("已复用 CurseForge 缓存并安装");
+                return CollectionModInstallResult.Success(
+                    "已复用 CurseForge 缓存并安装",
+                    cachedCurseforgeNames);
             }
 
             if (resolvedModId > 0)
@@ -974,7 +1198,9 @@ public sealed class CollectionInstallService
                             ? effectiveCurseforgeFileId
                             : null);
                     return curseforgeResult.IsSuccess
-                        ? CollectionModInstallResult.Success("已通过 CurseForge 下载并安装")
+                        ? CollectionModInstallResult.Success(
+                            "已通过 CurseForge 下载并安装",
+                            curseforgeResult.InstalledNames)
                         : CollectionModInstallResult.Failed("CurseForge 下载或安装失败，归档中可能没有有效 manifest.json");
                 }
             }
@@ -1015,7 +1241,7 @@ public sealed class CollectionInstallService
                     pageOnlyModId,
                     cachedFileId > 0 ? cachedFileId : null,
                     fileName: Path.GetFileName(cachedAnyPath));
-                return CollectionModInstallResult.Success("已复用 Nexus 缓存并安装");
+                return CollectionModInstallResult.Success("已复用 Nexus 缓存并安装", cachedAnyInstalledNames);
             }
 
             var settings = _settingsStore.Load();
@@ -1035,7 +1261,9 @@ public sealed class CollectionInstallService
                     pageOnlyModId,
                     latest.FileId);
                 return latestResult.IsSuccess
-                    ? CollectionModInstallResult.Success("已通过 Nexus 文件列表下载并安装")
+                    ? CollectionModInstallResult.Success(
+                        "已通过 Nexus 文件列表下载并安装",
+                        latestResult.InstalledNames)
                     : CollectionModInstallResult.Failed("Nexus 文件列表已解析，但下载或安装失败");
             }
 
@@ -1057,7 +1285,9 @@ public sealed class CollectionInstallService
                     ct,
                     callbackInfo);
                 return callbackResult.IsSuccess
-                    ? CollectionModInstallResult.Success("已通过 Nexus 浏览器回调下载并安装")
+                    ? CollectionModInstallResult.Success(
+                        "已通过 Nexus 浏览器回调下载并安装",
+                        callbackResult.InstalledNames)
                     : CollectionModInstallResult.Failed("Nexus 浏览器回调已返回，但下载或安装失败");
             }
 
@@ -1079,7 +1309,9 @@ public sealed class CollectionInstallService
                 ct,
                 parsedNxm);
             return nexusResult.IsSuccess
-                ? CollectionModInstallResult.Success("已下载并安装 Nexus Mod")
+                ? CollectionModInstallResult.Success(
+                    "已下载并安装 Nexus Mod",
+                    nexusResult.InstalledNames)
                 : CollectionModInstallResult.Failed("Nexus Mod 下载或安装失败");
         }
 
@@ -1098,11 +1330,24 @@ public sealed class CollectionInstallService
                 source.ModId > 0 ? source.ModId : null,
                 source.FileId > 0 ? source.FileId : null);
             return result.IsSuccess
-                ? CollectionModInstallResult.Success("已通过直链下载并安装")
+                ? CollectionModInstallResult.Success(
+                    "已通过直链下载并安装",
+                    result.InstalledNames)
                 : CollectionModInstallResult.Failed("直链下载或安装失败，归档中可能没有有效 manifest.json");
         }
 
         return CollectionModInstallResult.Failed("来源缺少有效 Nexus ID 或 HTTP 下载直链");
+    }
+
+    private static string BuildManualSourceMessage(
+        NexusCollectionJsonMod mod,
+        NexusCollectionJsonModSource source)
+    {
+        var modName = string.IsNullOrWhiteSpace(mod.Name) ? "此 Mod" : mod.Name.Trim();
+        var sourceHint = string.IsNullOrWhiteSpace(source.Url)
+            ? "清单未提供可打开的来源地址，请补充来源信息。"
+            : $"来源地址：{source.Url.Trim()}";
+        return $"需要手动下载：{modName}。请在浏览器中完成下载后，将 Mod 压缩包拖入当前实例的 Mods 页面安装。{sourceHint}";
     }
 
     private static bool TryParseNexusPageIds(
@@ -1683,6 +1928,9 @@ internal sealed class NexusCollectionJsonMod
 
     [JsonPropertyName("source")]
     public NexusCollectionJsonModSource? Source { get; set; }
+
+    [JsonPropertyName("patches")]
+    public Dictionary<string, string>? Patches { get; set; }
 }
 
 /// <summary>
@@ -1711,7 +1959,8 @@ internal sealed class NexusCollectionJsonModConverter : JsonConverter<NexusColle
             Version = GetString(root, "version", "modVersion", "mod_version"),
             Optional = GetBoolean(root, "optional", "isOptional"),
             Phase = GetInt(root, "phase", "installPhase") ?? 1,
-            Author = GetString(root, "author", "modAuthor")
+            Author = GetString(root, "author", "modAuthor"),
+            Patches = GetPatches(root)
         };
 
         // 来源转换器同时读取顶层字段和嵌套 source，并负责 URL/Token 中的
@@ -1753,6 +2002,32 @@ internal sealed class NexusCollectionJsonModConverter : JsonConverter<NexusColle
                source.ModId > 0 ||
                source.FileId > 0 ||
                !string.IsNullOrWhiteSpace(source.Url);
+    }
+
+    private static Dictionary<string, string>? GetPatches(JsonElement root)
+    {
+        if (!TryGetPropertyIgnoreCase(root, "patches", out var patches) ||
+            patches.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in patches.EnumerateObject())
+        {
+            var value = property.Value.ValueKind switch
+            {
+                JsonValueKind.String => property.Value.GetString(),
+                JsonValueKind.Number => property.Value.GetRawText(),
+                _ => null
+            };
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                result[property.Name] = value.Trim();
+            }
+        }
+
+        return result.Count == 0 ? null : result;
     }
 
     private static string? GetString(JsonElement root, params string[] names)

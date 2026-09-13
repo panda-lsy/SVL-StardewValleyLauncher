@@ -11,7 +11,7 @@
                  TextWrapping="Wrap"
                  Opacity="0.82" />
 
-      <TextBlock Text="选择要安装 Mod 的 SMAPI 版本"
+      <TextBlock Text="选择要安装 Mod 的 SMAPI/Base 版本"
                  FontSize="13"
                  Opacity="0.72" />
       <Border Background="{DynamicResource CardBrush}"

@@ -173,6 +173,54 @@ public sealed class DownloadProgressAndNexusCacheTests
     }
 
     [TestMethod]
+    public async Task HttpDownloadService_ShouldRetryTruncatedResponse()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "svl-http-truncated-response-test-" + Guid.NewGuid().ToString("N"));
+        var targetPath = Path.Combine(root, "download.zip");
+        var payload = CreateZipBytes(("manifest.json", "{\"Name\":\"Transient Test\"}"));
+        using var server = new TruncatedResponseServer(payload);
+
+        try
+        {
+            var settings = new AppUserSettingsStore(Path.Combine(root, "settings"));
+            settings.Save(new AppUserSettings
+            {
+                EnableDownloadCache = false,
+                DownloadSegmentThreads = 4
+            });
+
+            var logs = new List<string>();
+            var serverTask = server.ServeAsync(
+                new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
+            var service = new HttpDownloadService(settings);
+
+            await service.DownloadAsync(
+                server.Url.ToString(),
+                targetPath,
+                threadCount: 1,
+                onProgress: null,
+                log: logs.Add,
+                cacheValidator: IsZipArchive);
+            await serverTask;
+
+            CollectionAssert.AreEqual(payload, File.ReadAllBytes(targetPath));
+            StringAssert.Contains(
+                string.Join("\n", logs),
+                "自动重试",
+                "响应提前结束时应在 HTTP 层自动重试，而不是直接把半包交给上层");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void ProgressSnapshot_ShouldWaitForDownloadCallCompletionBeforeShowing100()
     {
         var lastChunkObserved = new DownloadProgressSnapshot(
@@ -209,6 +257,11 @@ public sealed class DownloadProgressAndNexusCacheTests
         Assert.AreEqual(99, DownloadProgressCalculator.ToDisplayPercent(observed));
         Assert.IsNotNull(observed.SegmentPercents);
         Assert.IsTrue(observed.SegmentPercents!.All(percent => percent <= 99));
+
+        var partiallyObserved = (DownloadProgressSnapshot)createSnapshot.Invoke(
+            null,
+            new object[] { 999L, 1000L, 1d, 0L, new long[] { 499, 500 }, ranges, false })!;
+        CollectionAssert.AreEqual(new[] { 99d, 99d }, partiallyObserved.SegmentPercents);
 
         var completed = (DownloadProgressSnapshot)createSnapshot.Invoke(
             null,
@@ -878,6 +931,8 @@ public sealed class DownloadProgressAndNexusCacheTests
             ["File%207448774_%20Content%20Patcher.zip"] = 7448774,
             ["https://www.nexusmods.com/stardewvalley/mods/29868?tab=files&file-id=7448774"] = 7448774,
             ["https://example.invalid/cf-1012214-5312529.zip"] = 5312529,
+            ["https://edge.forgecdn.net/files/7942/677/MarketTown.zip"] = 7942677,
+            ["https://edge.forgecdn.net/files/5357/471/Cape%20Stardew%206.1.7.zip"] = 5357471,
             ["https://api.nexusmods.com/v1/games/stardewvalley/mods/29868/files/7448774.zip"] = 7448774
         };
 
@@ -1604,6 +1659,61 @@ public sealed class DownloadProgressAndNexusCacheTests
             if (Directory.Exists(modsPath))
             {
                 Directory.Delete(modsPath, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ModpackSourceCredentialWrite_ShouldClearNestedModUpdateSnapshots()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "svl-source-update-snapshot-test-" + Guid.NewGuid().ToString("N"));
+        var parentPath = Path.Combine(root, "MarketTown");
+        var childPath = Path.Combine(parentPath, "CloneNPC_RSV");
+        var writer = typeof(ModpackInstallService).GetMethod(
+            "WriteModpackSourceCredentials",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.IsNotNull(writer);
+
+        try
+        {
+            Directory.CreateDirectory(childPath);
+            File.WriteAllText(
+                Path.Combine(parentPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"1012214\",\"hasUpdate\":true,\"latestVersion\":\"6.7.1\",\"updateStatus\":\"可更新 -> 6.7.1\",\"updateFileId\":\"5312529\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"1012214\",\"hasUpdate\":true,\"latestVersion\":\"6.7.1\",\"updateStatus\":\"可更新 -> 6.7.1\",\"updateFileId\":\"5312529\"}");
+
+            writer!.Invoke(null, [
+                root,
+                new List<string> { "MarketTown" },
+                "Curseforge",
+                1012214L,
+                5312529L,
+                null,
+                null
+            ]);
+
+            foreach (var path in new[] {
+                         Path.Combine(parentPath, "svl-source.json"),
+                         Path.Combine(childPath, "svl-source.json")
+                     })
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(path));
+                Assert.IsFalse(document.RootElement.GetProperty("hasUpdate").GetBoolean());
+                Assert.AreEqual(string.Empty, document.RootElement.GetProperty("latestVersion").GetString());
+                Assert.AreEqual("未检查", document.RootElement.GetProperty("updateStatus").GetString());
+                Assert.AreEqual(string.Empty, document.RootElement.GetProperty("updateFileId").GetString());
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
             }
         }
     }
@@ -4101,6 +4211,91 @@ public sealed class DownloadProgressAndNexusCacheTests
     }
 
     [TestMethod]
+    public async Task CollectionInstall_ShouldReportManualSourceAndSkipUnsafeUrl()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "svl-collection-manual-source-e2e-" + Guid.NewGuid().ToString("N"));
+        var gamePath = Path.Combine(root, "Game");
+        var archivePath = Path.Combine(root, "collection.zip");
+        var instanceName = "CollectionManual-" + Guid.NewGuid().ToString("N")[..8];
+        var settingsStore = new AppUserSettingsStore(Path.Combine(root, "settings"));
+        var registry = new InstanceRegistryStore();
+        var sourceUrl = "https://www.nexusmods.com/stardewvalley/mods/12345";
+        var progress = new List<CollectionInstallProgress>();
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(gamePath, "versions", "Existing SMAPI 4.5.2"));
+            File.WriteAllText(
+                Path.Combine(gamePath, "versions", "Existing SMAPI 4.5.2", "StardewModdingAPI.dll"),
+                "existing-smapi");
+
+            using (var package = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                WriteArchiveText(
+                    package,
+                    "collection.json",
+                    "{\"info\":{\"name\":\"Manual Source Collection\"},\"mods\":[" +
+                    "{\"name\":\"Manual External Mod\",\"version\":\"1.0.0\",\"source\":{" +
+                    $"\"type\":\"manual\",\"modId\":12345,\"fileId\":67890,\"url\":\"{sourceUrl}\"}}}}]}}");
+            }
+
+            var nxmParser = new SVL.Core.Platform.Abstractions.NxmLinkParser();
+            var service = new CollectionInstallService(
+                new FixedGameInstallPathLocator(gamePath),
+                new TestSmapiInstallService(),
+                new HttpDownloadService(settingsStore),
+                new RemoteCatalogService(settingsStore),
+                settingsStore,
+                new NexusModDownloadResolverService(),
+                nxmParser,
+                new BrowserDownloadFallbackService(
+                    nxmParser,
+                    new SVL.Core.Platform.Services.ExternalProcessService()),
+                new ModpackInstallService(
+                    new FixedGameInstallPathLocator(gamePath),
+                    new TestSmapiInstallService(),
+                    new HttpDownloadService(settingsStore),
+                    new RemoteCatalogService(settingsStore),
+                    settingsStore,
+                    new NexusModDownloadResolverService(),
+                    nxmParser));
+
+            var result = await service.InstallCollectionFromArchiveAsync(
+                archivePath,
+                instanceName,
+                progress.Add,
+                gameBasePath: gamePath);
+
+            Assert.IsTrue(result.IsSuccess, result.Message);
+            Assert.AreEqual(0, result.InstalledMods.Count);
+            Assert.AreEqual(1, result.FailedMods.Count);
+            StringAssert.Contains(result.FailedMods[0], "需要手动下载");
+            StringAssert.Contains(result.FailedMods[0], sourceUrl);
+
+            var failedProgress = progress.Last(item =>
+                item.ModState == CollectionModTaskState.Failed);
+            Assert.IsTrue(failedProgress.ModRequiresManualAction);
+            Assert.AreEqual(sourceUrl, failedProgress.ModSourceUrl);
+        }
+        finally
+        {
+            var records = registry.LoadManualInstances();
+            records.RemoveAll(record => string.Equals(
+                record.Name,
+                instanceName,
+                StringComparison.OrdinalIgnoreCase));
+            registry.SaveManualInstances(records);
+
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public async Task DownloadInstall_ShouldFlattenOuterModDirectory()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-mod-install-shape-test-" + Guid.NewGuid().ToString("N"));
@@ -4138,6 +4333,87 @@ public sealed class DownloadProgressAndNexusCacheTests
             StringAssert.Contains(sourceJson, "\"platform\": \"Curseforge\"");
             StringAssert.Contains(sourceJson, "\"projectId\": \"12345\"");
             StringAssert.Contains(sourceJson, "\"fileId\": \"67890\"");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void DownloadInstall_BackupShouldUseModManagementBackupDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-mod-backup-root-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var existingModPath = Path.Combine(modsPath, "Content Patcher");
+        try
+        {
+            Directory.CreateDirectory(existingModPath);
+            File.WriteAllText(Path.Combine(existingModPath, "manifest.json"), "{\"Name\":\"Content Patcher\"}");
+
+            var service = new DownloadInstallService(new TestGameInstallPathLocator());
+            var success = service.TryBackupExistingModDirectory(
+                modsPath,
+                existingModPath,
+                out var backupPath);
+
+            Assert.IsTrue(success);
+            Assert.IsTrue(backupPath.StartsWith(
+                Path.Combine(root, "ModsBackup") + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase));
+            Assert.IsTrue(File.Exists(Path.Combine(backupPath, "manifest.json")));
+            Assert.IsTrue(File.Exists(Path.Combine(backupPath, ".svl-backup.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void DownloadInstall_UpdateBackupShouldWriteChainAndMoveOriginalDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-mod-update-chain-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var existingModPath = Path.Combine(modsPath, "Old Mod Folder");
+        try
+        {
+            Directory.CreateDirectory(existingModPath);
+            File.WriteAllText(
+                Path.Combine(existingModPath, "manifest.json"),
+                "{\"Name\":\"New Mod Name\",\"UniqueID\":\"test.new-mod\",\"Version\":\"1.0.0\"}");
+
+            var service = new DownloadInstallService(new TestGameInstallPathLocator());
+            var success = service.TryBackupExistingModDirectory(
+                modsPath,
+                existingModPath,
+                ["New Mod Folder"],
+                "New Mod Folder.zip",
+                out var backupPath);
+
+            Assert.IsTrue(success);
+            Assert.IsFalse(Directory.Exists(existingModPath), "更新备份成功后旧目录应已移入 ModsBackup");
+            Assert.IsTrue(File.Exists(Path.Combine(backupPath, ".svl-update-chain.json")));
+
+            using var chain = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(backupPath, ".svl-update-chain.json")));
+            Assert.AreEqual("Old Mod Folder", chain.RootElement.GetProperty("OriginalFolderName").GetString());
+            CollectionAssert.Contains(
+                chain.RootElement.GetProperty("ReplacementFolderNames")
+                    .EnumerateArray()
+                    .Select(item => item.GetString())
+                    .ToList(),
+                "New Mod Folder");
+
+            using var metadata = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(backupPath, ".svl-backup.json")));
+            Assert.IsTrue(metadata.RootElement.TryGetProperty("UpdateChain", out _));
         }
         finally
         {
@@ -4390,6 +4666,78 @@ public sealed class DownloadProgressAndNexusCacheTests
             File.WriteAllText(Path.Combine(versionRoot, "StardewModdingAPI.dll"), "smapi");
             return Task.FromResult(
                 SVL.Core.Platform.Abstractions.SmapiInstallResult.Success(versionRoot, versionRoot));
+        }
+    }
+
+    private sealed class TruncatedResponseServer : IDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly byte[] _payload;
+
+        public TruncatedResponseServer(byte[] payload)
+        {
+            _payload = payload;
+            _listener = new TcpListener(IPAddress.Loopback, 0);
+            _listener.Start();
+            Url = new Uri($"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/transient.zip");
+        }
+
+        public Uri Url { get; }
+
+        public async Task ServeAsync(CancellationToken cancellationToken)
+        {
+            // 初次下载和底层重试各包含一次 Range 探测与一次实际下载。
+            for (var requestIndex = 0; requestIndex < 4; requestIndex++)
+            {
+                using var client = await _listener.AcceptTcpClientAsync(cancellationToken);
+                await using var stream = client.GetStream();
+                var requestBuffer = new byte[4096];
+                var requestLength = 0;
+                while (requestLength < requestBuffer.Length)
+                {
+                    var read = await stream.ReadAsync(
+                        requestBuffer.AsMemory(requestLength),
+                        cancellationToken);
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    requestLength += read;
+                    if (requestLength >= 4 &&
+                        Encoding.ASCII.GetString(requestBuffer, 0, requestLength)
+                            .Contains("\r\n\r\n", StringComparison.Ordinal))
+                    {
+                        break;
+                    }
+                }
+
+                var header = Encoding.ASCII.GetBytes(
+                    $"HTTP/1.1 200 OK\r\n" +
+                    $"Content-Type: application/zip\r\n" +
+                    $"Content-Length: {_payload.Length}\r\n" +
+                    "Connection: close\r\n\r\n");
+                await stream.WriteAsync(header, cancellationToken);
+
+                if (requestIndex == 1)
+                {
+                    // 声明完整长度但只写入半包，模拟 CDN 的 ResponseEnded/EOF。
+                    await stream.WriteAsync(
+                        _payload.AsMemory(0, Math.Max(1, _payload.Length / 2)),
+                        cancellationToken);
+                }
+                else
+                {
+                    await stream.WriteAsync(_payload, cancellationToken);
+                }
+
+                await stream.FlushAsync(cancellationToken);
+            }
+        }
+
+        public void Dispose()
+        {
+            _listener.Stop();
         }
     }
 

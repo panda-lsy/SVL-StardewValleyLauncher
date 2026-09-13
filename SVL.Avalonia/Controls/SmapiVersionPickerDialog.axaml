@@ -45,8 +45,8 @@
           <!-- 加载中 -->
           <StackPanel IsVisible="{Binding IsLoading}"
                       VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8">
-            <Image Source="avares://SVL.Avalonia/Assets/Icons/Generated/Cropped/RefreshCw.png" Width="24" Height="24"
-                  Stretch="Uniform" Opacity="0.6" />
+            <Path Data="{StaticResource Icon.RefreshCw}" Width="24" Height="24"
+                  Stretch="Uniform" Fill="{DynamicResource AccentBrush}" Opacity="0.6" />
             <TextBlock Text="正在获取版本列表..." FontSize="14" Opacity="0.6" HorizontalAlignment="Center" />
           </StackPanel>
 

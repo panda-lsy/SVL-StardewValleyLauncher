@@ -266,7 +266,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         VersionSettingsPage.AvailableGamePathsProvider = basePathsProvider;
         DownloadPage.AvailableGamePathsProvider = basePathsProvider;
-        DownloadPage.AvailableModInstancesProvider = () =>
+        Func<IReadOnlyList<ModInstallTarget>> modTargetsProvider = () =>
         {
             if (!InstancesPage.HasPathEntries)
             {
@@ -288,8 +288,11 @@ public partial class MainWindowViewModel : ObservableObject
                 .Select(group => group.First())
                 .ToList();
         };
+        VersionSettingsPage.AvailableModInstancesProvider = modTargetsProvider;
+        DownloadPage.AvailableModInstancesProvider = modTargetsProvider;
         VersionSettingsPage.OpenDetailsRequested += HandleOpenDetailsFromModManage;
         VersionSettingsPage.BatchUpdateModsRequested += HandleBatchUpdateModsRequested;
+        VersionSettingsPage.ModUpdateRequested += HandleModUpdateRequested;
         InstanceSettingsPage = new InstanceSettingsPageViewModel(_settingsStore, dialogService);
         LaunchPage.NavigateToInstancesRequested += HandleNavigateToInstances;
         LaunchPage.NavigateToVersionSettingsRequested += HandleNavigateToVersionSettings;
@@ -312,6 +315,9 @@ public partial class MainWindowViewModel : ObservableObject
         DownloadPage.OpenStructuredDetailsRequested += HandleOpenDetailsFromSearch;
         // SMAPI/Modpack/Collection 安装成功后刷新 LaunchPage/InstancesPage 实例图标
         DownloadPage.InstanceContextChanged += HandleInstanceContextChanged;
+        // 在线 Mod 覆盖前自动备份后刷新备份标签，确保批量更新创建的备份立即可见。
+        DownloadPage.ModBackupCreated += HandleDownloadModBackupCreated;
+        DownloadPage.ModInstallationCompleted += HandleDownloadModInstallationCompleted;
         // 任务状态页统一视图：任务操作事件转发到 DownloadPage 执行
         TaskStatusPage.RetryFailedItemsRequested += HandleRetryFailedItemsRequested;
         TaskStatusPage.NavigateToDownloadRequested += HandleNavigateToDownload;
@@ -321,6 +327,7 @@ public partial class MainWindowViewModel : ObservableObject
         TaskStatusPage.OpenDirectoryRequested += HandleOpenDirectoryRequested;
         TaskStatusPage.OpenReportRequested += HandleOpenReportRequested;
         TaskStatusPage.OpenRetryReportRequested += HandleOpenRetryReportRequested;
+        TaskStatusPage.OpenBrowserRequested += HandleOpenBrowserRequested;
         TaskStatusPage.ClearCompletedRequested += HandleClearCompletedRequested;
         ModSearchPage.OpenDetailsRequested += HandleOpenDetailsFromSearch;
         ModpackSearchPage.OpenDetailsRequested += HandleOpenDetailsFromSearch;
@@ -456,6 +463,36 @@ public partial class MainWindowViewModel : ObservableObject
         // 整合包安装会更新当前实例路径；若用户正停留在 Mod 管理页，必须同步重新读取
         // 新实例的 Mods，而不是保留安装前页面缓存的清单结果。
         VersionSettingsPage.ReloadFromSettings(reloadModsWhenActive: VersionSettingsPage.IsModManageSection);
+    }
+
+    private void HandleDownloadModBackupCreated()
+    {
+        void RefreshModBackups()
+        {
+            if (VersionSettingsPage.IsModManageSection)
+            {
+                VersionSettingsPage.ReloadFromSettings(reloadModsWhenActive: true);
+            }
+        }
+
+        if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            RefreshModBackups();
+        }
+        else
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshModBackups);
+        }
+    }
+
+    private void HandleDownloadModInstallationCompleted()
+    {
+        if (!VersionSettingsPage.IsModManageSection)
+        {
+            return;
+        }
+
+        VersionSettingsPage.ReloadFromSettings(reloadModsWhenActive: true);
     }
 
     private void HandleSmapiInstallTaskCreated(Models.DownloadTaskItem taskItem)
@@ -625,6 +662,11 @@ public partial class MainWindowViewModel : ObservableObject
         DownloadPage.OpenTaskRetryReportCommand.Execute(task);
     }
 
+    private void HandleOpenBrowserRequested(Models.DownloadTaskItem task)
+    {
+        DownloadPage.OpenTaskBrowser(task);
+    }
+
     private void HandleClearCompletedRequested()
     {
         DownloadPage.ClearCompletedTasksCommand.Execute(null);
@@ -758,6 +800,57 @@ public partial class MainWindowViewModel : ObservableObject
         NavigateToPage("任务", TaskStatusPage);
     }
 
+    /// <summary>单个 Mod 更新走普通外部下载流程，保留 Nexus 未登录时的浏览器回退。</summary>
+    private async void HandleModUpdateRequested(ModBatchUpdateEntry entry)
+    {
+        if (entry == null)
+        {
+            return;
+        }
+
+        var source = entry.UpdateSource?.Contains("curse", StringComparison.OrdinalIgnoreCase) == true
+            ? "Curseforge"
+            : entry.UpdateSource?.Contains("github", StringComparison.OrdinalIgnoreCase) == true
+                ? "GitHub"
+                : "NexusMods";
+        var updateUrl = entry.UpdateUrl ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(updateUrl) &&
+            source == "NexusMods" &&
+            long.TryParse(entry.ProjectId, out var nexusProjectId) && nexusProjectId > 0 &&
+            long.TryParse(entry.FileId, out var nexusFileId) && nexusFileId > 0)
+        {
+            updateUrl = $"nxm://stardewvalley/mods/{nexusProjectId}/files/{nexusFileId}";
+        }
+        else if (string.IsNullOrWhiteSpace(updateUrl) &&
+                 source == "Curseforge" &&
+                 long.TryParse(entry.ProjectId, out var curseforgeProjectId) && curseforgeProjectId > 0 &&
+                 long.TryParse(entry.FileId, out var curseforgeFileId) && curseforgeFileId > 0)
+        {
+            // 仅有 ProjectID/FileID 时交给统一 CurseForge 解析器换取 CDN 地址。
+            // 这个 token 不是下载 URL，只是为了让下载页保留 FileID 并进入
+            // ResolveCurseforgeFileDownloadUrlAsync，而不是误判为无源任务。
+            updateUrl = $"cf-{curseforgeProjectId}-{curseforgeFileId}";
+        }
+
+        var request = new Models.ExternalDownloadRequest
+        {
+            Action = Models.ExternalDownloadAction.Install,
+            ResourceName = entry.DisplayName,
+            ResourceSource = source,
+            ResourceId = source == "GitHub" ? entry.Repository : entry.ProjectId,
+            SourceToken = source,
+            SelectedDownloadOption = updateUrl
+        };
+        var queued = await DownloadPage.AddTaskFromExternalAsync(request);
+        if (!queued)
+        {
+            return;
+        }
+
+        TaskStatusPage.SetCurrentTask(request.ToTaskDisplayName(), "已加入队列");
+        NavigateToPage("任务", TaskStatusPage);
+    }
+
     [RelayCommand]
     private void NavigateToLaunch()
     {
@@ -878,6 +971,12 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         EnqueueModpackImportTask(result);
+    }
+
+    /// <summary>将文件管理器拖入的 Mod 交给版本设置页，统一选择 SMAPI/Base 目标并安装/更新。</summary>
+    public async Task HandleModInstallDropAsync(IReadOnlyList<string> filePaths)
+    {
+        await VersionSettingsPage.InstallModFromDropAsync(filePaths);
     }
 
     private static bool IsPathUnderDirectory(string? path, string? directory)

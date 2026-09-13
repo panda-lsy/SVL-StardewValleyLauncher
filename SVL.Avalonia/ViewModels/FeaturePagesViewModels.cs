@@ -21,7 +21,6 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -118,6 +117,12 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     public bool SelectedTaskHasInstalledPath => !string.IsNullOrWhiteSpace(SelectedTaskInstalledPath);
     public bool SelectedTaskHasReportPath => SelectedTask?.HasReportPath ?? false;
     public bool SelectedTaskHasRetryReportPath => SelectedTask?.HasRetryReportPath ?? false;
+    public bool SelectedTaskCanOpenBrowserPage => SelectedTask?.CanOpenBrowserPage ?? false;
+    public IEnumerable<CollectionModTaskItem> SelectedTaskCollectionModItems =>
+        SelectedTask == null ? Array.Empty<CollectionModTaskItem>() : SelectedTask.CollectionModItems;
+    public bool SelectedTaskHasCollectionMods => SelectedTask?.HasCollectionModItems ?? false;
+    public string SelectedTaskCollectionModProgressText => SelectedTask?.CollectionModProgressText ?? string.Empty;
+    public int SelectedTaskCollectionModFailedCount => SelectedTask?.CollectionModFailedCount ?? 0;
 
     public bool IsRunningState => HasSelectedTask && !IsFailedState && !IsCompletedState && !IsCancelledState;
     public bool ShowMainStateContent => !IsEmptyState;
@@ -135,6 +140,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     public event Action<DownloadTaskItem>? OpenDirectoryRequested;
     public event Action<DownloadTaskItem>? OpenReportRequested;
     public event Action<DownloadTaskItem>? OpenRetryReportRequested;
+    public event Action<DownloadTaskItem>? OpenBrowserRequested;
     public event Action? ClearCompletedRequested;
     public event Action? RetryFailedItemsRequested;
     public event Action? NavigateToDownloadRequested;
@@ -337,6 +343,19 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
 
         if (IsFailedState)
         {
+            if (HasManualSourceFailure())
+            {
+                AdviceTitle = "需要手动处理部分 Mod";
+                SuggestedActions.Add("Collection 清单中的部分 Mod 被标记为手动来源，SVL 不会把网页或 NXM 入口当成压缩包下载。");
+                SuggestedActions.Add("点击整合包 Mod 进度中的“打开来源”，完成下载后将压缩包拖入当前实例的 Mods 页面安装。");
+                if (SelectedTask?.CanRetry == true)
+                {
+                    SuggestedActions.Add("其余自动下载失败项可在来源补齐或登录后点击右栏“重试”。");
+                }
+
+                return;
+            }
+
             if (HasMissingSourceFailure())
             {
                 AdviceTitle = "需要补充 Mod 来源";
@@ -399,6 +418,23 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
                text.Contains("来源字段缺失", StringComparison.OrdinalIgnoreCase) ||
                text.Contains("未识别的 Mod 下载来源", StringComparison.OrdinalIgnoreCase) ||
                text.Contains("无法解析", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool HasManualSourceFailure()
+    {
+        if (!IsFailedState)
+        {
+            return false;
+        }
+
+        if (FailureSummary.Contains("需要手动下载", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return SelectedTask?.CollectionModItems.Any(item =>
+            item.RequiresManualAction &&
+            item.State is CollectionModTaskState.Failed or CollectionModTaskState.Skipped) == true;
     }
 
     [RelayCommand]
@@ -530,6 +566,29 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     }
 
     [RelayCommand]
+    private void OpenBrowserForTask(DownloadTaskItem? task)
+    {
+        if (task == null || !task.CanOpenBrowserPage)
+        {
+            return;
+        }
+
+        OpenBrowserRequested?.Invoke(task);
+    }
+
+    [RelayCommand]
+    private void OpenCollectionModSource(CollectionModTaskItem? item)
+    {
+        if (item == null || !item.RequiresManualAction || !item.HasOpenableSourceUrl)
+        {
+            return;
+        }
+
+        OpenPath(item.SourceUrl);
+        AddLog($"已打开手动 Mod 来源: {item.Name}");
+    }
+
+    [RelayCommand]
     private void ClearCompleted()
     {
         ClearCompletedRequested?.Invoke();
@@ -588,6 +647,11 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
         OnPropertyChanged(nameof(SelectedTaskHasInstalledPath));
         OnPropertyChanged(nameof(SelectedTaskHasReportPath));
         OnPropertyChanged(nameof(SelectedTaskHasRetryReportPath));
+        OnPropertyChanged(nameof(SelectedTaskCanOpenBrowserPage));
+        OnPropertyChanged(nameof(SelectedTaskCollectionModItems));
+        OnPropertyChanged(nameof(SelectedTaskHasCollectionMods));
+        OnPropertyChanged(nameof(SelectedTaskCollectionModProgressText));
+        OnPropertyChanged(nameof(SelectedTaskCollectionModFailedCount));
     }
 
     private DownloadTaskItem? _previousSelectedTask;
@@ -642,6 +706,17 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
             case nameof(DownloadTaskItem.RetryReportPath):
                 OnPropertyChanged(nameof(SelectedTaskHasRetryReportPath));
                 RefreshSuggestedActions();
+                break;
+            case nameof(DownloadTaskItem.HasCollectionModItems):
+            case nameof(DownloadTaskItem.CollectionModTotalCount):
+            case nameof(DownloadTaskItem.CollectionModFinishedCount):
+            case nameof(DownloadTaskItem.CollectionModFailedCount):
+            case nameof(DownloadTaskItem.CollectionModProgress):
+            case nameof(DownloadTaskItem.CollectionModProgressText):
+                OnPropertyChanged(nameof(SelectedTaskCollectionModItems));
+                OnPropertyChanged(nameof(SelectedTaskHasCollectionMods));
+                OnPropertyChanged(nameof(SelectedTaskCollectionModProgressText));
+                OnPropertyChanged(nameof(SelectedTaskCollectionModFailedCount));
                 break;
             case nameof(DownloadTaskItem.Progress):
                 ProgressPercent = task.IsCompleted && task.Progress >= 100
@@ -2190,20 +2265,43 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
     {
         var allVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var version in ExtractGameVersionTokens(_currentCompatTag))
-        {
-            allVersions.Add(version);
-        }
+        var isModpackContext = !string.IsNullOrEmpty(_currentSourceToken) &&
+                               _currentSourceToken.Contains("Pack", StringComparison.OrdinalIgnoreCase);
 
-        foreach (var option in DownloadOptions)
+        // 搜索卡片上的兼容标签可能来自整合包文件名（例如 Pokehaan Dew 1.1.4），
+        // 对整合包不能把它当作星露谷版本；普通 Mod 仍保留原有兼容标签回退。
+        if (!isModpackContext)
         {
-            foreach (var version in ExtractGameVersionTokens(option))
+            foreach (var version in ExtractGameVersionTokens(_currentCompatTag))
             {
                 allVersions.Add(version);
             }
         }
 
-        if (allVersions.Count == 0)
+        foreach (var option in DownloadOptions)
+        {
+            if (isModpackContext)
+            {
+                // 整合包详情的 gamever 元数据只来自 CurseForge 文件 API 的
+                // gameVersions 字段。ParseDownloadOptionItem 在元数据缺失时返回
+                // “未知”，不会再从整合包文件名提取版本号。
+                var parsed = ParseDownloadOptionItem(option, string.Empty, isModpackContext: true);
+                if (parsed != null &&
+                    TryNormalizeStardewVersionToken(parsed.GameVersion ?? string.Empty, out var modpackGameVersion))
+                {
+                    allVersions.Add(modpackGameVersion);
+                }
+            }
+            else
+            {
+                foreach (var version in ExtractGameVersionTokens(option))
+                {
+                    allVersions.Add(version);
+                }
+            }
+        }
+
+        if (allVersions.Count == 0 && !isModpackContext)
         {
             foreach (var group in _allVersionGroups)
             {
@@ -2948,7 +3046,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
 
         var gameVersion = !string.IsNullOrWhiteSpace(meta.GameVersion)
             ? meta.GameVersion
-            : ExtractPrimaryGameVersion(title, compatTag);
+            : (isModpackContext ? "未知" : ExtractPrimaryGameVersion(title, compatTag));
         var fileName = TryExtractFileName(title, url);
         // 整合包不从标题提取版本号（无法区分游戏版本与整合包版本），仅使用元数据中的 Version
         // 普通资源回退到从标题/文件名提取版本号
@@ -3407,6 +3505,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
             SelectedDownloadOption = SelectedDownloadOption ?? string.Empty,
             IsCollection = IsCollectionDetails,
             IsModpack = isModpack,
+            ModpackIconUrl = isModpack ? DisplayIconUrl : string.Empty,
             CollectionSlug = ResolveCollectionSlugFromContext(),
             CollectionRevision = ResolveCollectionRevisionFromContext()
         };
@@ -4021,6 +4120,7 @@ public sealed class ModBackupRecord
     public string Description { get; set; } = string.Empty;
     public string UniqueId { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public ModUpdateChainMetadata? UpdateChain { get; set; }
 }
 
 public sealed class ModDependencyDisplayItem
@@ -4298,6 +4398,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     public event Action<Models.DownloadTaskItem>? SmapiInstallTaskCreated;
     /// <summary>批量更新请求：携带可更新 Mod 的下载入口列表，由 MainWindow 路由到 DownloadPage 入队。</summary>
     public event Action<IReadOnlyList<ModBatchUpdateEntry>>? BatchUpdateModsRequested;
+    /// <summary>单个更新请求：允许 MainWindow 走普通在线下载流程（包括 Nexus 浏览器回退）。</summary>
+    public event Action<ModBatchUpdateEntry>? ModUpdateRequested;
     /// <summary>请求返回主页面（删除版本后自动切换到 Base 版本并返回启动页）。</summary>
     public event Action? RequestReturnToLaunch;
 
@@ -4669,6 +4771,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
     public bool HasFilteredMods => FilteredMods.Count > 0;
 
+    public bool HasUpdatableMods => IsModsTab && Mods.Any(item =>
+        !item.IsBackupItem && item.HasUpdate);
+
+    public bool CanUpdateSelectedMod => IsModsTab &&
+        SelectedMod is { IsBackupItem: false, HasUpdate: true };
+
     public bool HasModConflicts => ModConflicts.Count > 0;
 
     public bool ShowModConflictResult => IsModsTab && IsModConflictCheckCompleted;
@@ -4680,8 +4788,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     public string ModConflictSummary => !IsModConflictCheckCompleted
         ? "尚未检测当前实例的 Mod 冲突"
         : HasModConflicts
-            ? $"发现 {ModConflicts.Count} 项冲突，请按条目处理后重新检测"
-            : "未发现启用 Mod 之间的明显冲突";
+            ? $"发现 {ModConflicts.Count} 项社区冲突，可前往社区贡献页面补充冲突数据"
+            : "目前未检测到冲突";
+
+    public string CommunityConflictContributionUrl =>
+        "https://svl.qzz.io/contribute.html";
 
     public bool ShowEmptyModsHint => !HasFilteredMods;
 
@@ -4863,6 +4974,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             OnPropertyChanged(nameof(EnabledFilterText));
             OnPropertyChanged(nameof(DisabledFilterText));
             OnPropertyChanged(nameof(UpdatableFilterText));
+            OnPropertyChanged(nameof(HasUpdatableMods));
             UpdateSelectionState();
             OnPropertyChanged(nameof(CanDetectModConflicts));
         };
@@ -5187,6 +5299,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     {
         OnPropertyChanged(nameof(HasSelectedMod));
         OnPropertyChanged(nameof(CanOperateSelectedMod));
+        OnPropertyChanged(nameof(CanUpdateSelectedMod));
         OnPropertyChanged(nameof(CanEnableSelectedMod));
         OnPropertyChanged(nameof(CanDisableSelectedMod));
         OnPropertyChanged(nameof(CanBatchAddSelectedTags));
@@ -5221,6 +5334,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         OnPropertyChanged(nameof(ModsSummary));
         OnPropertyChanged(nameof(CurrentEmptyHintText));
         OnPropertyChanged(nameof(CanOperateSelectedMod));
+        OnPropertyChanged(nameof(CanUpdateSelectedMod));
         OnPropertyChanged(nameof(CanEnableSelectedMod));
         OnPropertyChanged(nameof(CanDisableSelectedMod));
         OnPropertyChanged(nameof(ShowTagBatchAction));
@@ -5353,6 +5467,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         {
             OnPropertyChanged(nameof(UpdatableModsCount));
             OnPropertyChanged(nameof(UpdatableFilterText));
+            OnPropertyChanged(nameof(HasUpdatableMods));
+            if (ReferenceEquals(sender, SelectedMod))
+            {
+                OnPropertyChanged(nameof(CanUpdateSelectedMod));
+            }
         }
 
         if (string.Equals(e.PropertyName, nameof(ModManageItem.IsSelected), StringComparison.Ordinal))
@@ -5578,11 +5697,38 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         IsCheckingModConflicts = true;
         IsModConflictCheckCompleted = false;
         ModConflicts.Clear();
-        Status = "正在检测启用 Mod 的 ID、前置和文件冲突…";
+        Status = "正在读取 SVL 本地化社区的冲突字段…";
 
         try
         {
-            var conflicts = await Task.Run(() => Services.ModConflictAnalyzer.Analyze(snapshot));
+            // 冲突数据来自社区条目，不能把本地目录中的 svl-source.json、DLL 或
+            // 其它文件当成冲突依据。并发读取社区缓存/网络数据，但限制并发数，
+            // 避免一次检测给社区源造成大量请求。
+            using var semaphore = new SemaphoreSlim(6, 6);
+            var communityTasks = snapshot.Select(async mod =>
+            {
+                await semaphore.WaitAsync();
+                try
+                {
+                    var sourceInfo = TryGetLocalizationSourceInfo(mod);
+                    var entry = await TryFetchCommunityConflictEntryAsync(
+                        sourceInfo,
+                        mod.UniqueId);
+                    return entry == null
+                        ? null
+                        : new Services.ModCommunityConflictSource(mod, entry);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var communitySources = (await Task.WhenAll(communityTasks))
+                .Where(item => item != null)
+                .Select(item => item!)
+                .ToList();
+            var conflicts = Services.ModConflictAnalyzer.AnalyzeCommunity(communitySources);
             if (scanVersion != _modConflictScanVersion)
             {
                 return;
@@ -5595,8 +5741,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
             IsModConflictCheckCompleted = true;
             Status = conflicts.Count == 0
-                ? "冲突检测完成：未发现明显冲突"
-                : $"冲突检测完成：发现 {conflicts.Count} 项，请处理后重新检测";
+                ? "冲突检测完成：目前未检测到冲突"
+                : $"冲突检测完成：发现 {conflicts.Count} 项社区冲突，可前往社区贡献页面补充";
             RefreshModManageHint(Status);
         }
         catch (Exception ex)
@@ -5624,6 +5770,24 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     {
         ClearModConflictResults();
         Status = "已清除冲突检测结果";
+    }
+
+    [RelayCommand]
+    private void OpenCommunityConflictContribution()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = CommunityConflictContributionUrl,
+                UseShellExecute = true
+            });
+            Status = "已打开社区冲突贡献页面";
+        }
+        catch (Exception ex)
+        {
+            Status = $"打开社区贡献页面失败：{ex.Message}";
+        }
     }
 
     private void InvalidateModConflictResults()
@@ -5712,7 +5876,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                         await Dispatcher.UIThread.InvokeAsync(() =>
                         {
                             mod.HasUpdate = false;
-                            mod.UpdateStatus = "缺少来源信息";
+                            var credential = TryReadSourceCredential(mod.FullPath);
+                            mod.UpdateStatus = IsInheritedModpackSource(mod.FullPath, credential)
+                                ? BuildInheritedSourceStatus(credential?.ParentMod)
+                                : "缺少来源信息";
+                            PersistModUpdateState(mod);
                         });
                         return;
                     }
@@ -5732,6 +5900,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                         mod.HasUpdate = checkResult.HasUpdate;
                         mod.CurseforgeProjectId = FirstNonEmpty(checkResult.CurseforgeProjectId, mod.CurseforgeProjectId);
                         mod.NexusModsProjectId = FirstNonEmpty(checkResult.NexusModsProjectId, mod.NexusModsProjectId);
+                        mod.GitHubRepository = FirstNonEmpty(checkResult.GitHubRepository, mod.GitHubRepository);
                         mod.UpdateSource = FirstNonEmpty(checkResult.UpdateSource, mod.UpdateSource);
                         mod.UpdateStatus = BuildUpdateStatusText(checkResult);
                         mod.LatestVersion = checkResult.LatestVersion;
@@ -5739,6 +5908,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                         mod.UpdateFileId = checkResult.UpdateFileId > 0
                             ? checkResult.UpdateFileId.ToString(CultureInfo.InvariantCulture)
                             : string.Empty;
+                        PersistModUpdateState(mod);
                     });
                 }
                 catch
@@ -5747,6 +5917,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     {
                         mod.HasUpdate = false;
                         mod.UpdateStatus = "检测失败";
+                        PersistModUpdateState(mod);
                     });
                 }
                 finally
@@ -5782,7 +5953,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     /// NexusMods 走 NXM 解析（含浏览器回退），Curseforge 走 HTTP 直链。
     /// </summary>
     [RelayCommand]
-    private void BatchUpdateMods()
+    private async Task BatchUpdateMods()
     {
         if (IsBackupTab)
         {
@@ -5792,25 +5963,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         var updatable = Mods
             .Where(m => !m.IsBackupItem && m.HasUpdate)
-            .Select(m =>
-            {
-                var credential = TryReadSourceCredential(m.FullPath);
-                var normalizedSource = NormalizePlatform(m.UpdateSource);
-                var projectId = NormalizePositiveId(
-                    string.Equals(normalizedSource, "Curseforge", StringComparison.OrdinalIgnoreCase)
-                        ? FirstNonEmpty(m.CurseforgeProjectId, credential?.ProjectId)
-                        : FirstNonEmpty(m.NexusModsProjectId, credential?.ProjectId));
-                var fileId = NormalizePositiveId(FirstNonEmpty(
-                    m.UpdateFileId,
-                    credential?.FileId,
-                    TryExtractFileIdFromNexusUrl(m.UpdateUrl)));
-                return new ModBatchUpdateEntry(
-                    m.DisplayName,
-                    m.UpdateUrl,
-                    m.UpdateSource,
-                    projectId,
-                    fileId);
-            })
+            .Select(mod => BuildBatchUpdateEntry(mod, isBatchUpdate: true))
+            .Where(entry => entry != null)
+            .Select(entry => entry!)
             .Where(entry =>
                 !string.IsNullOrWhiteSpace(entry.UpdateUrl) ||
                 (TryParsePositiveLong(entry.ProjectId, out _) &&
@@ -5823,9 +5978,92 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return;
         }
 
+        var confirmed = await _dialogService.ShowConfirmAsync(
+            "确认批量更新",
+            $"确认更新 {updatable.Count} 个 Mod 吗？\n更新覆盖前会自动备份原有 Mod；备份失败的 Mod 不会继续覆盖。\n批量更新过程中不会再次弹出冲突确认。\n\n是否继续？");
+        if (!confirmed)
+        {
+            Status = "已取消批量更新";
+            RefreshModManageHint(Status);
+            return;
+        }
+
         BatchUpdateModsRequested?.Invoke(updatable);
         Status = $"批量更新：已提交 {updatable.Count} 个 Mod 到下载队列";
         RefreshModManageHint($"批量更新：已提交 {updatable.Count} 个 Mod 到下载队列");
+    }
+
+    [RelayCommand]
+    private void UpdateItem(ModManageItem? item)
+    {
+        if (item == null || item.IsBackupItem)
+        {
+            return;
+        }
+
+        SelectedMod = item;
+        if (!item.HasUpdate)
+        {
+            Status = $"“{item.DisplayName}”当前没有可用更新";
+            return;
+        }
+
+        var entry = BuildBatchUpdateEntry(item);
+        if (entry == null ||
+            (string.IsNullOrWhiteSpace(entry.UpdateUrl) &&
+             (!TryParsePositiveLong(entry.ProjectId, out _) ||
+              !TryParsePositiveLong(entry.FileId, out _))))
+        {
+            Status = $"更新失败：{item.DisplayName} 缺少可用下载信息";
+            RefreshModManageHint(Status);
+            return;
+        }
+
+        ModUpdateRequested?.Invoke(entry);
+        Status = $"更新：已提交 {item.DisplayName} 到下载队列";
+        RefreshModManageHint(Status);
+    }
+
+    private ModBatchUpdateEntry? BuildBatchUpdateEntry(
+        ModManageItem mod,
+        bool isBatchUpdate = false)
+    {
+        if (mod == null || mod.IsBackupItem || !mod.HasUpdate)
+        {
+            return null;
+        }
+
+        var credential = TryReadSourceCredential(mod.FullPath);
+        var normalizedSource = NormalizePlatform(mod.UpdateSource);
+        var projectId = NormalizePositiveId(
+            string.Equals(normalizedSource, "Curseforge", StringComparison.OrdinalIgnoreCase)
+                ? FirstNonEmpty(mod.CurseforgeProjectId, credential?.ProjectId)
+                : string.Equals(normalizedSource, "NexusMods", StringComparison.OrdinalIgnoreCase)
+                    ? FirstNonEmpty(mod.NexusModsProjectId, credential?.ProjectId)
+                    : string.Empty);
+        var fileId = NormalizePositiveId(FirstNonEmpty(
+            mod.UpdateFileId,
+            credential?.FileId,
+            TryExtractFileIdFromNexusUrl(mod.UpdateUrl)));
+        var updateUrl = mod.UpdateUrl;
+        if (string.IsNullOrWhiteSpace(updateUrl) &&
+            string.Equals(normalizedSource, "NexusMods", StringComparison.OrdinalIgnoreCase) &&
+            TryParsePositiveLong(projectId, out var nexusProjectId) &&
+            TryParsePositiveLong(fileId, out var nexusFileId))
+        {
+            updateUrl = $"nxm://stardewvalley/mods/{nexusProjectId}/files/{nexusFileId}";
+        }
+
+        var repository = FirstNonEmpty(mod.GitHubRepository, credential?.Repository);
+
+        return new ModBatchUpdateEntry(
+            mod.DisplayName,
+            updateUrl,
+            mod.UpdateSource,
+            projectId,
+            fileId,
+            isBatchUpdate,
+            repository);
     }
 
     [RelayCommand]
@@ -6046,6 +6284,177 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             : "未检测到可安装的 Mod（请确认包含 manifest.json）";
     }
 
+    /// <summary>
+    /// 处理从文件管理器拖入的 Mod。先选择一个已有的 SMAPI/Base 目标，
+    /// 然后按 manifest.json 中的真实目录名事务式安装；目标已有同名 Mod 时
+    /// 直接替换，从而同时覆盖“安装”和“更新”两种场景。
+    /// </summary>
+    public async Task<int> InstallModFromDropAsync(IReadOnlyList<string> filePaths)
+    {
+        var sources = (filePaths ?? [])
+            .Where(path => !string.IsNullOrWhiteSpace(path) &&
+                           (File.Exists(path) || Directory.Exists(path)) &&
+                           ModArchiveDetector.LooksLikeModInstallSource(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (sources.Count == 0)
+        {
+            Status = "未检测到可安装的 Mod（请拖入包含 manifest.json 的压缩包或文件夹）";
+            return 0;
+        }
+
+        var targets = AvailableModInstancesProvider?.Invoke() ?? [];
+        var targetOptions = ModInstallTargetOptions.Build(targets);
+        if (targetOptions.Count == 0)
+        {
+            await _dialogService.ShowMessageAsync(
+                "无法安装 Mod",
+                "当前没有可用的 SMAPI/Base 目标，请先安装 SMAPI 或在实例页面添加游戏路径。");
+            return 0;
+        }
+
+        var currentModsPath = string.Empty;
+        if (TryGetCurrentModsPath(out var resolvedCurrentModsPath))
+        {
+            currentModsPath = resolvedCurrentModsPath;
+        }
+
+        var preferredTargetPath = targets
+            .Where(target =>
+            {
+                var runtimePath = InstanceRuntimePathResolver.Resolve(target.Path);
+                return string.Equals(
+                    Path.Combine(runtimePath, "Mods"),
+                    currentModsPath,
+                    StringComparison.OrdinalIgnoreCase);
+            })
+            .Select(target => target.Path)
+            .FirstOrDefault() ?? string.Empty;
+        var targetChoice = await _dialogService.ShowModInstallTargetDialogAsync(
+            targetOptions,
+            "选择 Mod 安装目标",
+            preferredTargetPath,
+            "请选择一个已有的 SMAPI/Base 版本后安装；目标中存在同名 Mod 时会直接更新。");
+        if (targetChoice.Action != ModInstallTargetDialogAction.Confirm ||
+            string.IsNullOrWhiteSpace(targetChoice.SelectedPath))
+        {
+            Status = "已取消 Mod 安装";
+            return 0;
+        }
+
+        var target = targets.FirstOrDefault(item =>
+            string.Equals(item.Path, targetChoice.SelectedPath, StringComparison.OrdinalIgnoreCase));
+        if (target == null)
+        {
+            Status = "所选 Mod 安装目标已失效，请刷新实例列表后重试";
+            return 0;
+        }
+
+        var targetModsPath = Path.Combine(
+            InstanceRuntimePathResolver.Resolve(target.Path),
+            "Mods");
+        Directory.CreateDirectory(targetModsPath);
+
+        // 先预览所有来源最终会写入的目录，统一处理更新/覆盖确认。
+        // 这一步必须发生在真正解压前，否则用户看到提示时原有 Mod 已经被替换。
+        var overwritePaths = new List<string>();
+        foreach (var source in sources)
+        {
+            var preferredName = Path.GetFileNameWithoutExtension(source);
+            var targetNames = ModpackInstallService.GetInstallTargetNames(source, preferredName, targetModsPath);
+            foreach (var targetName in targetNames)
+            {
+                var existingPath = Path.Combine(targetModsPath, targetName);
+                if (Directory.Exists(existingPath) &&
+                    !overwritePaths.Contains(existingPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    overwritePaths.Add(existingPath);
+                }
+            }
+        }
+
+        if (overwritePaths.Count > 0)
+        {
+            var comparisonSummary = $"检测到 {overwritePaths.Count} 个现有 Mod 将被覆盖：\n" +
+                                     string.Join("\n", overwritePaths.Select(path => $"• {Path.GetFileName(path)}"));
+            var resolution = await _dialogService.ShowConflictResolutionDialogAsync(
+                "安装 Mod 时发现更新/冲突",
+                "安装内容会替换已有 Mod。请确认是否覆盖；系统会在覆盖前自动备份原有 Mod。",
+                sources[0],
+                overwritePaths[0],
+                comparisonSummary,
+                "打开待安装文件",
+                "打开原有 Mod 文件夹",
+                "覆盖（先备份原有 Mod）");
+            if (resolution != ConflictResolutionDialogAction.Replace)
+            {
+                Status = "已取消 Mod 覆盖安装";
+                return 0;
+            }
+
+            var backupRoot = GetBackupRootPath(targetModsPath);
+            Directory.CreateDirectory(backupRoot);
+            foreach (var existingPath in overwritePaths)
+            {
+                if (!TryBackupExistingMod(existingPath, backupRoot))
+                {
+                    await _dialogService.ShowMessageAsync(
+                        "无法覆盖 Mod",
+                        $"原有 Mod“{Path.GetFileName(existingPath)}”备份失败，已取消本次安装。请检查目录权限后重试。");
+                    return 0;
+                }
+            }
+        }
+
+        var installed = 0;
+        var failed = 0;
+        foreach (var source in sources)
+        {
+            var preferredName = Path.GetFileNameWithoutExtension(source);
+            List<string> installedNames;
+            bool success;
+            if (File.Exists(source))
+            {
+                success = ModpackInstallService.InstallDownloadedModArchive(
+                    source,
+                    targetModsPath,
+                    preferredName,
+                    out installedNames);
+            }
+            else
+            {
+                success = ModpackInstallService.InstallBundledModDirectory(
+                    source,
+                    targetModsPath,
+                    Path.GetFileName(source),
+                    out installedNames);
+            }
+
+            if (success)
+            {
+                installed += installedNames.Count;
+            }
+            else
+            {
+                failed++;
+            }
+        }
+
+        if (string.Equals(targetModsPath, currentModsPath, StringComparison.OrdinalIgnoreCase))
+        {
+            ReloadMods();
+        }
+
+        Status = installed > 0
+            ? $"已安装/更新 {installed} 个 Mod 到 {target.Name}" +
+              (failed > 0 ? $"，失败 {failed} 个" : string.Empty)
+            : "Mod 安装失败，请确认压缩包中包含有效 manifest.json";
+        await _dialogService.ShowMessageAsync(
+            installed > 0 ? "Mod 安装完成" : "Mod 安装失败",
+            Status);
+        return installed;
+    }
+
     [RelayCommand]
     private void BackupSelectedMods()
     {
@@ -6082,7 +6491,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     }
 
     [RelayCommand]
-    private void RestoreSelectedBackups()
+    private async Task RestoreSelectedBackups()
     {
         if (!TryGetCurrentModsPath(out var modsPath))
         {
@@ -6105,7 +6514,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         var restored = 0;
         foreach (var backup in selectedBackups)
         {
-            if (TryRestoreBackup(backup, modsPath, backupRoot))
+            if (await TryRestoreBackupAsync(backup, modsPath, backupRoot))
             {
                 restored++;
             }
@@ -6128,8 +6537,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
 
         var confirmed = await _dialogService.ShowConfirmAsync(
-            "删除备份",
-            $"确定删除选中的 {selectedBackups.Count} 个备份吗？");
+            "移入回收站",
+            $"确定将选中的 {selectedBackups.Count} 个备份移入回收站吗？之后仍可从系统回收站恢复。");
         if (!confirmed)
         {
             return;
@@ -6145,8 +6554,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
             try
             {
-                Directory.Delete(backup.FullPath, true);
-                deleted++;
+                if (RecycleBinService.TryMoveToRecycleBin(backup.FullPath, out _))
+                {
+                    deleted++;
+                }
             }
             catch
             {
@@ -6159,7 +6570,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             LoadBackups(modsPath);
         }
         ApplyTagFilter();
-        Status = $"已删除备份：{deleted}/{selectedBackups.Count}";
+        Status = $"已移入回收站：{deleted}/{selectedBackups.Count} 个备份";
     }
 
     [RelayCommand]
@@ -6217,7 +6628,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     }
 
     [RelayCommand]
-    private void RestoreItem(ModManageItem? item)
+    private async Task RestoreItem(ModManageItem? item)
     {
         if (item == null || !item.IsBackupItem)
         {
@@ -6232,9 +6643,13 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         var backupRoot = GetBackupRootPath(modsPath);
         Directory.CreateDirectory(backupRoot);
-        var success = TryRestoreBackup(item, modsPath, backupRoot);
+        var success = await TryRestoreBackupAsync(item, modsPath, backupRoot);
         ReloadMods();
-        Status = success ? $"已恢复备份：{item.DisplayName}" : $"恢复失败：{item.DisplayName}";
+        Status = success ? "已恢复备份" : $"恢复失败：{item.DisplayName}";
+        if (success)
+        {
+            await _dialogService.ShowMessageAsync("恢复备份", "已恢复备份");
+        }
     }
 
     [RelayCommand]
@@ -6247,15 +6662,17 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         if (item.IsBackupItem)
         {
-            var confirmed = await _dialogService.ShowConfirmAsync("删除备份", $"确定删除备份“{item.DisplayName}”吗？");
+            var confirmed = await _dialogService.ShowConfirmAsync("移入回收站", $"确定将备份“{item.DisplayName}”移入回收站吗？");
             if (!confirmed)
             {
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(item.FullPath) && Directory.Exists(item.FullPath))
+            if (!string.IsNullOrWhiteSpace(item.FullPath) && Directory.Exists(item.FullPath) &&
+                !RecycleBinService.TryMoveToRecycleBin(item.FullPath, out var recycleError))
             {
-                Directory.Delete(item.FullPath, true);
+                Status = $"移入回收站失败：{recycleError}";
+                return;
             }
 
             if (TryGetCurrentModsPath(out var modsPath))
@@ -6264,11 +6681,13 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             }
 
             ApplyTagFilter();
-            Status = $"已删除备份：{item.DisplayName}";
+            Status = $"已移入回收站：{item.DisplayName}";
             return;
         }
 
-        var approveDelete = await _dialogService.ShowConfirmAsync("卸载 Mod", $"确定卸载“{item.DisplayName}”吗？");
+        var approveDelete = await _dialogService.ShowConfirmAsync(
+            "卸载 Mod",
+            $"确定卸载“{item.DisplayName}”吗？Mod 文件夹会移入回收站，之后仍可恢复。");
         if (!approveDelete)
         {
             return;
@@ -6457,40 +6876,178 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
     }
 
-    private static bool TryRestoreBackup(ModManageItem backup, string modsPath, string backupRoot)
+    private async Task<bool> TryRestoreBackupAsync(ModManageItem backup, string modsPath, string backupRoot)
     {
         if (string.IsNullOrWhiteSpace(backup.FullPath) || !Directory.Exists(backup.FullPath))
         {
             return false;
         }
 
-        var targetName = string.IsNullOrWhiteSpace(backup.BackupOriginalFolderName)
-            ? backup.FolderName
-            : backup.BackupOriginalFolderName;
+        var backupRecord = TryReadBackupRecord(backup.FullPath);
+        var updateChain = backupRecord?.UpdateChain;
+        var targetName = !string.IsNullOrWhiteSpace(backup.BackupOriginalFolderName)
+            ? backup.BackupOriginalFolderName
+            : updateChain?.OriginalFolderName;
+        targetName ??= backup.FolderName;
         if (string.IsNullOrWhiteSpace(targetName))
         {
             return false;
         }
 
-        var targetPath = Path.Combine(modsPath, targetName);
-        try
+        // 备份记录来自本地文件，但仍要限制恢复目标为 Mods 的直接子目录，
+        // 防止异常/旧记录中的相对路径越界到实例其它目录。
+        if (!string.Equals(Path.GetFileName(targetName), targetName, StringComparison.Ordinal) ||
+            targetName is "." or "..")
         {
-            if (Directory.Exists(targetPath))
+            return false;
+        }
+
+        var targetPath = Path.Combine(modsPath, targetName);
+        if (Directory.Exists(targetPath))
+        {
+            var comparison = await Task.Run(() => CompareBackupDirectories(backup.FullPath, targetPath));
+            if (!comparison.HasDifferences)
             {
-                var conflictPath = Path.Combine(
-                    backupRoot,
-                    $"conflict_{DateTime.Now:yyyyMMdd_HHmmss}_{SanitizeFileName(targetName)}");
-                Directory.Move(targetPath, conflictPath);
+                // 备份目录和当前目录可能就是同一份内容（例如用户先手动备份，
+                // 之后没有实际改动）。这不属于冲突，不应再弹出“处理冲突”，
+                // 也不应为了显示成功而删除并重建目录。
+                Status = $"备份与当前 Mod 内容一致，无需替换：{targetName}";
+                return true;
             }
 
-            CopyDirectory(backup.FullPath, targetPath);
-            var copiedMetaPath = Path.Combine(targetPath, BackupMetaFileName);
+            var resolution = await _dialogService.ShowConflictResolutionDialogAsync(
+                "恢复备份时发现冲突",
+                $"目标 Mod“{targetName}”已经存在。请先查看比对结果，再决定是否替换。",
+                backup.FullPath,
+                targetPath,
+                comparison.Summary,
+                "打开备份文件夹",
+                "打开原有 Mod 文件夹",
+                "替换（先备份原有 Mod）");
+            if (resolution != ConflictResolutionDialogAction.Replace)
+            {
+                Status = $"已取消恢复：{targetName}";
+                return false;
+            }
+
+            if (!TryBackupExistingMod(targetPath, backupRoot))
+            {
+                await _dialogService.ShowMessageAsync(
+                    "无法替换 Mod",
+                    $"原有 Mod“{targetName}”备份失败，已取消替换。请检查目录权限后重试。");
+                return false;
+            }
+        }
+
+        var stagingPath = string.Empty;
+        try
+        {
+            // 先复制到临时目录，成功后再替换目标，避免恢复过程中途失败留下半套 Mod。
+            stagingPath = Path.Combine(
+                modsPath,
+                $".svl-restore-{SanitizeFileName(targetName)}-{Guid.NewGuid():N}");
+            CopyDirectory(backup.FullPath, stagingPath);
+            var copiedMetaPath = Path.Combine(stagingPath, BackupMetaFileName);
             if (File.Exists(copiedMetaPath))
             {
                 File.Delete(copiedMetaPath);
             }
 
+            if (Directory.Exists(targetPath) &&
+                !RecycleBinService.TryMoveToRecycleBin(targetPath, out var recycleError))
+            {
+                throw new IOException($"无法将原有 Mod 移入回收站：{recycleError}");
+            }
+
+            Directory.Move(stagingPath, targetPath);
+
+            // 更新时发布者可能把旧目录 A 改名为 BCD。更新链记录了本次归档
+            // 的目标名；恢复旧版本后把已经安装的新目录移入回收站，避免 A/BCD
+            // 同时存在、游戏继续加载错误版本。与原目录同名时不做额外处理。
+            if (updateChain != null)
+            {
+                foreach (var replacementName in updateChain.ReplacementFolderNames
+                             .Where(name => !string.IsNullOrWhiteSpace(name))
+                             .Select(name => Path.GetFileName(name.Trim()))
+                             .Where(name => !string.IsNullOrWhiteSpace(name) &&
+                                            !string.Equals(name, targetName, StringComparison.OrdinalIgnoreCase))
+                             .Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    var replacementPath = Path.Combine(modsPath, replacementName);
+                    if (Directory.Exists(replacementPath) &&
+                        IsReplacementForBackup(replacementPath, updateChain, backupRecord) &&
+                        !RecycleBinService.TryMoveToRecycleBin(replacementPath, out var replacementError))
+                    {
+                        throw new IOException($"无法清理更新后的 Mod“{replacementName}”：{replacementError}");
+                    }
+                }
+            }
+
             return true;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            // 删除/移动失败时也清理暂存目录，避免下一次扫描把半套恢复内容当成 Mod。
+            if (!string.IsNullOrWhiteSpace(stagingPath) && Directory.Exists(stagingPath))
+            {
+                try
+                {
+                    Directory.Delete(stagingPath, true);
+                }
+                catch
+                {
+                    // 暂存目录清理失败不覆盖真正的恢复结果；后续刷新时会忽略 .svl-restore-*。
+                }
+            }
+        }
+    }
+
+    private static bool IsReplacementForBackup(
+        string replacementPath,
+        ModUpdateChainMetadata? updateChain,
+        ModBackupRecord? backupRecord)
+    {
+        if (updateChain == null)
+        {
+            return false;
+        }
+
+        // 单 Mod 更新没有歧义；复合归档的每个旧 Mod 都会写入同一组候选目录，
+        // 此时必须再按 UniqueID 过滤，不能恢复一个子 Mod 时误移除其它子 Mod。
+        if (updateChain.ReplacementFolderNames.Count <= 1)
+        {
+            return true;
+        }
+
+        var expectedUniqueId = !string.IsNullOrWhiteSpace(updateChain.OriginalUniqueId)
+            ? updateChain.OriginalUniqueId
+            : backupRecord?.UniqueId ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(expectedUniqueId))
+        {
+            return false;
+        }
+
+        try
+        {
+            var manifestPath = Directory
+                .EnumerateFiles(replacementPath, "manifest.json", SearchOption.AllDirectories)
+                .FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                return false;
+            }
+
+            using var document = JsonDocument.Parse(ManifestTextReader.ReadAllText(manifestPath));
+            var actualUniqueId = GetJsonStringFlexibleByCandidates(
+                document.RootElement,
+                "UniqueID",
+                "UniqueId",
+                "unique_id");
+            return string.Equals(expectedUniqueId, actualUniqueId, StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
@@ -6700,6 +7257,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             Services.InstanceRuntimePathResolver.Resolve(settings.PreferredInstancePath),
             "Mods");
         Directory.CreateDirectory(modsPath);
+        // 兼容旧版已安装数据：同一归档展开的父 Mod 与一级 ContentPack
+        // 可能被分别写成独立来源。先修复凭证，再加载层级和更新状态。
+        ModpackInstallService.RepairCompositeSourceCredentials(modsPath);
 
         var dependencyEntriesByPath = new Dictionary<string, List<(string UniqueId, string MinimumVersion, bool IsRequired, string Note)>>(StringComparer.OrdinalIgnoreCase);
 
@@ -6744,6 +7304,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             var updateSource = string.Empty;
             var curseforgeProjectId = string.Empty;
             var nexusModsProjectId = string.Empty;
+            var gitHubRepository = string.Empty;
             var localizationUpdatedAt = string.Empty;
             var dependencyEntries = new List<(string UniqueId, string MinimumVersion, bool IsRequired, string Note)>();
 
@@ -6762,7 +7323,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                         description = FirstNonEmpty(GetJsonStringFlexibleByCandidates(manifestRoot, "Description"), description);
 
                         ParseModDependencies(manifestRoot, dependencyEntries);
-                        TryResolveSourceFromUpdateKeys(manifestRoot, ref curseforgeProjectId, ref nexusModsProjectId, ref updateSource);
+                        TryResolveSourceFromUpdateKeys(
+                            manifestRoot,
+                            ref curseforgeProjectId,
+                            ref nexusModsProjectId,
+                            ref gitHubRepository,
+                            ref updateSource);
                     }
                 }
                 catch
@@ -6773,6 +7339,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
             var sourceCredential = TryReadSourceCredential(modDirectory);
             var isCompositeParent = sourceCredential?.IsParentMod == true;
+            var isInheritedModpackSource = !isCompositeParent &&
+                                           IsInheritedModpackSource(modDirectory, sourceCredential);
             var parentReference = sourceCredential?.ParentMod;
             // 保留 manifest 的原始文本，不能只把汉化结果写进 DisplayName/Description；
             // 否则用户切换回英文时已经没有可恢复的源站内容。
@@ -6787,6 +7355,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 ref updateSource,
                 ref curseforgeProjectId,
                 ref nexusModsProjectId,
+                ref gitHubRepository,
                 ref localizationUpdatedAt);
 
             // 部分发行包的 manifest 没有标准 Version 字段，或只在文件名中携带
@@ -6823,6 +7392,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 SourceFileName = sourceFileName,
                 CurseforgeProjectId = curseforgeProjectId,
                 NexusModsProjectId = nexusModsProjectId,
+                GitHubRepository = gitHubRepository,
                 UpdateSource = updateSource,
                 LocalizationUpdatedAt = localizationUpdatedAt,
                 SourceDisplayName = FirstNonEmpty(sourceDisplayName, actualName),
@@ -6830,7 +7400,21 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 SourceDescription = sourceDescription,
                 LocalizedDescription = sourceCredential?.Localization?.DescriptionZhCn ?? string.Empty,
                 IsEnabled = isEnabled,
-                UpdateStatus = isCompositeParent ? "分组" : "未检查",
+                HasUpdate = !isCompositeParent && !isInheritedModpackSource && sourceCredential?.HasUpdate == true,
+                LatestVersion = isCompositeParent || isInheritedModpackSource
+                    ? string.Empty
+                    : sourceCredential?.LatestVersion ?? string.Empty,
+                UpdateUrl = isCompositeParent || isInheritedModpackSource
+                    ? string.Empty
+                    : sourceCredential?.UpdateUrl ?? string.Empty,
+                UpdateFileId = isCompositeParent || isInheritedModpackSource
+                    ? string.Empty
+                    : sourceCredential?.UpdateFileId ?? string.Empty,
+                UpdateStatus = BuildInitialModUpdateStatus(
+                    sourceCredential,
+                    isCompositeParent,
+                    isInheritedModpackSource,
+                    parentReference),
                 IsCompositeParent = isCompositeParent,
                 ParentModId = parentReference?.Id ?? string.Empty,
                 ParentModName = parentReference?.Name ?? string.Empty
@@ -6890,6 +7474,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             // manifest.json；真正可导入的内容是其子 Mod，不能把分组头当成独立 Mod 导出。
             .Where(mod => !mod.IsCompositeParent ||
                           FindManifestPath(mod.FullPath) != null)
+            // 真正的父 Mod 已经携带完整压缩包和 childMods 映射。嵌套子 Mod
+            // 不能再作为第二个独立来源条目导出，否则回导时会先写入父级凭证，
+            // 又被子条目的旧来源覆盖，最终在管理页显示“缺少来源信息”。
+            // 只有找不到真实父目录/父 manifest 的兼容分组，才保留子 Mod 独立导出。
+            .Where(mod => !IsNestedChildOfInstalledComposite(mod))
             .Where(mod => !IsSmapiBundledModForExport(mod.UniqueId, mod.DirectoryName))
             .OrderBy(mod => mod.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -6902,6 +7491,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             var sourceFileId = string.Empty;
             var sourceDownloadUrl = string.Empty;
             var sourceFileName = string.Empty;
+            var sourceRepository = string.Empty;
 
             if (sourceCredential != null)
             {
@@ -6911,11 +7501,18 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 sourceFileId = NormalizePositiveId(sourceCredential.FileId);
                 sourceDownloadUrl = FirstNonEmpty(sourceCredential.DownloadUrl);
                 sourceFileName = FirstNonEmpty(sourceCredential.FileName);
+                sourceRepository = FirstNonEmpty(sourceCredential.Repository);
             }
 
             sourceFileName = FirstNonEmpty(sourceFileName, mod.SourceFileName);
 
             sourcePlatform = FirstNonEmpty(sourcePlatform, NormalizePlatform(mod.UpdateSource));
+            sourceRepository = FirstNonEmpty(sourceRepository, mod.GitHubRepository);
+            if (string.Equals(sourcePlatform, "GitHub", StringComparison.OrdinalIgnoreCase) &&
+                RemoteCatalogService.TryNormalizeGitHubRepository(sourceRepository, out var normalizedRepository))
+            {
+                sourceRepository = normalizedRepository;
+            }
 
             // 兼容旧版只保留 downloadUrl/nxmUrl 的来源凭证。身份推断必须发生在
             // FileID 补全前，否则“未知平台 + NXM 链接”永远不会进入 Nexus 缓存
@@ -6932,17 +7529,20 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             // 不要固定优先 CurseForge ID：旧版来源文件可能缺 platform，但 manifest
             // 同时留下了两个更新键。先按已知平台选择对应 ID，避免 Nexus 条目被
             // 错导出成 CurseForge 项目。
-            sourceProjectId = FirstNonEmpty(
-                sourceProjectId,
-                IsCurseforgePlatform(sourcePlatform)
-                    ? NormalizeProjectId(mod.CurseforgeProjectId)
-                    : IsNexusPlatform(sourcePlatform)
+            if (!string.Equals(sourcePlatform, "GitHub", StringComparison.OrdinalIgnoreCase))
+            {
+                sourceProjectId = FirstNonEmpty(
+                    sourceProjectId,
+                    IsCurseforgePlatform(sourcePlatform)
+                        ? NormalizeProjectId(mod.CurseforgeProjectId)
+                        : IsNexusPlatform(sourcePlatform)
+                            ? NormalizeProjectId(mod.NexusModsProjectId)
+                            : NormalizeProjectId(mod.CurseforgeProjectId),
+                    IsCurseforgePlatform(sourcePlatform)
                         ? NormalizeProjectId(mod.NexusModsProjectId)
                         : NormalizeProjectId(mod.CurseforgeProjectId),
-                IsCurseforgePlatform(sourcePlatform)
-                    ? NormalizeProjectId(mod.NexusModsProjectId)
-                    : NormalizeProjectId(mod.CurseforgeProjectId),
-                NormalizeProjectId(mod.NexusModsProjectId));
+                    NormalizeProjectId(mod.NexusModsProjectId));
+            }
 
             // FirstNonEmpty 只判断字符串是否为空，不能把旧版序列化的 0
             // 当作有效平台 ID。清理后再提取 FileID，避免“项目 ID=0”让
@@ -6975,6 +7575,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 SourceFileId = sourceFileId,
                 SourceDownloadUrl = sourceDownloadUrl,
                 SourceFileName = sourceFileName,
+                SourceRepository = sourceRepository,
                 IsCompositeParent = mod.IsCompositeParent,
                 ParentMod = BuildExportParentReference(currentModsPath, mod),
                 ChildMods = mod.ChildMods
@@ -6996,6 +7597,24 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         OnPropertyChanged(nameof(TotalExportModCount));
         OnPropertyChanged(nameof(CanStartExport));
         OnPropertyChanged(nameof(ExportProgressText));
+    }
+
+    private bool IsNestedChildOfInstalledComposite(ModManageItem mod)
+    {
+        if (mod == null || !mod.IsChildMod || string.IsNullOrWhiteSpace(mod.ParentModId))
+        {
+            return false;
+        }
+
+        var parent = Mods.FirstOrDefault(candidate =>
+            candidate.IsCompositeParent &&
+            string.Equals(
+                NormalizeModPathKey(candidate.FullPath),
+                NormalizeModPathKey(mod.ParentModId),
+                StringComparison.OrdinalIgnoreCase));
+
+        return parent != null &&
+               !string.IsNullOrWhiteSpace(FindManifestPath(parent.FullPath));
     }
 
     private static ExportModParentReference? BuildExportParentReference(
@@ -7506,6 +8125,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         JsonElement manifestRoot,
         ref string curseforgeProjectId,
         ref string nexusModsProjectId,
+        ref string gitHubRepository,
         ref string updateSource)
     {
         if (!TryGetJsonPropertyIgnoreCase(manifestRoot, "UpdateKeys", out var updateKeysElement) ||
@@ -7555,6 +8175,16 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 if (string.IsNullOrWhiteSpace(updateSource))
                 {
                     updateSource = "NexusMods";
+                }
+            }
+
+            if (string.Equals(source, "github", StringComparison.OrdinalIgnoreCase) &&
+                RemoteCatalogService.TryNormalizeGitHubRepository(identifier, out var repository))
+            {
+                gitHubRepository = FirstNonEmpty(gitHubRepository, repository);
+                if (string.IsNullOrWhiteSpace(updateSource))
+                {
+                    updateSource = "GitHub";
                 }
             }
         }
@@ -7632,6 +8262,23 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 metadata.DownloadUrl = FirstNonEmpty(
                     metadata.DownloadUrl,
                     GetJsonStringFlexibleByCandidates(root, "downloadUrl", "download_url", "url", "nxmUrl", "nxm_url"));
+                metadata.Repository = FirstNonEmpty(
+                    metadata.Repository,
+                    GetJsonStringFlexibleByCandidates(root, "repository", "repo", "githubRepository", "github_repository"));
+
+                metadata.HasUpdate = GetJsonBoolByCandidates(root, "hasUpdate", "has_update") ?? metadata.HasUpdate;
+                metadata.LatestVersion = FirstNonEmpty(
+                    metadata.LatestVersion,
+                    GetJsonStringFlexibleByCandidates(root, "latestVersion", "latest_version"));
+                metadata.UpdateStatus = FirstNonEmpty(
+                    metadata.UpdateStatus,
+                    GetJsonStringFlexibleByCandidates(root, "updateStatus", "update_status"));
+                metadata.UpdateUrl = FirstNonEmpty(
+                    metadata.UpdateUrl,
+                    GetJsonStringFlexibleByCandidates(root, "updateUrl", "update_url"));
+                metadata.UpdateFileId = FirstNonEmpty(
+                    metadata.UpdateFileId,
+                    GetJsonStringFlexibleByCandidates(root, "updateFileId", "update_file_id"));
 
                 // 第三方/旧 Collection 来源可能只保存 logicalFilename，且没有
                 // 单独的 fileId。将文件名中的 Nexus FileID 立即补回内存模型，
@@ -7712,6 +8359,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         ref string updateSource,
         ref string curseforgeProjectId,
         ref string nexusModsProjectId,
+        ref string gitHubRepository,
         ref string localizationUpdatedAt)
     {
         if (sourceCredential == null)
@@ -7736,6 +8384,16 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             {
                 updateSource = "NexusMods";
             }
+        }
+
+        if (string.Equals(normalizedPlatform, "GitHub", StringComparison.OrdinalIgnoreCase))
+        {
+            if (RemoteCatalogService.TryNormalizeGitHubRepository(sourceCredential.Repository, out var repository))
+            {
+                gitHubRepository = FirstNonEmpty(repository, gitHubRepository);
+            }
+
+            updateSource = "GitHub";
         }
 
         sourceFileName = FirstNonEmpty(sourceFileName, sourceCredential.FileName);
@@ -7849,6 +8507,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return "NexusMods";
         }
 
+        if (string.Equals(platform, "GitHub", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(platform, "Github", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GitHub";
+        }
+
         return platform.Trim();
     }
 
@@ -7859,7 +8523,35 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return null;
         }
 
+        var credential = TryReadSourceCredential(mod.FullPath);
+        if (IsInheritedModpackSource(mod.FullPath, credential))
+        {
+            // CurseForge 整合包的 manifest.files 只有“整合包文件”的 ID。
+            // 内容包可能只是这个归档里的子目录，并没有对应的独立项目；
+            // 禁止拿父整合包的最新版本与子 Mod 比较，避免出现“每个子 Mod
+            // 都可更新到 6.7.1”这类伪更新。
+            return null;
+        }
+
         var sourceInfo = TryGetLocalizationSourceInfo(mod);
+        var githubRepository = FirstNonEmpty(mod.GitHubRepository, credential?.Repository);
+        if (!string.IsNullOrWhiteSpace(githubRepository) &&
+            (string.Equals(NormalizePlatform(mod.UpdateSource), "GitHub", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(NormalizePlatform(credential?.Platform), "GitHub", StringComparison.OrdinalIgnoreCase)))
+        {
+            var githubResult = await _catalogService.CheckGitHubModUpdateAsync(githubRepository, mod.Version);
+            return new LocalModUpdateCheckResult
+            {
+                IsChecked = githubResult.IsChecked,
+                HasUpdate = githubResult.HasUpdate,
+                LatestVersion = githubResult.LatestVersion,
+                UpdateSource = "GitHub",
+                GitHubRepository = githubResult.Repository,
+                UpdateUrl = githubResult.DownloadUrl,
+                UpdateStatusMessage = githubResult.Message
+            };
+        }
+
         if (!sourceInfo.HasValue)
         {
             return null;
@@ -8034,7 +8726,6 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 // 一个 API 路径不可用时继续尝试另一种历史路径。
             }
         }
-
         return result;
     }
 
@@ -8091,14 +8782,22 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         {
             return string.Equals(result.UpdateSource, "NexusMods", StringComparison.OrdinalIgnoreCase)
                 ? "需登录 Nexus"
-                : "检测失败";
+                : FirstNonEmpty(result.UpdateStatusMessage, "检测失败");
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.UpdateStatusMessage) && !result.HasUpdate)
+        {
+            return result.UpdateStatusMessage;
         }
 
         if (result.HasUpdate)
         {
+            var suffix = string.IsNullOrWhiteSpace(result.UpdateStatusMessage)
+                ? string.Empty
+                : $"（{result.UpdateStatusMessage}）";
             return string.IsNullOrWhiteSpace(result.LatestVersion)
                 ? "可更新"
-                : $"可更新 -> {result.LatestVersion}";
+                : $"可更新 -> {result.LatestVersion}{suffix}";
         }
 
         if (!string.IsNullOrWhiteSpace(result.UpdateSource) &&
@@ -8153,7 +8852,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                             }
 
                             if (updateKey.StartsWith("curseforge:", StringComparison.OrdinalIgnoreCase) ||
-                                updateKey.StartsWith("nexus:", StringComparison.OrdinalIgnoreCase))
+                                updateKey.StartsWith("nexus:", StringComparison.OrdinalIgnoreCase) ||
+                                updateKey.StartsWith("github:", StringComparison.OrdinalIgnoreCase))
                             {
                                 return true;
                             }
@@ -8273,6 +8973,160 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         {
             var pathByUniqueId = BuildCommunityLocalizationRelativePath("UniqueID", uniqueId);
             return await FetchCommunityLocalizationByPathAsync(pathByUniqueId, forceRefresh);
+        }
+
+        return null;
+    }
+
+    private static bool IsInheritedModpackSource(
+        string modDirectory,
+        LocalSourceMetadata? credential)
+    {
+        if (credential == null)
+        {
+            return false;
+        }
+
+        // 嵌套 ContentPack 的来源由父 Mod 提供，与平台无关。旧实现只对
+        // CurseForge 来源做判断，导致 Nexus/普通导入的子 Mod 在单独检查
+        // 更新时被错误显示为“缺少来源信息”。
+        if (credential.ParentMod != null &&
+            !string.IsNullOrWhiteSpace(credential.ParentMod.RelativePath))
+        {
+            return true;
+        }
+
+        if (string.Equals(credential.SourceKind, "parent-inherited", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(credential.SourceKind, "modpack-parent-inherited", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 兼容更早的导入格式：只有在没有明确 sourceKind、没有下载文件名/URL，
+        // 并且 manifest 明确是 ContentPack 时，才把它视为没有独立来源的
+        // 嵌套子 Mod。不能再仅凭 sourceKind=modpack 或 project/file ID 判断。
+        if (!string.IsNullOrWhiteSpace(credential.SourceKind))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(credential.FileName) ||
+            !string.IsNullOrWhiteSpace(credential.DownloadUrl) ||
+            string.IsNullOrWhiteSpace(modDirectory))
+        {
+            return false;
+        }
+
+        var manifestPath = FindManifestPath(modDirectory);
+        if (string.IsNullOrWhiteSpace(manifestPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = TryReadManifestDocument(manifestPath);
+            if (document == null || document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            if (!TryGetJsonPropertyIgnoreCase(document.RootElement, "ContentPackFor", out var contentPackFor))
+            {
+                return false;
+            }
+
+            return contentPackFor.ValueKind == JsonValueKind.Object
+                ? contentPackFor.EnumerateObject().Any()
+                : contentPackFor.ValueKind == JsonValueKind.String &&
+                  !string.IsNullOrWhiteSpace(contentPackFor.GetString());
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string BuildInitialModUpdateStatus(
+        LocalSourceMetadata? credential,
+        bool isCompositeParent,
+        bool isInheritedModpackSource,
+        LocalParentModReference? parentReference)
+    {
+        if (isCompositeParent)
+        {
+            return "分组";
+        }
+
+        if (isInheritedModpackSource)
+        {
+            return BuildInheritedSourceStatus(parentReference);
+        }
+
+        // 旧版本曾把有效的 Modpack 条目先写成“缺少来源信息”。来源修复后
+        // 不能继续沿用这个持久化的错误状态，否则用户必须手动再检测一次
+        // 才能看到正确结果。保留其它真实的更新状态。
+        var persistedStatus = credential?.UpdateStatus ?? string.Empty;
+        if (HasActionableSourceCredential(credential) &&
+            persistedStatus.Contains("缺少来源", StringComparison.OrdinalIgnoreCase))
+        {
+            return "未检查";
+        }
+
+        return FirstNonEmpty(
+            persistedStatus,
+            credential?.HasUpdate == true
+                ? (string.IsNullOrWhiteSpace(credential.LatestVersion)
+                    ? "可更新"
+                    : $"可更新 -> {credential.LatestVersion}")
+                : "未检查");
+    }
+
+    private static string BuildInheritedSourceStatus(LocalParentModReference? parentReference)
+    {
+        return string.IsNullOrWhiteSpace(parentReference?.Name)
+            ? "继承父 Mod 来源"
+            : $"父 Mod：{parentReference.Name}";
+    }
+
+    private static bool HasActionableSourceCredential(LocalSourceMetadata? credential)
+    {
+        if (credential == null)
+        {
+            return false;
+        }
+
+        var platform = NormalizePlatform(credential.Platform);
+        return !string.IsNullOrWhiteSpace(credential.DownloadUrl) ||
+               (string.Equals(platform, "GitHub", StringComparison.OrdinalIgnoreCase) &&
+                RemoteCatalogService.TryNormalizeGitHubRepository(credential.Repository, out _)) ||
+               ((string.Equals(platform, "Curseforge", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(platform, "NexusMods", StringComparison.OrdinalIgnoreCase)) &&
+                TryParsePositiveLong(FirstNonEmpty(credential.ProjectId, credential.ModId), out _));
+    }
+
+    private async Task<Services.CommunityLocalizationEntry?> TryFetchCommunityConflictEntryAsync(
+        (string Platform, string ProjectId)? sourceInfo,
+        string? uniqueId)
+    {
+        if (sourceInfo.HasValue)
+        {
+            var pathBySource = BuildCommunityLocalizationRelativePath(
+                sourceInfo.Value.Platform,
+                sourceInfo.Value.ProjectId);
+            if (!string.IsNullOrWhiteSpace(pathBySource))
+            {
+                var bySource = await _communityLocalizationService.GetByRelativePathAsync(pathBySource);
+                if (bySource != null)
+                {
+                    return bySource;
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(uniqueId))
+        {
+            return await _communityLocalizationService.GetByUniqueIdAsync(uniqueId);
         }
 
         return null;
@@ -9053,7 +9907,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
 
         var directDirectories = topLevelDirectories
-            .Where(path => !string.Equals(Path.GetFileName(path), BackupRootFolderName, StringComparison.OrdinalIgnoreCase));
+            .Where(path => !IsTransientModDirectory(path));
         var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var directory in directDirectories)
@@ -9086,6 +9940,16 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
 
         return results;
+    }
+
+    private static bool IsTransientModDirectory(string path)
+    {
+        var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return string.Equals(name, BackupRootFolderName, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, "_staging", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, "_downloads", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith(".svl-restore-", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith(".svl-delete-", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? FindManifestPath(string directory)
@@ -9156,6 +10020,138 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
     }
 
+    private bool TryBackupExistingMod(string targetPath, string backupRoot)
+    {
+        var existing = Mods.FirstOrDefault(item =>
+            !item.IsBackupItem &&
+            !string.IsNullOrWhiteSpace(item.FullPath) &&
+            string.Equals(Path.GetFullPath(item.FullPath), Path.GetFullPath(targetPath), StringComparison.OrdinalIgnoreCase));
+        var item = existing ?? new ModManageItem
+        {
+            DisplayName = Path.GetFileName(targetPath),
+            Version = "未知版本",
+            FolderName = Path.GetFileName(targetPath),
+            DirectoryName = Path.GetFileName(targetPath),
+            FullPath = targetPath
+        };
+
+        return TryBackupMod(item, backupRoot);
+    }
+
+    private sealed record BackupDirectoryComparison(
+        int SameFiles,
+        int ChangedFiles,
+        int OnlyInBackup,
+        int OnlyInExisting)
+    {
+        public bool HasDifferences => ChangedFiles > 0 || OnlyInBackup > 0 || OnlyInExisting > 0;
+
+        public string Summary =>
+            $"相同 {SameFiles} 个，内容不同 {ChangedFiles} 个，仅备份中 {OnlyInBackup} 个，仅原有 Mod 中 {OnlyInExisting} 个。";
+    }
+
+    private static BackupDirectoryComparison CompareBackupDirectories(string backupPath, string existingPath)
+    {
+        var backupFiles = EnumerateComparableFiles(backupPath);
+        var existingFiles = EnumerateComparableFiles(existingPath);
+        var same = 0;
+        var changed = 0;
+        var onlyInBackup = 0;
+
+        foreach (var (relativePath, backupFile) in backupFiles)
+        {
+            if (!existingFiles.TryGetValue(relativePath, out var existingFile))
+            {
+                onlyInBackup++;
+                continue;
+            }
+
+            if (FilesEqual(backupFile, existingFile))
+            {
+                same++;
+            }
+            else
+            {
+                changed++;
+            }
+        }
+
+        var onlyInExisting = existingFiles.Keys.Count(relativePath => !backupFiles.ContainsKey(relativePath));
+        return new BackupDirectoryComparison(same, changed, onlyInBackup, onlyInExisting);
+    }
+
+    private static Dictionary<string, string> EnumerateComparableFiles(string root)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var fileName = Path.GetFileName(file);
+                if (string.Equals(fileName, BackupMetaFileName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fileName, ".svl-update-chain.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var relative = Path.GetRelativePath(root, file)
+                    .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                result[relative] = file;
+            }
+        }
+        catch
+        {
+            // 比对是辅助信息；某个文件不可读时仍保留已扫描结果，并继续允许用户查看目录。
+        }
+
+        return result;
+    }
+
+    private static bool FilesEqual(string left, string right)
+    {
+        try
+        {
+            var leftInfo = new FileInfo(left);
+            var rightInfo = new FileInfo(right);
+            if (leftInfo.Length != rightInfo.Length)
+            {
+                return false;
+            }
+
+            using var leftStream = new FileStream(left, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var rightStream = new FileStream(right, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var leftBuffer = new byte[64 * 1024];
+            var rightBuffer = new byte[leftBuffer.Length];
+            while (true)
+            {
+                var leftRead = leftStream.Read(leftBuffer, 0, leftBuffer.Length);
+                var rightRead = rightStream.Read(rightBuffer, 0, rightBuffer.Length);
+                if (leftRead != rightRead)
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < leftRead; i++)
+                {
+                    if (leftBuffer[i] != rightBuffer[i])
+                    {
+                        return false;
+                    }
+                }
+
+                if (leftRead == 0)
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool HasNestedManifest(string manifestPath)
     {
         var directory = Path.GetDirectoryName(manifestPath);
@@ -9219,7 +10215,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 continue;
             }
 
-            var parentPath = ResolveCompositeReferencePath(modsPath, credential.ParentMod.RelativePath);
+            var parentPath = ResolveCompositeReferencePathWithIdentity(
+                modsPath,
+                credential.ParentMod.RelativePath,
+                credential.ParentMod.Name,
+                credential.ParentMod.Id,
+                itemsByPath.Values);
             if (string.IsNullOrWhiteSpace(parentPath))
             {
                 continue;
@@ -9250,7 +10251,13 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     continue;
                 }
 
-                var childPath = ResolveCompositeReferencePath(modsPath, childReference.RelativePath);
+                var childPath = ResolveCompositeReferencePathWithIdentity(
+                    modsPath,
+                    childReference.RelativePath,
+                    childReference.Name,
+                    childReference.UniqueId,
+                    itemsByPath.Values,
+                    parent.FullPath);
                 if (string.IsNullOrWhiteSpace(childPath) ||
                     !itemsByPath.TryGetValue(NormalizeModPathKey(childPath), out var child))
                 {
@@ -9338,6 +10345,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             var updateSource = string.Empty;
             var curseforgeProjectId = string.Empty;
             var nexusModsProjectId = string.Empty;
+            var gitHubRepository = string.Empty;
             var localizationUpdatedAt = string.Empty;
             ApplySourceCredentialToModItem(
                 credential,
@@ -9348,6 +10356,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 ref updateSource,
                 ref curseforgeProjectId,
                 ref nexusModsProjectId,
+                ref gitHubRepository,
                 ref localizationUpdatedAt);
 
             parent.DisplayName = resolvedDisplayName;
@@ -9357,6 +10366,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             parent.UpdateSource = updateSource;
             parent.CurseforgeProjectId = curseforgeProjectId;
             parent.NexusModsProjectId = nexusModsProjectId;
+            parent.GitHubRepository = gitHubRepository;
             parent.LocalizationUpdatedAt = localizationUpdatedAt;
         }
 
@@ -9414,6 +10424,159 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
 
         return IsPathUnderDirectoryOrEqual(candidate, root) ? candidate : null;
+    }
+
+    private static string? ResolveCompositeReferencePathWithIdentity(
+        string modsPath,
+        string relativePath,
+        string? expectedName,
+        string? expectedUniqueId,
+        IEnumerable<ModManageItem> knownItems,
+        string? requiredParentPath = null)
+    {
+        var candidate = ResolveCompositeReferencePath(modsPath, relativePath);
+        if (!string.IsNullOrWhiteSpace(candidate) &&
+            Directory.Exists(candidate) &&
+            IsAllowedCompositeChildReferenceLocation(
+                candidate,
+                modsPath,
+                requiredParentPath) &&
+            IsCompositeReferenceIdentityMatch(
+                candidate,
+                expectedName,
+                expectedUniqueId,
+                knownItems))
+        {
+            return candidate;
+        }
+
+        // 旧版本把相对路径写成了当时的压缩包目录名。此时优先从已经
+        // 加载的 manifest 项中按 UniqueID，再按 Name 找回真实磁盘目录。
+        var expectedId = (expectedUniqueId ?? string.Empty).Trim();
+        var expectedDisplayName = (expectedName ?? string.Empty).Trim();
+        foreach (var item in knownItems)
+        {
+            if (string.IsNullOrWhiteSpace(item.FullPath) ||
+                !Directory.Exists(item.FullPath) ||
+                !IsAllowedCompositeChildReferenceLocation(
+                    item.FullPath,
+                    modsPath,
+                    requiredParentPath))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(expectedId) &&
+                (string.Equals(item.UniqueId, expectedId, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(item.DirectoryName, expectedId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return item.FullPath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(expectedDisplayName) &&
+                (string.Equals(item.DisplayName, expectedDisplayName, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(item.FolderName, expectedDisplayName, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(item.DirectoryName, expectedDisplayName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return item.FullPath;
+            }
+        }
+
+        // 没有 manifest 的复合父级可能只存在于旧的来源关系中；目录名仍
+        // 是最后的安全回退，但仅限 Mods 根目录的一级目录，避免越界或误认。
+        if (string.IsNullOrWhiteSpace(requiredParentPath) &&
+            !string.IsNullOrWhiteSpace(expectedDisplayName) &&
+            Directory.Exists(modsPath))
+        {
+            try
+            {
+                var directory = Directory.GetDirectories(modsPath)
+                    .FirstOrDefault(path =>
+                        string.Equals(
+                            Path.GetFileName(path),
+                            expectedDisplayName,
+                            StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    return directory;
+                }
+            }
+            catch
+            {
+                // 目录扫描是兼容回退；异常不应阻断其它 Mod 的加载。
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsAllowedCompositeChildReferenceLocation(
+        string candidate,
+        string modsPath,
+        string? requiredParentPath)
+    {
+        if (string.IsNullOrWhiteSpace(requiredParentPath))
+        {
+            return IsPathUnderDirectoryOrEqual(candidate, modsPath);
+        }
+
+        if (IsPathUnderDirectory(candidate, requiredParentPath))
+        {
+            return true;
+        }
+
+        // 压缩包展开后，父 Mod 与 ContentPack 可能被整理成 Mods 下的
+        // 兄弟目录。childMods 仍然以 Mods 根为基准记录相对路径，此时
+        // 允许一级兄弟目录，但不放宽到任意 Mods 外路径。
+        if (!IsPathUnderDirectoryOrEqual(candidate, modsPath))
+        {
+            return false;
+        }
+
+        var candidateParent = Path.GetDirectoryName(
+            candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return !string.IsNullOrWhiteSpace(candidateParent) &&
+               string.Equals(
+                   NormalizeModPathKey(candidateParent),
+                   NormalizeModPathKey(modsPath),
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCompositeReferenceIdentityMatch(
+        string candidate,
+        string? expectedName,
+        string? expectedUniqueId,
+        IEnumerable<ModManageItem> knownItems)
+    {
+        if (string.IsNullOrWhiteSpace(expectedName) && string.IsNullOrWhiteSpace(expectedUniqueId))
+        {
+            return true;
+        }
+
+        var item = knownItems.FirstOrDefault(known =>
+            string.Equals(
+                NormalizeModPathKey(known.FullPath),
+                NormalizeModPathKey(candidate),
+                StringComparison.OrdinalIgnoreCase));
+        if (item != null)
+        {
+            return (string.IsNullOrWhiteSpace(expectedUniqueId) ||
+                    string.Equals(item.UniqueId, expectedUniqueId, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(item.DirectoryName, expectedUniqueId, StringComparison.OrdinalIgnoreCase)) &&
+                   (string.IsNullOrWhiteSpace(expectedName) ||
+                    string.Equals(item.DisplayName, expectedName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(item.FolderName, expectedName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(item.DirectoryName, expectedName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // 兼容尚未进入管理列表的无 manifest 父级，只在目录叶名与来源名
+        // 一致时接受；带 UniqueID 的引用必须等待已加载 manifest 匹配。
+        return string.IsNullOrWhiteSpace(expectedUniqueId) &&
+               !string.IsNullOrWhiteSpace(expectedName) &&
+               string.Equals(
+                   Path.GetFileName(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+                   expectedName,
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPathUnderDirectoryOrEqual(string path, string directory)
@@ -10243,7 +11406,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return;
         }
 
-        var confirmed = await _dialogService.ShowConfirmAsync("删除 Mod", $"确定删除选中的 {targets.Count} 个 Mod 吗？");
+        var confirmed = await _dialogService.ShowConfirmAsync(
+            "移入回收站",
+            $"确定将选中的 {targets.Count} 个 Mod 移入回收站吗？之后仍可从系统回收站恢复。");
         if (!confirmed)
         {
             return;
@@ -10259,10 +11424,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
             try
             {
-                Directory.Delete(target.FullPath, true);
-                DetachModItem(target);
-                Mods.Remove(target);
-                deleted++;
+                if (RecycleBinService.TryMoveToRecycleBin(target.FullPath, out _))
+                {
+                    DetachModItem(target);
+                    Mods.Remove(target);
+                    deleted++;
+                }
             }
             catch
             {
@@ -10271,7 +11438,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
 
         ApplyTagFilter();
-        Status = $"已删除 {deleted}/{targets.Count} 个 Mod";
+        Status = $"已移入回收站 {deleted}/{targets.Count} 个 Mod";
     }
 
     [RelayCommand]
@@ -10723,14 +11890,18 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         var targetIndex = Mods.IndexOf(target);
         try
         {
-            Directory.Delete(target.FullPath, true);
+            if (!RecycleBinService.TryMoveToRecycleBin(target.FullPath, out var recycleError))
+            {
+                throw new IOException($"无法将 Mod 移入回收站：{recycleError}");
+            }
+
             DetachModItem(target);
             Mods.Remove(target);
             SelectedMod = Mods.Count == 0
                 ? null
                 : Mods[Math.Clamp(targetIndex, 0, Mods.Count - 1)];
             target.UpdateStatus = "已卸载";
-            Status = $"已卸载 Mod: {target.DisplayName}";
+            Status = $"已卸载 Mod（已移入回收站）: {target.DisplayName}";
             ApplyTagFilter();
             RefreshModManageHint($"已卸载 {target.DisplayName}，可在下载页重新安装");
             OnPropertyChanged(nameof(ModsSummary));
@@ -10753,7 +11924,20 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         var checkResult = await CheckUpdateForModAsync(target);
         if (checkResult == null)
         {
+            target.HasUpdate = false;
+            var credential = TryReadSourceCredential(target.FullPath);
+            if (IsInheritedModpackSource(target.FullPath, credential))
+            {
+                target.UpdateStatus = BuildInheritedSourceStatus(credential?.ParentMod);
+                PersistModUpdateState(target);
+                Status = $"已完成更新检查：{target.DisplayName}（{target.UpdateStatus}）";
+                RefreshModManageHint(Status);
+                OnPropertyChanged(nameof(SelectedModDetails));
+                return;
+            }
+
             target.UpdateStatus = "缺少来源信息";
+            PersistModUpdateState(target);
             Status = $"更新检测失败：{target.DisplayName}";
             return;
         }
@@ -10761,10 +11945,15 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         target.HasUpdate = checkResult.HasUpdate;
         target.CurseforgeProjectId = FirstNonEmpty(checkResult.CurseforgeProjectId, target.CurseforgeProjectId);
         target.NexusModsProjectId = FirstNonEmpty(checkResult.NexusModsProjectId, target.NexusModsProjectId);
+        target.GitHubRepository = FirstNonEmpty(checkResult.GitHubRepository, target.GitHubRepository);
         target.UpdateSource = FirstNonEmpty(checkResult.UpdateSource, target.UpdateSource);
         target.UpdateStatus = BuildUpdateStatusText(checkResult);
         target.LatestVersion = checkResult.LatestVersion;
         target.UpdateUrl = checkResult.UpdateUrl;
+        target.UpdateFileId = checkResult.UpdateFileId > 0
+            ? checkResult.UpdateFileId.ToString(CultureInfo.InvariantCulture)
+            : string.Empty;
+        PersistModUpdateState(target);
         Status = checkResult.IsTokenExpired
             ? "Nexus 登录已过期，请先重新登录"
             : $"已完成更新检查：{target.DisplayName}";
@@ -10896,6 +12085,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
     /// <summary>由 MainWindowViewModel 注入，用于获取版本选择页面的 Base 路径列表供 SMAPI 安装对话框选择。</summary>
     public Func<IReadOnlyList<string>>? AvailableGamePathsProvider { get; set; }
+
+    /// <summary>由 MainWindowViewModel 注入，用于拖入 Mod 时选择已有的 SMAPI/Base 目标。</summary>
+    public Func<IReadOnlyList<ModInstallTarget>>? AvailableModInstancesProvider { get; set; }
 
     [RelayCommand]
     private async Task ChangeSmapiVersionAsync()
@@ -11231,7 +12423,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         var confirmed = await _dialogService.ShowConfirmAsync(
             "确认删除版本",
-            $"确定要删除当前版本目录吗？\n\n{versionRoot}\n\n该操作不可撤销。");
+            $"确定要删除当前版本目录吗？\n\n{versionRoot}\n\n目录会移入系统回收站，之后仍可恢复。");
 
         if (!confirmed)
         {
@@ -11352,8 +12544,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             try
             {
                 ClearDeletionAttributes(versionRoot);
-                Directory.Delete(versionRoot, true);
-                return VersionDirectoryDeletionOutcome.Deleted;
+                if (RecycleBinService.TryMoveToRecycleBin(versionRoot, out var recycleError))
+                {
+                    return VersionDirectoryDeletionOutcome.Deleted;
+                }
+
+                lastError = new IOException($"无法移入回收站：{recycleError}");
             }
             catch (IOException ex) when (attempt < 5)
             {
@@ -11378,49 +12574,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return VersionDirectoryDeletionOutcome.Deferred;
         }
 
-        // Windows 的图片解码器、预览器或安全软件可能以“不允许删除”的共享模式
-        // 持有图标文件，此时连目录改名也会失败。MoveFileEx 的延迟删除不会阻塞
-        // 当前流程，用户已经确认删除后可以立即离开版本设置页，系统重启时再清理
-        // 整个版本目录。非 Windows 平台没有这个 API，仍保留原异常给上层提示。
-        if (TryScheduleVersionDirectoryDeletionAtReboot(versionRoot))
-        {
-            return VersionDirectoryDeletionOutcome.ScheduledForReboot;
-        }
-
         throw lastError ?? new IOException($"无法删除版本目录: {versionRoot}");
-    }
-
-    private const int MoveFileDelayUntilReboot = 0x00000004;
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool MoveFileEx(
-        string existingFileName,
-        string? newFileName,
-        int flags);
-
-    private static bool TryScheduleVersionDirectoryDeletionAtReboot(string versionRoot)
-    {
-        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(versionRoot))
-        {
-            return false;
-        }
-
-        try
-        {
-            var scheduled = MoveFileEx(versionRoot, null, MoveFileDelayUntilReboot);
-            if (!scheduled)
-            {
-                Debug.WriteLine(
-                    $"[VersionSettings] 无法安排重启后清理版本目录: {versionRoot}, Win32Error={Marshal.GetLastWin32Error()}");
-            }
-
-            return scheduled;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[VersionSettings] 重启后清理版本目录异常: {ex.Message}");
-            return false;
-        }
     }
 
     /// <summary>清除归档/解压后可能残留的只读、隐藏属性，不跟随连接点。</summary>
@@ -11497,8 +12651,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 }
 
                 ClearDeletionAttributes(deferredPath);
-                Directory.Delete(deferredPath, true);
-                return;
+                if (RecycleBinService.TryMoveToRecycleBin(deferredPath, out _))
+                {
+                    return;
+                }
             }
             catch (IOException) when (attempt < 39)
             {
@@ -11512,7 +12668,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             Thread.Sleep(Math.Min(1000, 150 + attempt * 25));
         }
 
-        Debug.WriteLine($"[VersionSettings] 后台清理版本目录仍失败: {deferredPath}");
+        Debug.WriteLine($"[VersionSettings] 版本目录仍未能移入回收站: {deferredPath}");
     }
 
     /// <summary>判断路径是否为 junction 或 symbolic link。</summary>
@@ -11569,7 +12725,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         var confirmed = await _dialogService.ShowConfirmAsync(
             "确认卸载 Base SMAPI",
-            "将移除当前 Base 路径下的 SMAPI 可执行文件，并保留你的 Mods。是否继续？");
+            "将当前 Base 路径下的 SMAPI 可执行文件移入回收站，并保留你的 Mods。是否继续？");
 
         if (!confirmed)
         {
@@ -11597,7 +12753,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 var fullPath = Path.Combine(instancePath, file);
                 if (File.Exists(fullPath))
                 {
-                    File.Delete(fullPath);
+                    if (!RecycleBinService.TryMoveToRecycleBin(fullPath, out var recycleError))
+                    {
+                        throw new IOException($"无法将 {file} 移入回收站：{recycleError}");
+                    }
                 }
             }
 
@@ -11854,6 +13013,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     SourceFileId = item.SourceFileId,
                     SourceDownloadUrl = item.SourceDownloadUrl,
                     SourceFileName = item.SourceFileName,
+                    SourceRepository = item.SourceRepository,
                     IsCompositeParent = item.IsCompositeParent,
                     ParentMod = item.ParentMod,
                     ChildMods = item.ChildMods.ToList()
@@ -12110,7 +13270,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     SourceProjectId = mod.SourceProjectId,
                     SourceFileId = mod.SourceFileId,
                     SourceDownloadUrl = mod.SourceDownloadUrl,
-                    RequiresManualInstall = !mod.HasCompleteSourceCredential
+                    RequiresManualInstall = !mod.HasCompleteSourceCredential,
+                    SourceRepository = mod.SourceRepository
                 }).ToList()
             };
 
@@ -12158,7 +13319,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     ProjectId = mod.SourceProjectId,
                     FileId = mod.SourceFileId,
                     DownloadUrl = mod.SourceDownloadUrl,
-                    FileName = mod.SourceFileName
+                    FileName = mod.SourceFileName,
+                    Repository = mod.SourceRepository
                 }
             }).ToList();
 
@@ -13422,6 +14584,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         public string UpdateSource { get; set; } = string.Empty;
 
+        public string GitHubRepository { get; set; } = string.Empty;
+
+        public string UpdateStatusMessage { get; set; } = string.Empty;
+
         public string CurseforgeProjectId { get; set; } = string.Empty;
 
         public string NexusModsProjectId { get; set; } = string.Empty;
@@ -13457,6 +14623,29 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         [JsonPropertyName("downloadUrl")]
         public string DownloadUrl { get; set; } = string.Empty;
 
+        [JsonPropertyName("repository")]
+        public string Repository { get; set; } = string.Empty;
+
+        /// <summary>来源类别：modpack-entry 为整合包中的独立文件条目，parent-inherited 为嵌套子 Mod 继承父级来源。</summary>
+        [JsonPropertyName("sourceKind")]
+        public string SourceKind { get; set; } = string.Empty;
+
+        [JsonPropertyName("hasUpdate")]
+        public bool HasUpdate { get; set; }
+
+        [JsonPropertyName("latestVersion")]
+        public string LatestVersion { get; set; } = string.Empty;
+
+        [JsonPropertyName("updateStatus")]
+        public string UpdateStatus { get; set; } = string.Empty;
+
+        [JsonPropertyName("updateUrl")]
+        public string UpdateUrl { get; set; } = string.Empty;
+
+        /// <summary>更新检查得到的目标文件 ID，兼容字符串和 JSON number。</summary>
+        [JsonPropertyName("updateFileId")]
+        public string UpdateFileId { get; set; } = string.Empty;
+
         [JsonPropertyName("schemaVersion")]
         public int SchemaVersion { get; set; } = 3;
 
@@ -13474,6 +14663,50 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+    }
+
+    /// <summary>
+    /// 将更新检查结果写回 Mod 目录。更新状态是实例级本地状态，不能只停留在
+    /// ObservableCollection 中，否则重启或重新加载管理页后“可更新”会丢失。
+    /// 没有任何稳定来源身份的普通本地 Mod 不会被强行创建 svl-source.json。
+    /// </summary>
+    private static bool PersistModUpdateState(ModManageItem mod)
+    {
+        if (mod == null || mod.IsBackupItem || string.IsNullOrWhiteSpace(mod.FullPath) ||
+            !Directory.Exists(mod.FullPath))
+        {
+            return false;
+        }
+
+        var metadata = TryReadSourceCredential(mod.FullPath);
+        var normalizedSource = NormalizePlatform(mod.UpdateSource);
+        var projectId = string.Equals(normalizedSource, "Curseforge", StringComparison.OrdinalIgnoreCase)
+            ? mod.CurseforgeProjectId
+            : string.Equals(normalizedSource, "NexusMods", StringComparison.OrdinalIgnoreCase)
+                ? mod.NexusModsProjectId
+                : string.Empty;
+        var repository = FirstNonEmpty(mod.GitHubRepository, metadata?.Repository);
+        var canPersistSource = string.Equals(normalizedSource, "Curseforge", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(normalizedSource, "NexusMods", StringComparison.OrdinalIgnoreCase) ||
+                               (string.Equals(normalizedSource, "GitHub", StringComparison.OrdinalIgnoreCase) &&
+                                !string.IsNullOrWhiteSpace(repository));
+
+        if (metadata == null && !canPersistSource)
+        {
+            return false;
+        }
+
+        metadata ??= new LocalSourceMetadata();
+        metadata.Platform = FirstNonEmpty(normalizedSource, NormalizePlatform(metadata.Platform));
+        metadata.ProjectId = FirstNonEmpty(projectId, metadata.ProjectId, metadata.ModId);
+        metadata.Repository = repository;
+        metadata.ModId = FirstNonEmpty(metadata.ModId, metadata.ProjectId);
+        metadata.HasUpdate = mod.HasUpdate;
+        metadata.LatestVersion = mod.LatestVersion ?? string.Empty;
+        metadata.UpdateStatus = mod.UpdateStatus ?? string.Empty;
+        metadata.UpdateUrl = mod.UpdateUrl ?? string.Empty;
+        metadata.UpdateFileId = mod.UpdateFileId ?? string.Empty;
+        return WriteSourceCredential(mod.FullPath, metadata);
     }
 
     /// <summary>兼容旧版来源凭证把 ID 写成 JSON number 的情况。</summary>
@@ -13633,6 +14866,8 @@ public partial class ExportModSelectionItem : ObservableObject
 
     public string SourceFileId { get; set; } = string.Empty;
 
+    public string SourceRepository { get; set; } = string.Empty;
+
     /// <summary>来源下载文件名，用于旧 Nexus 来源缺少 FileID 时的本地恢复。</summary>
     public string SourceFileName { get; set; } = string.Empty;
 
@@ -13657,6 +14892,8 @@ public partial class ExportModSelectionItem : ObservableObject
 
     public bool HasSourceCredential =>
         HasDirectSourceUrl ||
+        (string.Equals(SourcePlatform, "GitHub", StringComparison.OrdinalIgnoreCase) &&
+         RemoteCatalogService.TryNormalizeGitHubRepository(SourceRepository, out _)) ||
         (!string.IsNullOrWhiteSpace(SourcePlatform) &&
          !string.Equals(SourcePlatform, "未知", StringComparison.OrdinalIgnoreCase) &&
          !string.IsNullOrWhiteSpace(SourceProjectId));
@@ -13671,7 +14908,9 @@ public partial class ExportModSelectionItem : ObservableObject
     public string SourceDescription => HasDirectSourceUrl
         ? "直链"
         : HasSourceCredential
-            ? string.IsNullOrWhiteSpace(SourceFileId)
+            ? string.Equals(SourcePlatform, "GitHub", StringComparison.OrdinalIgnoreCase)
+                ? $"GitHub {SourceRepository}"
+                : string.IsNullOrWhiteSpace(SourceFileId)
                 ? $"{SourcePlatform} #{SourceProjectId}（FileID 缺失）"
                 : $"{SourcePlatform} #{SourceProjectId} / FileID {SourceFileId}"
             : "无来源信息（需手动安装）";
@@ -13766,6 +15005,8 @@ public sealed class VersionSettingsExportManifestMod
 
     public string SourceFileId { get; set; } = string.Empty;
 
+    public string SourceRepository { get; set; } = string.Empty;
+
     public string SourceDownloadUrl { get; set; } = string.Empty;
 
     public bool RequiresManualInstall { get; set; }
@@ -13834,6 +15075,9 @@ internal sealed class SvlExportSource
     [JsonPropertyName("projectId")]
     public string ProjectId { get; set; } = string.Empty;
 
+    [JsonPropertyName("repository")]
+    public string Repository { get; set; } = string.Empty;
+
     [JsonPropertyName("fileId")]
     public string FileId { get; set; } = string.Empty;
 
@@ -13891,6 +15135,8 @@ internal sealed class ExportModPackageItem
 
     public string SourceFileId { get; set; } = string.Empty;
 
+    public string SourceRepository { get; set; } = string.Empty;
+
     /// <summary>来源下载文件名，用于导出/回导时保留 FileID 恢复线索。</summary>
     public string SourceFileName { get; set; } = string.Empty;
 
@@ -13912,6 +15158,8 @@ internal sealed class ExportModPackageItem
 
     public bool HasSourceCredential =>
         HasDirectSourceUrl ||
+        (string.Equals(SourcePlatform, "GitHub", StringComparison.OrdinalIgnoreCase) &&
+         RemoteCatalogService.TryNormalizeGitHubRepository(SourceRepository, out _)) ||
         (!string.IsNullOrWhiteSpace(SourcePlatform) &&
          !string.Equals(SourcePlatform, "未知", StringComparison.OrdinalIgnoreCase) &&
          !string.IsNullOrWhiteSpace(SourceProjectId));
@@ -13921,7 +15169,9 @@ internal sealed class ExportModPackageItem
         (HasSourceCredential &&
          (!IsNexusPlatformToken(SourcePlatform) &&
           !IsCurseforgePlatformToken(SourcePlatform) ||
-          !string.IsNullOrWhiteSpace(SourceFileId)));
+          !string.IsNullOrWhiteSpace(SourceFileId)) ||
+         (string.Equals(SourcePlatform, "GitHub", StringComparison.OrdinalIgnoreCase) &&
+          RemoteCatalogService.TryNormalizeGitHubRepository(SourceRepository, out _)));
 
     private static bool IsNexusPlatformToken(string? platform)
     {
@@ -13949,7 +15199,9 @@ public sealed record ModBatchUpdateEntry(
     string UpdateUrl,
     string UpdateSource,
     string ProjectId = "",
-    string FileId = "");
+    string FileId = "",
+    bool IsBatchUpdate = false,
+    string Repository = "");
 
 public partial class ModManageItem : ObservableObject
 {
@@ -14028,6 +15280,9 @@ public partial class ModManageItem : ObservableObject
 
     [ObservableProperty]
     private string _nexusModsProjectId = string.Empty;
+
+    [ObservableProperty]
+    private string _gitHubRepository = string.Empty;
 
     [ObservableProperty]
     private string _updateSource = string.Empty;

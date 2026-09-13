@@ -22,6 +22,12 @@ public enum ModpackFailureDialogAction
     Retry
 }
 
+public enum ConflictResolutionDialogAction
+{
+    Cancel,
+    Replace
+}
+
 public sealed class DialogService
 {
     private static Window? GetMainWindow()
@@ -49,6 +55,47 @@ public sealed class DialogService
 
         var result = await dialog.ShowDialog<bool>(owner);
         return result;
+    }
+
+    public async Task<ConflictResolutionDialogAction> ShowConflictResolutionDialogAsync(
+        string title,
+        string message,
+        string incomingPath,
+        string existingPath,
+        string comparisonSummary,
+        string openIncomingText = "打开备份文件夹",
+        string openExistingText = "打开原有 Mod 文件夹",
+        string replaceButtonText = "替换（先备份）")
+    {
+        var owner = GetMainWindow();
+        if (owner == null)
+        {
+            return ConflictResolutionDialogAction.Cancel;
+        }
+
+        var dialog = new ConflictResolutionDialog();
+        var model = new ConflictResolutionDialogModel
+        {
+            Title = title,
+            Message = message,
+            ComparisonSummary = comparisonSummary,
+            IncomingPath = incomingPath,
+            ExistingPath = existingPath,
+            IncomingPathText = $"备份/待安装来源：{incomingPath}",
+            ExistingPathText = $"当前原有 Mod：{existingPath}",
+            OpenIncomingText = openIncomingText,
+            OpenExistingText = openExistingText,
+            ReplaceButtonText = replaceButtonText
+        };
+        model.OpenIncomingCommand = new DelegateCommand(_ => TryOpenExternal(incomingPath));
+        model.OpenExistingCommand = new DelegateCommand(_ => TryOpenExternal(existingPath));
+        model.CancelCommand = new DelegateCommand(_ => dialog.Close(ConflictResolutionDialogAction.Cancel));
+        model.ReplaceCommand = new DelegateCommand(_ => dialog.Close(ConflictResolutionDialogAction.Replace));
+        // 命令在绑定建立前注入，避免普通 POCO 模型后续赋值没有触发
+        // PropertyChanged，导致按钮显示但点击无效。
+        dialog.DataContext = model;
+
+        return await dialog.ShowDialog<ConflictResolutionDialogAction>(owner);
     }
 
     public async Task<string?> ShowInputAsync(string title, string message, string defaultValue = "")
@@ -173,7 +220,9 @@ public sealed class DialogService
     /// </summary>
     public async Task<ModInstallTargetDialogResult> ShowModInstallTargetDialogAsync(
         IReadOnlyList<(string DisplayName, string TargetPath)> targets,
-        string title = "没有选择游戏版本，请选择")
+        string title = "没有选择游戏版本，请选择",
+        string? selectedPath = null,
+        string? message = null)
     {
         var owner = GetMainWindow();
         if (owner == null)
@@ -193,12 +242,17 @@ public sealed class DialogService
         var displayNames = targetList
             .Select(target => $"{target.DisplayName}\n{target.TargetPath}")
             .ToList();
+        var selectedTargetIndex = targetList.FindIndex(target =>
+            !string.IsNullOrWhiteSpace(selectedPath) &&
+            string.Equals(target.TargetPath, selectedPath, StringComparison.OrdinalIgnoreCase));
         var dialog = new ModInstallTargetDialog
         {
             Title = title,
-            Message = "主页当前没有选中的游戏版本，请选择一个 SMAPI 版本后继续安装。",
+            Message = message ?? "请选择一个已有的 SMAPI/Base 版本后继续安装；已存在同名 Mod 时会直接更新。",
             TargetDisplayNames = displayNames,
-            SelectedIndex = targetList.Count > 0 ? 0 : -1,
+            SelectedIndex = selectedTargetIndex >= 0
+                ? selectedTargetIndex
+                : targetList.Count > 0 ? 0 : -1,
             HasTargets = targetList.Count > 0,
             HasNoTargets = targetList.Count == 0
         };
@@ -1002,6 +1056,13 @@ public sealed class DialogService
             ? "download.zip"
             : suggestedFileName.Trim();
         var defaultExtension = Path.GetExtension(normalizedName);
+        if (defaultExtension.Length > 1 &&
+            defaultExtension[1..].All(char.IsDigit))
+        {
+            // “SMAPI 4.5.2”这类版本号会被 Path.GetExtension 误判为“.2”，
+            // 不能把它传给系统文件选择器，否则类型会显示为“.2 文件 (*.2)”。
+            defaultExtension = string.Empty;
+        }
 
         var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {

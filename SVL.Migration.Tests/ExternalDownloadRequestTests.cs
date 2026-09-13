@@ -61,7 +61,7 @@ public class ExternalDownloadRequestTests
         };
 
         Assert.AreEqual(
-            "Content Patcher 2.9.0 2.9.0.zip",
+            "Content Patcher 2.9.0.zip",
             request.ResolveSuggestedFileName());
     }
 
@@ -101,6 +101,20 @@ public class ExternalDownloadRequestTests
         };
 
         Assert.AreEqual("Content Patcher.zip", request.ResolveSuggestedFileName());
+    }
+
+    [TestMethod]
+    public void ResolveSuggestedFileName_ShouldDecodeEncodedLegacyFileName()
+    {
+        var request = new ExternalDownloadRequest
+        {
+            ResourceName = "Content Patcher",
+            SelectedDownloadOption = "File%207448774_%20Content%20Patcher%202.9.0%202.9.0.zip%20|%20https://example.invalid/download"
+        };
+
+        Assert.AreEqual(
+            "Content Patcher 2.9.0.zip",
+            request.ResolveSuggestedFileName());
     }
 
     [TestMethod]

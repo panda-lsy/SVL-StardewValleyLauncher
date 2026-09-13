@@ -29,7 +29,8 @@
         <!-- 空状态 -->
         <Border Grid.Row="1" Classes="hintCard" IsVisible="{Binding IsEmptyState}">
           <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Image Source="avares://SVL.Avalonia/Assets/Icons/Generated/Cropped/Inbox.png" Width="40" Height="40" Stretch="Uniform" HorizontalAlignment="Center" Opacity="0.4" />
+            <Path Data="{StaticResource Icon.Inbox}" Width="40" Height="40" Stretch="Uniform"
+                  Fill="{DynamicResource DefaultTextForeground}" HorizontalAlignment="Center" Opacity="0.4" />
             <TextBlock Text="当前没有任务" FontWeight="SemiBold" HorizontalAlignment="Center" />
             <TextBlock Text="去下载页发起任务后，这里会实时显示进度。" Opacity="0.72" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="240" />
             <Button Content="前往下载" Command="{Binding GoToDownloadCommand}" HorizontalAlignment="Center" MinWidth="120" Height="34" Margin="0,8,0,0" />
@@ -178,6 +179,37 @@
             </StackPanel>
           </Border>
 
+          <!-- Collection 逐 Mod 状态：比总进度更准确地说明哪个条目正在处理/失败。 -->
+          <Border Classes="hintCard" IsVisible="{Binding SelectedTaskHasCollectionMods}">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="整合包 Mod 进度" Classes="hintTitle" />
+                <TextBlock Grid.Column="1" Text="{Binding SelectedTaskCollectionModProgressText}" Opacity="0.75" />
+              </Grid>
+              <ScrollViewer MaxHeight="240">
+                <ItemsControl ItemsSource="{Binding SelectedTaskCollectionModItems}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="models:CollectionModTaskItem">
+                      <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,7">
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DisplayStateText}" Opacity="0.75" Margin="10,0,0,0" />
+                        <Button Grid.Row="0" Grid.Column="2" Content="打开来源"
+                                Command="{Binding DataContext.OpenCollectionModSourceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"
+                                IsVisible="{Binding RequiresManualAction}"
+                                IsEnabled="{Binding HasOpenableSourceUrl}"
+                                MinWidth="76" Margin="10,0,0,0" Padding="8,2" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                   Text="{Binding Message}" FontSize="11" Opacity="0.65"
+                                   TextWrapping="Wrap" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
+
           <!-- 完成/取消态提示 -->
           <Border Classes="hintCard" IsVisible="{Binding IsCompletedState}">
             <StackPanel Spacing="8">
@@ -220,6 +252,10 @@
                         CommandParameter="{Binding SelectedTask}"
                         IsVisible="{Binding SelectedTaskHasRetryReportPath}"
                         MinWidth="108" Margin="0,0,8,8" />
+                <Button Content="重新打开来源页面" Command="{Binding OpenBrowserForTaskCommand}"
+                        CommandParameter="{Binding SelectedTask}"
+                        IsVisible="{Binding SelectedTaskCanOpenBrowserPage}"
+                        MinWidth="132" Margin="0,0,8,8" />
               </WrapPanel>
             </StackPanel>
           </Border>

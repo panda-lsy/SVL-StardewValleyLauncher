@@ -158,6 +158,15 @@ public partial class DownloadPageViewModel : ObservableObject
     /// </summary>
     public event Action? InstanceContextChanged;
 
+    /// <summary>普通 Mod 安装完成后通知版本设置页重新读取 manifest 和来源状态。</summary>
+    public event Action? ModInstallationCompleted;
+
+    /// <summary>
+    /// 在线更新覆盖前创建备份后触发。由主窗口转发给 Mod 管理页，
+    /// 让“备份”标签在批量更新创建备份后立即显示新条目。
+    /// </summary>
+    public event Action? ModBackupCreated;
+
     /// <summary>路径列表提供者：Collection 安装时从版本选择页面的 Base 路径列表中选择安装目标。</summary>
     public Func<IReadOnlyList<string>>? AvailableGamePathsProvider { get; set; }
 
@@ -2291,6 +2300,36 @@ public partial class DownloadPageViewModel : ObservableObject
         EmitLog($"打开重试报告: {task.RetryReportPath}");
     }
 
+    /// <summary>从任务详情重新打开 Nexus 来源页，供等待浏览器回调或失败重试使用。</summary>
+    public void OpenTaskBrowser(DownloadTaskItem? task)
+    {
+        if (task == null || !task.CanOpenBrowserPage)
+        {
+            return;
+        }
+
+        string url;
+        if ((task.TaskKind is DownloadTaskKind.NxmCollection or DownloadTaskKind.NexusCollection) &&
+            !string.IsNullOrWhiteSpace(task.CollectionSlug))
+        {
+            url = $"https://next.nexusmods.com/stardewvalley/collections/{Uri.EscapeDataString(task.CollectionSlug.Trim())}";
+        }
+        else if (task.SourceModId is long modId && modId > 0)
+        {
+            var fileQuery = task.SourceFileId is long fileId && fileId > 0
+                ? $"&file_id={fileId}"
+                : string.Empty;
+            url = $"https://www.nexusmods.com/stardewvalley/mods/{modId}?tab=files{fileQuery}&nmm=1";
+        }
+        else
+        {
+            return;
+        }
+
+        TryOpenPath(url);
+        EmitLog($"重新打开 Nexus 来源页面: {url}");
+    }
+
     [RelayCommand]
     private async Task CopyTaskFailedDetailsAsync(DownloadTaskItem? task)
     {
@@ -2524,6 +2563,7 @@ public partial class DownloadPageViewModel : ObservableObject
                         OutputFilePath = outputPath,
                         SourceModId = parsed.ModId,
                         SourceFileId = parsed.FileId,
+                        SkipConflictPrompt = entry.IsBatchUpdate,
                         CanCancel = false,
                         CanRetry = false
                     };
@@ -2571,6 +2611,7 @@ public partial class DownloadPageViewModel : ObservableObject
                         SourcePlatform = "Curseforge",
                         SourceModId = TryParsePositiveLong(entry.ProjectId, out var projectId) ? projectId : null,
                         SourceFileId = TryParsePositiveLong(entry.FileId, out var fileId) ? fileId : null,
+                        SkipConflictPrompt = entry.IsBatchUpdate,
                         CanCancel = false,
                         CanRetry = false
                     };
@@ -2593,6 +2634,13 @@ public partial class DownloadPageViewModel : ObservableObject
                         TaskAction = DownloadTaskAction.InstallMod,
                         SourceUrl = uri.ToString(),
                         OutputFilePath = outputPath,
+                        SourcePlatform = string.Equals(entry.UpdateSource, "GitHub", StringComparison.OrdinalIgnoreCase)
+                            ? "GitHub"
+                            : string.Empty,
+                        SourceRepository = string.Equals(entry.UpdateSource, "GitHub", StringComparison.OrdinalIgnoreCase)
+                            ? entry.Repository
+                            : string.Empty,
+                        SkipConflictPrompt = entry.IsBatchUpdate,
                         CanCancel = false,
                         CanRetry = false
                     };
@@ -2755,6 +2803,7 @@ public partial class DownloadPageViewModel : ObservableObject
 
         var sourceToken = NormalizeSourceToken(request);
         var hasTrackedSource = sourceToken == "nexusmods" || sourceToken == "curseforge";
+        var isGitHubSource = sourceToken == "github";
         long? sourceModId = hasTrackedSource &&
                             TryExtractPositiveLong(request.ResourceId, out var smodId)
             ? smodId
@@ -2777,6 +2826,9 @@ public partial class DownloadPageViewModel : ObservableObject
             SourceFileId = sourceFileId,
             SourcePlatform = hasTrackedSource
                 ? (sourceToken == "curseforge" ? "Curseforge" : "NexusMods")
+                : isGitHubSource ? "GitHub" : string.Empty,
+            SourceRepository = isGitHubSource
+                ? request.ResourceId?.Trim() ?? string.Empty
                 : string.Empty,
             CanCancel = false,
             CanRetry = false
@@ -2790,7 +2842,8 @@ public partial class DownloadPageViewModel : ObservableObject
     {
         // 先弹出另存为对话框让用户输入文件名，再解析下载地址
         // 这样即使 Nexus 非 Premium 需要浏览器回调，用户也能先确定保存路径
-        var suggestedFileName = CreateSafeFileName(request.ResolveSuggestedFileName());
+        var suggestedFileName = NormalizeSaveAsFileName(
+            CreateSafeFileName(request.ResolveSuggestedFileName()));
         var savePath = await _dialogService.SaveFilePathAsync(
             "另存为",
             suggestedFileName,
@@ -3320,6 +3373,9 @@ public partial class DownloadPageViewModel : ObservableObject
 
         var safeResolvedFileName = CreateSafeFileName(resolved.FileName);
         var outputPath = Path.Combine(_downloadRootPath, safeResolvedFileName);
+        var customIconPath = !isSvlModpack && request.IsModpack
+            ? await ResolveModpackIconToLocalPathAsync(request.ModpackIconUrl)
+            : string.Empty;
 
         var task = new DownloadTaskItem
         {
@@ -3335,6 +3391,7 @@ public partial class DownloadPageViewModel : ObservableObject
             SourcePlatform = hasCurseforgeIdentity ? "Curseforge" : string.Empty,
             TargetGamePath = selectedPath,
             TargetInstanceName = instanceName,
+            CustomIconPath = customIconPath,
             CanCancel = false,
             CanRetry = false
         };
@@ -4287,6 +4344,23 @@ public partial class DownloadPageViewModel : ObservableObject
         ];
     }
 
+    private static string NormalizeSaveAsFileName(string fileName)
+    {
+        var normalized = string.IsNullOrWhiteSpace(fileName)
+            ? "download.zip"
+            : fileName.Trim();
+        var extension = Path.GetExtension(normalized);
+        if (!IsKnownArchiveExtension(extension))
+        {
+            // 版本号中的最后一个“.2”“.0”不是文件扩展名。在线 Mod/SMAPI
+            // 另存为始终保存归档，补成 .zip 后 Windows 文件选择器才能
+            // 显示正确的“ZIP 压缩包 (*.zip)”类型。
+            normalized += ".zip";
+        }
+
+        return CollapseRepeatedVersionSuffix(normalized);
+    }
+
     private sealed class ResolvedExternalDownloadTarget
     {
         public bool IsSuccess { get; init; }
@@ -5105,6 +5179,64 @@ public partial class DownloadPageViewModel : ObservableObject
         return AssetImageConverter.GetIconCachePath(remoteUrl);
     }
 
+    /// <summary>
+    /// 缓存 CurseForge 整合包详情页的主图标。安装器随后把该文件写入实例目录；
+    /// 如果 URL 不可用或下载失败，返回空值并让安装器继续扫描包内图标作为回退。
+    /// </summary>
+    private async Task<string> ResolveModpackIconToLocalPathAsync(string? iconUrl)
+    {
+        if (!Uri.TryCreate(iconUrl?.Trim(), UriKind.Absolute, out var iconUri) ||
+            (iconUri.Scheme != Uri.UriSchemeHttp && iconUri.Scheme != Uri.UriSchemeHttps))
+        {
+            return string.Empty;
+        }
+
+        var remoteUrl = iconUri.ToString();
+        var cachePath = AssetImageConverter.GetIconCachePath(remoteUrl);
+        if (string.IsNullOrWhiteSpace(cachePath))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            if (File.Exists(cachePath) && new FileInfo(cachePath).Length > 0)
+            {
+                return cachePath;
+            }
+
+            var cacheDirectory = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(cacheDirectory))
+            {
+                Directory.CreateDirectory(cacheDirectory);
+            }
+
+            using var response = await GetIconHttpClient().GetAsync(
+                iconUri,
+                HttpCompletionOption.ResponseHeadersRead);
+            if (!response.IsSuccessStatusCode)
+            {
+                EmitLog($"整合包图标下载失败，回退到包内图标: {(int)response.StatusCode} {remoteUrl}");
+                return string.Empty;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            if (bytes.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            await File.WriteAllBytesAsync(cachePath, bytes);
+            EmitLog($"已缓存 CurseForge 整合包图标: {cachePath}");
+            return cachePath;
+        }
+        catch (Exception ex)
+        {
+            EmitLog($"整合包图标缓存失败，回退到包内图标: {ex.Message}");
+            return string.Empty;
+        }
+    }
+
     private void ClearSmapiSourceItems()
     {
         SmapiGithubItems.Clear();
@@ -5483,7 +5615,7 @@ public partial class DownloadPageViewModel : ObservableObject
     /// </summary>
     private async Task DownloadTaskArtifactWithNexusRefreshAsync(
         DownloadTaskItem task,
-        Func<string, bool> cacheValidator,
+        Func<string, bool>? cacheValidator,
         Action<DownloadProgressSnapshot>? onProgress,
         CancellationToken cancellationToken,
         Action<string>? log)
@@ -5492,6 +5624,11 @@ public partial class DownloadPageViewModel : ObservableObject
         // 任务来源写入；如果缓存随后被清理，仍应跳过一次必然失败的伪 URL 请求，
         // 直接按 ProjectID/FileID 刷新真实地址。
         var requiresTrackedSourceRefresh = IsCurseforgeCacheSource(task.SourceUrl);
+        if (!requiresTrackedSourceRefresh)
+        {
+            task.SourceUrl = NormalizeHttpDownloadUrl(task.SourceUrl);
+        }
+        Exception? firstError = null;
         try
         {
             if (!requiresTrackedSourceRefresh)
@@ -5510,9 +5647,37 @@ public partial class DownloadPageViewModel : ObservableObject
         {
             throw;
         }
-        catch (Exception firstError) when (CanRefreshTrackedTaskSource(task))
+        catch (Exception initialError) when (CanRefreshTrackedTaskSource(task))
         {
-            log?.Invoke($"平台临时下载地址失效，按稳定来源 ID 重新解析: {firstError.Message}");
+            firstError = initialError;
+            log?.Invoke($"平台临时下载地址失效，先复用直链重试: {initialError.Message}");
+            // Edge CDN 偶发会在分片响应中途断流。先复用当前地址重试一次；
+            // CurseForge 的重试强制使用单连接，避免同一 CDN 对并发 Range 请求
+            // 不稳定时不断重复相同的分片失败。
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var retryThreadCount = IsCurseforgeTrackedTask(task) ? 1 : 0;
+                await _httpDownloadService.DownloadAsync(
+                    task.SourceUrl,
+                    task.OutputFilePath,
+                    retryThreadCount,
+                    onProgress,
+                    cancellationToken,
+                    log,
+                    cacheValidator);
+                log?.Invoke("平台直链重试成功");
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception retryError)
+            {
+                firstError = retryError;
+                log?.Invoke($"平台直链重试失败，继续刷新稳定地址: {retryError.Message}");
+            }
         }
 
         if (requiresTrackedSourceRefresh && !CanRefreshTrackedTaskSource(task))
@@ -5526,17 +5691,26 @@ public partial class DownloadPageViewModel : ObservableObject
             !Uri.TryCreate(refreshed.DownloadUrl, UriKind.Absolute, out var refreshedUri) ||
             !IsHttpUri(refreshedUri))
         {
+            if (firstError != null && IsCurseforgeTrackedTask(task))
+            {
+                throw new InvalidDataException(
+                    $"CurseForge 下载失败，且无法刷新下载地址: {firstError.Message}",
+                    firstError);
+            }
+
             throw new InvalidDataException(
                 string.IsNullOrWhiteSpace(refreshed.Message)
                     ? "Nexus 下载地址刷新失败"
                     : refreshed.Message);
         }
 
-        task.SourceUrl = refreshed.DownloadUrl;
-        log?.Invoke($"Nexus 下载地址已刷新，继续下载: {refreshed.FileName}");
+        task.SourceUrl = NormalizeHttpDownloadUrl(refreshed.DownloadUrl);
+        log?.Invoke($"{(IsCurseforgeTrackedTask(task) ? "CurseForge" : "Nexus")} 下载地址已刷新，继续下载: {refreshed.FileName}");
+        var refreshedThreadCount = IsCurseforgeTrackedTask(task) ? 1 : 0;
         await _httpDownloadService.DownloadAsync(
             task.SourceUrl,
             task.OutputFilePath,
+            refreshedThreadCount,
             onProgress,
             cancellationToken,
             log,
@@ -5593,7 +5767,7 @@ public partial class DownloadPageViewModel : ObservableObject
                 IsLikelyCurseforgeDirectDownloadUrl(resolvedUrl))
             {
                 return ResolvedExternalDownloadTarget.Success(
-                    resolvedUrl,
+                    curseUri.AbsoluteUri,
                     ResolveDownloadFileName(curseUri, task.Name));
             }
 
@@ -5976,6 +6150,7 @@ public partial class DownloadPageViewModel : ObservableObject
         DownloadTaskItem task,
         string archivePath)
     {
+        task.ResetCollectionModProgress();
         task.CanRetry = false;
         task.CanCancel = true;
         task.SetState(DownloadTaskState.Installing, "Collection 安装中");
@@ -6090,11 +6265,15 @@ public partial class DownloadPageViewModel : ObservableObject
         {
             // Nexus 下载缓存命中：直接用缓存文件，免重复下载/浏览器指引
             var fromCache = false;
-            Func<string, bool> sourceCacheValidator = task.TaskAction switch
+            Func<string, bool>? sourceCacheValidator = task.TaskAction switch
             {
                 DownloadTaskAction.InstallSmapi => ModpackInstallService.TryNormalizeSmapiArchive,
                 DownloadTaskAction.InstallModpack => path => IsValidLocalPackageArchive(path, task.TaskKind),
                 DownloadTaskAction.InstallCollection => IsValidCollectionArchive,
+                // 另存为允许保存任意远程资源，不能按 Mod manifest 校验。
+                // 之前这里复用了 InstallMod 的校验器，导致另存为 SMAPI
+                // 通过下载后又被判定为“未通过文件校验”。
+                DownloadTaskAction.SaveOnly => null,
                 _ => ModpackInstallService.IsValidModArchiveFile
             };
 
@@ -6182,11 +6361,11 @@ public partial class DownloadPageViewModel : ObservableObject
                         // Percent 是观测值，不代表 DownloadAsync 已经完成；多线程分片
                         // 可能先把累计字节写满，再等待其它响应释放。状态文案也必须
                         // 与进度条遵守同一规则，不能出现“下载中 100.0%”。
-                        var statusPercent = snapshot.IsComplete
-                            ? 100d
-                            : Math.Min(99.9d, Math.Max(0d, snapshot.Percent));
+                        // 状态文本必须复用进度条的整数值；否则会出现进度条为
+                        // 99%，文案却显示 99.9%/100.0% 的视觉不一致。
+                        var statusPercent = displayPercent;
                         var statusText = snapshot.TotalBytes > 0
-                            ? $"下载中 {statusPercent:F1}% ({downloadedMb:F1}/{totalMb:F1} MB, {speedMb:F1} MB/s)"
+                            ? $"下载中 {statusPercent}% ({downloadedMb:F1}/{totalMb:F1} MB, {speedMb:F1} MB/s)"
                             : $"下载中 ({downloadedMb:F1} MB, {speedMb:F1} MB/s)";
                         var segmentPercents = snapshot.SegmentPercents is { Length: > 1 } percents
                             ? percents.ToArray()
@@ -6622,6 +6801,34 @@ public partial class DownloadPageViewModel : ObservableObject
         }
 
         // 普通 Mod 同样要区分“下载完成”和“安装完成”。
+        if (task.SkipConflictPrompt)
+        {
+            var backupResult = await BackupExistingModsBeforeInstallAsync(task);
+            if (!backupResult.Success)
+            {
+                task.FailedDetails = backupResult.ErrorMessage;
+                task.SetState(DownloadTaskState.Failed, "覆盖前备份失败（可重试）");
+                task.CanRetry = true;
+                task.CanCancel = false;
+                Status = $"任务失败: {task.Name}";
+                TaskStateChanged?.Invoke(task);
+                SaveTaskState();
+                EmitLog($"批量更新未覆盖 {task.Name}: {backupResult.ErrorMessage}");
+                return;
+            }
+        }
+        else if (!await ConfirmModOverwriteBeforeInstallAsync(task))
+        {
+            task.SetState(DownloadTaskState.Cancelled, "已取消覆盖安装");
+            task.CanRetry = false;
+            task.CanCancel = false;
+            Status = $"已取消 Mod 安装: {task.Name}";
+            TaskStateChanged?.Invoke(task);
+            SaveTaskState();
+            EmitLog($"已取消 Mod 覆盖安装: {task.Name}");
+            return;
+        }
+
         task.Progress = 0;
         task.SetState(DownloadTaskState.Installing, "安装中");
         TaskStateChanged?.Invoke(task);
@@ -6634,7 +6841,8 @@ public partial class DownloadPageViewModel : ObservableObject
             sourceProjectId: task.SourceModId,
             sourceFileId: task.SourceFileId,
             sourceDownloadUrl: task.SourceUrl,
-            sourceFileName: Path.GetFileName(task.OutputFilePath));
+            sourceFileName: Path.GetFileName(task.OutputFilePath),
+            sourceRepository: task.SourceRepository);
         if (!installResult.IsSuccess)
         {
             task.SetState(installResult.IsCancelled ? DownloadTaskState.Cancelled : DownloadTaskState.Failed, installResult.IsCancelled ? "安装已取消" : "安装失败（可重试）");
@@ -6652,6 +6860,9 @@ public partial class DownloadPageViewModel : ObservableObject
         Status = $"任务完成: {task.Name}";
         SaveTaskState();
         EmitLog($"任务完成: {task.Name}，安装目录: {task.InstalledPath}");
+        // 更新任务可能替换了一个包含多个子 Mod 的复合目录。通知外层刷新，
+        // 让列表从磁盘重新读取新的 manifest/source，而不是继续显示旧对象状态。
+        Dispatcher.UIThread.Post(() => ModInstallationCompleted?.Invoke());
     }
 
     private async Task ExecuteCollectionTaskAsync(DownloadTaskItem task)
@@ -6872,17 +7083,13 @@ public partial class DownloadPageViewModel : ObservableObject
                             var displayProgress = (int)Math.Round(Math.Min(85, 20 + percent * 0.65));
                             // DownloadAsync 返回前，最后一次回调仍然只是观测值；
                             // 因此下载阶段最多显示 99%，真正完成由 await 返回确认。
-                            var subProgress = snapshot.IsComplete
-                                ? 100
-                                : (percent >= 100 ? 99 : (int)Math.Floor(percent));
+                            var subProgress = DownloadProgressCalculator.ToDisplayPercent(snapshot);
                             var downloadedMb = snapshot.DownloadedBytes / 1024d / 1024d;
                             var totalMb = snapshot.TotalBytes / 1024d / 1024d;
                             var speedMb = snapshot.BytesPerSecond / 1024d / 1024d;
-                            var statusPercent = snapshot.IsComplete
-                                ? 100d
-                                : Math.Min(99.9d, Math.Max(0d, percent));
+                            var statusPercent = subProgress;
                             var statusText = snapshot.TotalBytes > 0
-                                ? $"下载 Collection {statusPercent:F1}% ({downloadedMb:F1}/{totalMb:F1} MB, {speedMb:F1} MB/s)"
+                                ? $"下载 Collection {statusPercent}% ({downloadedMb:F1}/{totalMb:F1} MB, {speedMb:F1} MB/s)"
                                 : $"下载 Collection ({downloadedMb:F1} MB, {speedMb:F1} MB/s)";
 
                             Dispatcher.UIThread.Post(() =>
@@ -6894,7 +7101,7 @@ public partial class DownloadPageViewModel : ObservableObject
 
                                 task.Progress = displayProgress;
                                 task.SubProgress = subProgress;
-                                task.SubProgressText = $"镜像 {index + 1}/{candidateUrls.Count}: {statusPercent:F1}%";
+                                task.SubProgressText = $"镜像 {index + 1}/{candidateUrls.Count}: {statusPercent}%";
                                 task.SetState(DownloadTaskState.Downloading, statusText);
                                 TaskStateChanged?.Invoke(task);
                             });
@@ -6973,6 +7180,7 @@ public partial class DownloadPageViewModel : ObservableObject
                 ? Path.GetFileNameWithoutExtension(archivePath)
                 : task.TargetInstanceName;
             var updateExisting = HasPreviouslyInstalledPackageRuntime(task);
+            task.ResetCollectionModProgress();
             var collectionResult = await _collectionInstallService.InstallCollectionFromArchiveAsync(
                 archivePath,
                 collectionInstanceName,
@@ -7173,6 +7381,18 @@ public partial class DownloadPageViewModel : ObservableObject
             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
+    private static string NormalizeHttpDownloadUrl(string value)
+    {
+        if (Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) && IsHttpUri(uri))
+        {
+            // AbsoluteUri 会把文件名中的空格等字符正确编码，避免日志里看似
+            // 完整的 Edge CDN 地址在 HttpClient 解析时被截断或解释成非法 URI。
+            return uri.AbsoluteUri;
+        }
+
+        return value?.Trim() ?? string.Empty;
+    }
+
     /// <summary>
     /// 判断 Nexus 来源的 URL 是否足够像真实归档直链。
     /// Nexus 文件页也会被保存为 downloadUrl，因此不能仅凭 HTTP scheme 放行；
@@ -7342,11 +7562,30 @@ public partial class DownloadPageViewModel : ObservableObject
                 return;
             }
 
-            task.Progress = Math.Clamp(progress.Percent, 0, 99);
-            task.SetState(DownloadTaskState.Installing, progress.StepText);
-            task.SubProgressText = progress.SubProgressText;
-            task.SubProgress = progress.SubProgress;
-            EmitModpackProgress(task.Name, progress.StepText, progress.SubProgressText);
+            if (progress.ModState is CollectionModTaskState modState &&
+                !string.IsNullOrWhiteSpace(progress.ModName))
+            {
+                task.SyncCollectionModProgress(
+                    progress.ModName,
+                    progress.ModPhase,
+                    progress.ModOptional,
+                    modState,
+                    progress.ModMessage,
+                    progress.ModSourceUrl,
+                    progress.ModRequiresManualAction);
+                // 单个 Mod 状态变化是低频事件；立即落盘，进程中断后任务页仍能
+                // 恢复到最后一个已处理条目，而不是只保留整合包总进度。
+                SaveTaskState();
+            }
+
+            if (!string.IsNullOrWhiteSpace(progress.StepText))
+            {
+                task.Progress = Math.Clamp(progress.Percent, 0, 99);
+                task.SetState(DownloadTaskState.Installing, progress.StepText);
+                task.SubProgressText = progress.SubProgressText;
+                task.SubProgress = progress.SubProgress;
+                EmitModpackProgress(task.Name, progress.StepText, progress.SubProgressText);
+            }
             TaskStateChanged?.Invoke(task);
         }
 
@@ -7374,6 +7613,206 @@ public partial class DownloadPageViewModel : ObservableObject
         {
             Status = $"打开路径失败: {ex.Message}";
         }
+    }
+
+    private async Task<bool> ConfirmModOverwriteBeforeInstallAsync(DownloadTaskItem task)
+    {
+        var modsPath = GetCurrentModsPath();
+        var existingPaths = await GetExistingModPathsForInstallAsync(task, modsPath);
+        if (existingPaths.Count == 0)
+        {
+            return true;
+        }
+
+        var summary = $"检测到 {existingPaths.Count} 个现有 Mod 将被覆盖：\n" +
+                      string.Join("\n", existingPaths.Select(path => $"• {Path.GetFileName(path)}"));
+        var resolution = await ShowConflictResolutionOnUiThreadAsync(
+            "安装 Mod 时发现更新/冲突",
+            "当前下载包会替换已有 Mod。是否覆盖？系统会在覆盖前自动备份原有 Mod。",
+            task.OutputFilePath,
+            existingPaths[0],
+            summary,
+            "打开待安装文件",
+            "打开原有 Mod 文件夹",
+            "覆盖（先备份原有 Mod）");
+        if (resolution != ConflictResolutionDialogAction.Replace)
+        {
+            return false;
+        }
+
+        var replacementFolderNames = await GetReplacementFolderNamesForUpdateAsync(task, existingPaths);
+        var backupResult = await BackupExistingModPathsAsync(
+            modsPath,
+            existingPaths,
+            replacementFolderNames,
+            task.Name);
+        if (!backupResult.Success)
+        {
+            var failedName = backupResult.FailedPath == null
+                ? "未知 Mod"
+                : Path.GetFileName(backupResult.FailedPath);
+            await ShowMessageOnUiThreadAsync(
+                "无法覆盖 Mod",
+                $"原有 Mod“{failedName}”备份失败，已取消本次安装。请检查目录权限后重试。");
+            return false;
+        }
+
+        task.BackupPath = backupResult.BackupPath ?? string.Empty;
+        return true;
+    }
+
+    private async Task<List<string>> GetExistingModPathsForInstallAsync(
+        DownloadTaskItem task,
+        string? modsPath = null)
+    {
+        modsPath ??= GetCurrentModsPath();
+        if (string.IsNullOrWhiteSpace(modsPath) || !Directory.Exists(modsPath))
+        {
+            return [];
+        }
+
+        var targetNames = await Task.Run(() =>
+            ModpackInstallService.GetInstallTargetNames(task.OutputFilePath, task.Name, modsPath));
+        return targetNames
+            .Select(name => Path.Combine(modsPath, name))
+            .Where(Directory.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private async Task<(bool Success, string ErrorMessage, string? FailedPath, string? BackupPath)> BackupExistingModsBeforeInstallAsync(
+        DownloadTaskItem task)
+    {
+        var modsPath = GetCurrentModsPath();
+        var existingPaths = await GetExistingModPathsForInstallAsync(task, modsPath);
+        if (existingPaths.Count == 0)
+        {
+            return (true, string.Empty, null, null);
+        }
+
+        var replacementFolderNames = await GetReplacementFolderNamesForUpdateAsync(task, existingPaths);
+        var result = await BackupExistingModPathsAsync(
+            modsPath,
+            existingPaths,
+            replacementFolderNames,
+            task.Name);
+        if (result.Success)
+        {
+            task.BackupPath = result.BackupPath ?? string.Empty;
+        }
+
+        return result;
+    }
+
+    private async Task<(bool Success, string ErrorMessage, string? FailedPath, string? BackupPath)> BackupExistingModPathsAsync(
+        string? modsPath,
+        IReadOnlyList<string> existingPaths,
+        IReadOnlyList<string>? replacementFolderNames = null,
+        string? sourceArchiveName = null)
+    {
+        if (string.IsNullOrWhiteSpace(modsPath))
+        {
+            return (false, "未找到有效的 Mods 目录，无法创建覆盖前备份", existingPaths.FirstOrDefault(), null);
+        }
+
+        string? lastBackupPath = null;
+        foreach (var existingPath in existingPaths)
+        {
+            var backupResult = await Task.Run(() =>
+            {
+                var success = _downloadInstallService.TryBackupExistingModDirectory(
+                    modsPath,
+                    existingPath,
+                    replacementFolderNames,
+                    sourceArchiveName,
+                    out var backupPath);
+                return (success, backupPath);
+            });
+            if (!backupResult.success)
+            {
+                return (
+                    false,
+                    $"原有 Mod“{Path.GetFileName(existingPath)}”备份失败",
+                    existingPath,
+                    lastBackupPath);
+            }
+
+            lastBackupPath = backupResult.backupPath;
+            EmitLog($"覆盖前已备份 Mod: {existingPath} -> {backupResult.backupPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(lastBackupPath))
+        {
+            ModBackupCreated?.Invoke();
+        }
+
+        return (true, string.Empty, null, lastBackupPath);
+    }
+
+    private static async Task<IReadOnlyList<string>> GetReplacementFolderNamesForUpdateAsync(
+        DownloadTaskItem task,
+        IReadOnlyList<string> existingPaths)
+    {
+        var archiveNames = await Task.Run(() =>
+            ModpackInstallService.GetInstallTargetNames(task.OutputFilePath, task.Name));
+        if (archiveNames.Count > 0)
+        {
+            return archiveNames;
+        }
+
+        // 非标准归档无法解析时仍记录当前目标名，保证恢复链不会丢失。
+        return existingPaths
+            .Select(path => Path.GetFileName(path))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private async Task<ConflictResolutionDialogAction> ShowConflictResolutionOnUiThreadAsync(
+        string title,
+        string message,
+        string incomingPath,
+        string existingPath,
+        string comparisonSummary,
+        string openIncomingText,
+        string openExistingText,
+        string replaceButtonText)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return await _dialogService.ShowConflictResolutionDialogAsync(
+                title,
+                message,
+                incomingPath,
+                existingPath,
+                comparisonSummary,
+                openIncomingText,
+                openExistingText,
+                replaceButtonText);
+        }
+
+        var operation = Dispatcher.UIThread.InvokeAsync(() =>
+            _dialogService.ShowConflictResolutionDialogAsync(
+                title,
+                message,
+                incomingPath,
+                existingPath,
+                comparisonSummary,
+                openIncomingText,
+                openExistingText,
+                replaceButtonText));
+        return await operation;
+    }
+
+    private async Task ShowMessageOnUiThreadAsync(string title, string message)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            await _dialogService.ShowMessageAsync(title, message);
+            return;
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() => _dialogService.ShowMessageAsync(title, message));
     }
 
     private static bool HasRealDownloadSource(DownloadTaskItem task)
@@ -7835,9 +8274,11 @@ public partial class DownloadPageViewModel : ObservableObject
 
         if (!string.IsNullOrWhiteSpace(manualName))
         {
-            var cleaned = InstanceRuntimePathResolver.SanitizeFileNameComponent(manualName.Trim(), string.Empty);
+            var decodedManualName = Uri.UnescapeDataString(manualName.Trim());
+            var cleaned = InstanceRuntimePathResolver.SanitizeFileNameComponent(decodedManualName, string.Empty);
             if (!string.IsNullOrWhiteSpace(cleaned))
             {
+                cleaned = CollapseRepeatedVersionSuffix(cleaned);
                 // 若手动指定文件名缺少有效的压缩包扩展名，且 URL 中包含扩展名，则附加 URL 的扩展名
                 // 避免 CurseForge 整合包 displayName（如 "1.9.10"）被 Path.GetExtension 误判为有扩展名 ".10"
                 // 只有已知压缩包扩展名才视为有效扩展名
@@ -7853,10 +8294,31 @@ public partial class DownloadPageViewModel : ObservableObject
 
         if (!string.IsNullOrWhiteSpace(urlFileName))
         {
-            return InstanceRuntimePathResolver.SanitizeFileNameComponent(urlFileName, "download.bin");
+            return InstanceRuntimePathResolver.SanitizeFileNameComponent(
+                CollapseRepeatedVersionSuffix(Uri.UnescapeDataString(urlFileName)),
+                "download.bin");
         }
 
         return $"download-{DateTime.Now:yyyyMMddHHmmss}.bin";
+    }
+
+    private static string CollapseRepeatedVersionSuffix(string value)
+    {
+        var extension = Path.GetExtension(value);
+        if (string.IsNullOrWhiteSpace(extension) ||
+            !IsKnownArchiveExtension(extension))
+        {
+            return value;
+        }
+
+        var stem = value[..^extension.Length];
+        var match = Regex.Match(
+            stem,
+            @"^(?<prefix>.+?)\s+(?<version>\d+(?:\.\d+)+)\s+\k<version>$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        return match.Success
+            ? $"{match.Groups["prefix"].Value.Trim()} {match.Groups["version"].Value}{extension}"
+            : value;
     }
 
     private static bool TryParsePositiveLong(string? value, out long result)
@@ -7952,7 +8414,7 @@ public partial class DownloadPageViewModel : ObservableObject
             DownloadTasks.Clear();
             foreach (var record in records)
             {
-                DownloadTasks.Add(new DownloadTaskItem
+                var recoveredTask = new DownloadTaskItem
                 {
                     Name = record.Name,
                     Status = record.Status,
@@ -7965,6 +8427,7 @@ public partial class DownloadPageViewModel : ObservableObject
                     SourceModId = record.SourceModId,
                     SourceFileId = record.SourceFileId,
                     SourcePlatform = record.SourcePlatform,
+                    SourceRepository = record.SourceRepository,
                     CollectionSlug = record.CollectionSlug,
                     CollectionRevision = record.CollectionRevision,
                     SourceUrl = record.SourceUrl,
@@ -7978,6 +8441,7 @@ public partial class DownloadPageViewModel : ObservableObject
                     TargetGamePath = record.TargetGamePath,
                     TargetInstanceName = record.TargetInstanceName,
                     CustomIconPath = record.CustomIconPath,
+                    SkipConflictPrompt = record.SkipConflictPrompt,
                     SpeedText = record.SpeedText,
                     EtaText = record.EtaText,
                     TotalSizeText = record.TotalSizeText,
@@ -7988,10 +8452,22 @@ public partial class DownloadPageViewModel : ObservableObject
                     DependencyUrls = record.DependencyUrls ?? [],
                     FailedDownloadUrls = record.FailedDownloadUrls ?? [],
                     ConflictPreviewItems = record.ConflictPreviewItems ?? []
-                });
+                };
+                foreach (var modItem in record.CollectionModItems ?? [])
+                {
+                    recoveredTask.SyncCollectionModProgress(
+                        modItem.Name,
+                        modItem.Phase,
+                        modItem.Optional,
+                        modItem.State,
+                        modItem.Message,
+                        modItem.SourceUrl,
+                        modItem.RequiresManualAction);
+                }
 
-                NormalizeRecoveredTaskState(DownloadTasks[^1]);
-                DownloadTasks[^1].StatusIconSource = ResolveTaskStatusIcon(DownloadTasks[^1]);
+                DownloadTasks.Add(recoveredTask);
+                NormalizeRecoveredTaskState(recoveredTask);
+                recoveredTask.StatusIconSource = ResolveTaskStatusIcon(recoveredTask);
             }
         }
         catch

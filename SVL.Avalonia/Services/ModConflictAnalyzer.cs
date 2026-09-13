@@ -12,7 +12,9 @@ public enum ModConflictKind
     DisabledDependency,
     VersionMismatch,
     CircularDependency,
-    FileConflict
+    FileConflict,
+    CommunityHardConflict,
+    CommunityFunctionalOverlap
 }
 
 /// <summary>一次本地 Mod 冲突的可展示结果。</summary>
@@ -30,6 +32,8 @@ public sealed record ModConflictResult(
         ModConflictKind.VersionMismatch => "前置版本不满足",
         ModConflictKind.CircularDependency => "循环依赖",
         ModConflictKind.FileConflict => "文件冲突",
+        ModConflictKind.CommunityHardConflict => "社区冲突",
+        ModConflictKind.CommunityFunctionalOverlap => "功能重复",
         _ => "冲突"
     };
 
@@ -39,6 +43,15 @@ public sealed record ModConflictResult(
 }
 
 /// <summary>
+/// 一个 Mod 及其对应的 SVL 本地化社区条目。
+/// 冲突检测只使用条目中的 hardConflicts/functionalOverlaps，
+/// 不把文件名、svl-source.json 或其它运行时文件当成冲突依据。
+/// </summary>
+public sealed record ModCommunityConflictSource(
+    ModManageItem Mod,
+    CommunityLocalizationEntry Entry);
+
+/// <summary>
 /// 对已安装 Mod 做只读冲突分析。
 /// 该类不改变文件或启用状态，方便在 UI 外单独回归测试。
 /// </summary>
@@ -46,6 +59,10 @@ public static class ModConflictAnalyzer
 {
     private static readonly Regex s_versionPartRegex = new(@"\d+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// 保留旧的结构性诊断入口（重复 ID、依赖和循环依赖）。不读取 Mod 目录文件；
+    /// 用户界面的冲突检测必须使用 <see cref="AnalyzeCommunity"/>，只依据社区字段。
+    /// </summary>
     public static IReadOnlyList<ModConflictResult> Analyze(IEnumerable<ModManageItem> source)
     {
         var candidates = source
@@ -59,7 +76,6 @@ public static class ModConflictAnalyzer
         DetectDuplicateIds(enabledMods, conflicts);
         DetectDependencyConflicts(enabledMods, candidates, conflicts);
         DetectCircularDependencies(enabledMods, candidates, conflicts);
-        DetectFileConflicts(enabledMods, conflicts);
 
         return conflicts
             .OrderBy(item => item.Kind)
@@ -67,6 +83,156 @@ public static class ModConflictAnalyzer
             .ThenBy(item => item.RelatedModName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Description, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// 按 SVL 本地化社区的冲突字段检测当前已安装 Mod。
+    ///
+    /// 社区条目的关系只描述“可能冲突”的 Mod，只有关系双方都存在且都启用时
+    /// 才报告结果。这样不会把未安装的关系项误报成冲突，也不会扫描 Mod 目录
+    /// 中的文件，因此 svl-source.json 等来源元数据不会制造海量假冲突。
+    /// </summary>
+    public static IReadOnlyList<ModConflictResult> AnalyzeCommunity(
+        IEnumerable<ModCommunityConflictSource> source)
+    {
+        var entries = (source ?? [])
+            .Where(item => item.Mod != null &&
+                           item.Entry != null &&
+                           IsCandidateMod(item.Mod) &&
+                           item.Mod.IsEnabled)
+            .GroupBy(item => GetModKey(item.Mod), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToList();
+        var installed = entries.Select(item => item.Mod).ToList();
+        var conflicts = new List<ModConflictResult>();
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in entries)
+        {
+            AddCommunityRelations(
+                item,
+                item.Entry.HardConflicts,
+                ModConflictKind.CommunityHardConflict,
+                installed,
+                reported,
+                conflicts);
+            AddCommunityRelations(
+                item,
+                item.Entry.FunctionalOverlaps,
+                ModConflictKind.CommunityFunctionalOverlap,
+                installed,
+                reported,
+                conflicts);
+        }
+
+        return conflicts
+            .OrderBy(item => item.Kind)
+            .ThenBy(item => item.ModName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.RelatedModName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Description, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static void AddCommunityRelations(
+        ModCommunityConflictSource source,
+        IEnumerable<CommunityLocalizationRelation>? relations,
+        ModConflictKind kind,
+        IReadOnlyList<ModManageItem> installed,
+        ISet<string> reported,
+        ICollection<ModConflictResult> conflicts)
+    {
+        foreach (var relation in relations ?? [])
+        {
+            var related = FindRelatedMod(relation, installed, source.Mod);
+            if (related == null)
+            {
+                continue;
+            }
+
+            var firstKey = GetModKey(source.Mod);
+            var secondKey = GetModKey(related);
+            var pairKey = string.Compare(firstKey, secondKey, StringComparison.OrdinalIgnoreCase) < 0
+                ? $"{kind}:{firstKey}:{secondKey}"
+                : $"{kind}:{secondKey}:{firstKey}";
+            if (!reported.Add(pairKey))
+            {
+                continue;
+            }
+
+            var defaultDescription = kind == ModConflictKind.CommunityHardConflict
+                ? "SVL 本地化社区标注为硬冲突"
+                : "SVL 本地化社区标注为功能重复";
+            conflicts.Add(new ModConflictResult(
+                kind,
+                GetModName(source.Mod),
+                GetModName(related),
+                string.IsNullOrWhiteSpace(relation.Reason)
+                    ? defaultDescription
+                    : relation.Reason.Trim()));
+        }
+    }
+
+    private static ModManageItem? FindRelatedMod(
+        CommunityLocalizationRelation relation,
+        IReadOnlyList<ModManageItem> installed,
+        ModManageItem source)
+    {
+        var relationId = relation.Id?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(relationId))
+        {
+            var byId = installed.FirstOrDefault(mod =>
+                !ReferenceEquals(mod, source) &&
+                GetIdentityValues(mod).Any(value =>
+                    string.Equals(value, relationId, StringComparison.OrdinalIgnoreCase)));
+            if (byId != null)
+            {
+                return byId;
+            }
+        }
+
+        var relationName = relation.Name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(relationName))
+        {
+            return null;
+        }
+
+        return installed.FirstOrDefault(mod =>
+            !ReferenceEquals(mod, source) &&
+            GetNameValues(mod).Any(value =>
+                string.Equals(value, relationName, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static IEnumerable<string> GetIdentityValues(ModManageItem mod)
+    {
+        return new[]
+        {
+            mod.UniqueId,
+            mod.CurseforgeProjectId,
+            mod.NexusModsProjectId,
+            mod.DirectoryName,
+            mod.FolderName
+        }.Where(value => !string.IsNullOrWhiteSpace(value))
+         .Select(value => value.Trim());
+    }
+
+    private static IEnumerable<string> GetNameValues(ModManageItem mod)
+    {
+        return new[]
+        {
+            mod.DisplayName,
+            mod.SourceDisplayName,
+            mod.DirectoryName,
+            mod.FolderName,
+            mod.UniqueId
+        }.Where(value => !string.IsNullOrWhiteSpace(value))
+         .Select(value => value.Trim());
+    }
+
+    private static string GetModKey(ModManageItem mod)
+    {
+        return !string.IsNullOrWhiteSpace(mod.FullPath)
+            ? mod.FullPath.Trim()
+            : $"{mod.UniqueId}|{mod.DisplayName}";
     }
 
     private static bool IsCandidateMod(ModManageItem item)
@@ -148,66 +314,6 @@ public static class ModConflictAnalyzer
                         GetModName(mod),
                         GetModName(installed),
                         $"需要最低版本 {dependency.MinimumVersion}，当前为 {installed.Version}"));
-                }
-            }
-        }
-    }
-
-    private static void DetectFileConflicts(
-        IReadOnlyList<ModManageItem> mods,
-        ICollection<ModConflictResult> conflicts)
-    {
-        var filesByRelativePath = new Dictionary<string, List<ModManageItem>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var mod in mods)
-        {
-            IEnumerable<string> files;
-            try
-            {
-                files = Directory.EnumerateFiles(mod.FullPath, "*", SearchOption.AllDirectories)
-                    .Select(path => new { Path = path, Relative = Path.GetRelativePath(mod.FullPath, path) })
-                    .Where(item => !IsIgnoredAsset(item.Relative))
-                    .Select(item => NormalizeRelativePath(item.Relative))
-                    .Where(path => !string.IsNullOrWhiteSpace(path))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-            {
-                // 单个目录不可读时不影响其他 Mod 的检测；管理页会继续显示该 Mod。
-                continue;
-            }
-
-            foreach (var relativePath in files)
-            {
-                if (!filesByRelativePath.TryGetValue(relativePath, out var owners))
-                {
-                    owners = [];
-                    filesByRelativePath[relativePath] = owners;
-                }
-
-                owners.Add(mod);
-            }
-        }
-
-        foreach (var fileGroup in filesByRelativePath
-                     .Where(pair => pair.Value.Count > 1)
-                     .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            var owners = fileGroup.Value
-                .Distinct()
-                .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            for (var firstIndex = 0; firstIndex < owners.Count - 1; firstIndex++)
-            {
-                for (var secondIndex = firstIndex + 1; secondIndex < owners.Count; secondIndex++)
-                {
-                    conflicts.Add(new ModConflictResult(
-                        ModConflictKind.FileConflict,
-                        GetModName(owners[firstIndex]),
-                        GetModName(owners[secondIndex]),
-                        $"都包含文件“{fileGroup.Key}”"));
                 }
             }
         }
@@ -298,15 +404,6 @@ public static class ModConflictAnalyzer
         return string.IsNullOrWhiteSpace(mod.UniqueId)
             ? NormalizeRelativePath(mod.FullPath)
             : mod.UniqueId.Trim();
-    }
-
-    private static bool IsIgnoredAsset(string relativePath)
-    {
-        var fileName = Path.GetFileName(relativePath);
-        return fileName.Equals("manifest.json", StringComparison.OrdinalIgnoreCase) ||
-               fileName.Equals("icon.png", StringComparison.OrdinalIgnoreCase) ||
-               fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
-               fileName.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeRelativePath(string path)

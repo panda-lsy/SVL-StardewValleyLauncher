@@ -425,6 +425,17 @@ public sealed class LegacyConfigurationMigrationService
         {
             settings.PreferredInstancePath = ResolveLegacyInstanceRuntimePath(preferred);
             settings.InstanceName = preferred.Name.Trim();
+            settings.InstanceDescription = preferred.Description.Trim();
+            settings.IsFavoriteInstance = preferred.IsFavorite;
+            settings.GameWindowTitle = string.IsNullOrWhiteSpace(preferred.WindowTitle)
+                ? settings.GameWindowTitle
+                : preferred.WindowTitle.Trim();
+            settings.InstanceCustomLaunchArguments = preferred.CustomArguments.Trim();
+            settings.InstanceAutoConnectServer = preferred.AutoConnectServer;
+            settings.InstanceServerAddress = preferred.ServerAddress.Trim();
+            settings.InstanceSteamInviteCode = preferred.SteamInviteCode.Trim();
+            settings.OverrideSteamLaunchOptions = preferred.OverrideSteamLaunchOptions;
+            settings.SteamLaunchOptions = preferred.SteamLaunchOptions.Trim();
             settings.PreferredLaunchMode = preferred.IsSMAPIInstance ? "SMAPI" : "Vanilla";
             changed = true;
             result.SettingsChanged = true;
@@ -733,6 +744,14 @@ public sealed class LegacyConfigurationMigrationService
                 IsDefault = GetBool(item, "IsDefault"),
                 IsFavorite = GetBool(item, "IsFavorite"),
                 EnableIsolation = GetBool(item, "EnableIsolation"),
+                Description = GetString(item, "Description") ?? string.Empty,
+                WindowTitle = GetString(item, "WindowTitle") ?? string.Empty,
+                CustomArguments = GetString(item, "CustomArguments", "CustomLaunchArguments") ?? string.Empty,
+                AutoConnectServer = GetBool(item, "AutoConnectServer"),
+                ServerAddress = GetString(item, "ServerAddress") ?? string.Empty,
+                SteamInviteCode = GetString(item, "SteamInviteCode") ?? string.Empty,
+                OverrideSteamLaunchOptions = GetBool(item, "OverrideSteamLaunchOptions"),
+                SteamLaunchOptions = GetString(item, "SteamLaunchOptions") ?? string.Empty,
                 Tags = tags
             });
         }
@@ -1117,6 +1136,14 @@ public sealed class LegacyConfigurationMigrationService
         public bool IsDefault { get; init; }
         public bool IsFavorite { get; init; }
         public bool EnableIsolation { get; init; }
+        public string Description { get; init; } = string.Empty;
+        public string WindowTitle { get; init; } = string.Empty;
+        public string CustomArguments { get; init; } = string.Empty;
+        public bool AutoConnectServer { get; init; }
+        public string ServerAddress { get; init; } = string.Empty;
+        public string SteamInviteCode { get; init; } = string.Empty;
+        public bool OverrideSteamLaunchOptions { get; init; }
+        public string SteamLaunchOptions { get; init; } = string.Empty;
         public List<string> Tags { get; init; } = [];
     }
 }

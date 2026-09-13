@@ -1,4 +1,5 @@
 using SVL.Avalonia.Services;
+using System.Text.RegularExpressions;
 
 namespace SVL.Avalonia.Models;
 
@@ -31,6 +32,12 @@ public sealed class ExternalDownloadRequest
 
     /// <summary>是否为 Curseforge/SVL 整合包（非 Nexus Collection）。用于走 Modpack 安装流程（manifest.json）。</summary>
     public bool IsModpack { get; init; }
+
+    /// <summary>
+    /// 整合包详情页的主图标 URL。CurseForge 安装时优先缓存该图标，
+    /// 下载包内未提供图标或网络获取失败时再回退到包内/现有整合包图标。
+    /// </summary>
+    public string ModpackIconUrl { get; init; } = string.Empty;
 
     /// <summary>Nexus Collection 的 slug（仅 IsCollection 为 true 时有效）。</summary>
     public string CollectionSlug { get; init; } = string.Empty;
@@ -65,6 +72,13 @@ public sealed class ExternalDownloadRequest
         var option = SelectedDownloadOption?.Trim() ?? string.Empty;
         if (option.Length > 0)
         {
+            // 某些来源把“File 7448774_ 文件名.zip”整体 URL 编码后再传入，
+            // 先解码非 URL 选项，才能正确去掉 Nexus 的 FileID 前缀。
+            if (!IsHttpUrl(option))
+            {
+                option = Uri.UnescapeDataString(option);
+            }
+
             // 剥离 ~~ 后缀元数据（CurseForge 下载选项可能包含 ~~channel=...;gamever=... 等元数据）
             var tildeIndex = option.IndexOf("~~", StringComparison.Ordinal);
             if (tildeIndex > 0)
@@ -78,7 +92,7 @@ public sealed class ExternalDownloadRequest
                 var leftPart = DownloadOptionIdentityParser.StripGeneratedFilePrefix(option[..pipeIndex]);
                 if (leftPart.Length > 0 && !IsHttpUrl(leftPart))
                 {
-                    return leftPart;
+                    return CollapseRepeatedVersionSuffix(Uri.UnescapeDataString(leftPart));
                 }
             }
 
@@ -99,7 +113,7 @@ public sealed class ExternalDownloadRequest
                         : ResourceName.Trim();
                 }
 
-                return option;
+                return CollapseRepeatedVersionSuffix(option);
             }
         }
 
@@ -134,7 +148,29 @@ public sealed class ExternalDownloadRequest
             return false;
         }
 
-        fileName = pathFileName;
+        fileName = CollapseRepeatedVersionSuffix(pathFileName);
         return true;
+    }
+
+    private static string CollapseRepeatedVersionSuffix(string value)
+    {
+        var extension = Path.GetExtension(value);
+        if (string.IsNullOrWhiteSpace(extension) ||
+            !extension.Equals(".zip", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".7z", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".rar", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".cfmodpack", StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        var stem = value[..^extension.Length];
+        var match = Regex.Match(
+            stem,
+            @"^(?<prefix>.+?)\s+(?<version>\d+(?:\.\d+)+)\s+\k<version>$",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        return match.Success
+            ? $"{match.Groups["prefix"].Value.Trim()} {match.Groups["version"].Value}{extension}"
+            : value;
     }
 }

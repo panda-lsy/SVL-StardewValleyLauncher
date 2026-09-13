@@ -2,8 +2,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="SVL.Avalonia.Controls.ConfirmDialog"
         Classes="confirmDialog"
-        Width="420"
-        Height="220"
+        SizeToContent="WidthAndHeight"
+        MinWidth="420"
+        MaxWidth="680"
+        MaxHeight="420"
         WindowStartupLocation="CenterOwner"
         Title="确认"
         Background="{DynamicResource WindowBackgroundBrush}">
@@ -12,9 +14,11 @@
           BorderBrush="{DynamicResource BorderBrush}"
           BorderThickness="1"
           CornerRadius="10">
-    <StackPanel Spacing="12">
+    <StackPanel Spacing="16" MaxWidth="640">
       <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" />
-      <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+      <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
+        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+      </ScrollViewer>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
         <Button Content="取消" Click="Cancel_Click" />
         <Button Content="确定" Click="Confirm_Click" />

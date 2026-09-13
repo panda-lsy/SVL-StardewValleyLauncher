@@ -67,7 +67,7 @@
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <Button Classes="nav back" IsVisible="{Binding ShowBackButton}" Command="{Binding NavigateBackCommand}">
-            <Image Source="avares://SVL.Avalonia/Assets/Icons/Generated/Cropped/ArrowLeft.png" Width="20" Height="20" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center" />
+            <Path Data="{StaticResource Icon.ArrowLeft}" Width="16" Height="16" Stretch="Uniform" Stroke="White" StrokeThickness="1.8" VerticalAlignment="Center" HorizontalAlignment="Center" />
           </Button>
           <Image Source="avares://SVL.Avalonia/Assets/Icons/Junimo.png" Width="22" Height="22" VerticalAlignment="Center" IsVisible="{Binding ShowBrandIdentity}" />
           <TextBlock Text="{Binding LauncherAppNameText}" Classes="brand" Foreground="White" IsVisible="{Binding ShowBrandIdentity}" />
@@ -116,7 +116,7 @@
                   HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
             <Grid Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
               <!-- 三个图形都以 24×24 的同一坐标系绘制，避免资源图片透明边界造成视觉偏移。 -->
-              <Path Data="M 4,12 L 20,12" Stroke="White" StrokeThickness="2"
+              <Path Data="{StaticResource Icon.Minus}" Stretch="Uniform" Fill="White"
                     StrokeLineCap="Round" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
             </Grid>
           </Button>
@@ -124,7 +124,7 @@
                   Width="40" Height="48" Padding="0" HorizontalAlignment="Center" VerticalAlignment="Center"
                   HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
             <Grid Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
-              <Path Data="M 5,19 L 5,5 L 19,5 L 19,19 Z" Stroke="White" StrokeThickness="2"
+              <Path Data="{StaticResource Icon.Maximize}" Stretch="Uniform" Stroke="White" StrokeThickness="1.6"
                     Fill="Transparent"
                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
             </Grid>
@@ -133,7 +133,7 @@
                   Width="40" Height="48" Padding="0" HorizontalAlignment="Center" VerticalAlignment="Center"
                   HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
             <Grid Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
-              <Path Data="M 5,5 L 19,19 M 19,5 L 5,19" Stroke="White" StrokeThickness="2"
+              <Path Data="{StaticResource Icon.X}" Stretch="Uniform" Stroke="White" StrokeThickness="1.8"
                     StrokeLineCap="Round" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
             </Grid>
           </Button>

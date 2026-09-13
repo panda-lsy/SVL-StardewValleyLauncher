@@ -15,7 +15,7 @@
 						Padding="0"
 						Command="{Binding OpenQueueCommand, ElementName=Root}"
 						CommandParameter="{Binding PendingTaskCount, ElementName=Root}">
-			<Image Source="avares://SVL.Avalonia/Assets/Icons/Generated/Cropped/Download.png"
+			<Path Data="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"
 						Width="24"
 						Height="24"
 						Stretch="Uniform"  />

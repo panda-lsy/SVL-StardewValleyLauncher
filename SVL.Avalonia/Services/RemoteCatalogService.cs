@@ -1271,6 +1271,14 @@ public sealed class RemoteCatalogService
             var fullIconUrl = TryGetNestedString(item, "logo", "url");
             var iconUrl = TryGetNestedString(item, "logo", "thumbnailUrl") ?? fullIconUrl;
             var resourceId = TryGetLong(item, "id");
+            // Modpack 搜索结果中的 name/summary 通常携带的是整合包自身版本；
+            // 这里只接受 API 明确提供的 latestFilesIndexes.gameVersion，
+            // 与详情页的 allowTextFallback=false 保持一致。
+            var supportedGameVersions = ResolveCurseforgeGameVersions(
+                item,
+                summary,
+                name,
+                allowTextFallback: false);
 
             result.Add(new RemoteSearchItem
             {
@@ -1280,7 +1288,9 @@ public sealed class RemoteCatalogService
                 Stat = downloadCount > 0 ? $"Downloads {downloadCount:N0}" : string.Empty,
                 TimeTag = timeTag,
                 IconUrl = iconUrl,
-                FullIconUrl = fullIconUrl
+                FullIconUrl = fullIconUrl,
+                GameVersionTag = supportedGameVersions.FirstOrDefault() ?? string.Empty,
+                SupportedGameVersions = supportedGameVersions
             });
         }
 
@@ -1551,7 +1561,13 @@ public sealed class RemoteCatalogService
         }
 
         var modType = ResolveCurseforgeModType(item);
-        var supportedVersions = ResolveCurseforgeGameVersions(item, summary, name);
+        // Modpack 的名称/摘要通常包含“整合包自身版本”（例如 1.2.0），
+        // 不能把它当成 Stardew Valley 游戏版本。只有普通 Mod 才允许文本兜底。
+        var supportedVersions = ResolveCurseforgeGameVersions(
+            item,
+            summary,
+            name,
+            allowTextFallback: !onlyLikelyModpacks);
 
         return new RemoteSearchItem
         {
@@ -2231,7 +2247,9 @@ public sealed class RemoteCatalogService
             : new Version(0, 0);
     }
 
-    private static List<string> ExtractCurseforgeFileGameVersions(JsonElement file)
+    private static List<string> ExtractCurseforgeFileGameVersions(
+        JsonElement file,
+        bool allowFileNameFallback = true)
     {
         var versions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -2256,7 +2274,10 @@ public sealed class RemoteCatalogService
             }
         }
 
-        if (versions.Count == 0)
+        // 普通 Mod 的旧 API 数据有时没有 gameVersions，只能从文件名兜底。
+        // 整合包文件名中的 1.2.0/1.0.0 往往是整合包自身版本，不是星露谷版本，
+        // 详情页调用时会关闭这个兜底，避免把包版本伪装成游戏兼容版本。
+        if (versions.Count == 0 && allowFileNameFallback)
         {
             var fallbackText = FirstNonEmpty(TryGetString(file, "displayName"), TryGetString(file, "fileName"));
             foreach (var token in ParsePossibleGameVersions(fallbackText))
@@ -2914,13 +2935,10 @@ public sealed class RemoteCatalogService
             downloadOptions.Add("通过 NXM Collection 链接导入下载");
         }
 
-        // 从 Collection summary 提取游戏版本信息（Collection 是多 mod 合集，GraphQL 不直接返回游戏版本字段）
-        var collectionGameVersions = ParsePossibleGameVersions(collectionSummary);
-        var collectionVersionHeader = collectionGameVersions
-            .Select(version => $"兼容游戏版本：{version}")
-            .ToList();
-        var finalCollectionVersions = collectionVersionHeader
-            .Concat(versions)
+        // Nexus Collection 的 GraphQL 详情只提供 Collection/Revision 元数据，
+        // summary 中的数字是整合包自身版本，不能推断为 Stardew Valley 版本。
+        // 因此这里只展示 Revision，不伪造“兼容游戏版本”选项。
+        var finalCollectionVersions = versions
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -3395,7 +3413,9 @@ public sealed class RemoteCatalogService
                 ? fileDownloadCount.ToString("N0", CultureInfo.InvariantCulture)
                 : string.Empty;
 
-            var gameVersions = ExtractCurseforgeFileGameVersions(file);
+            var gameVersions = ExtractCurseforgeFileGameVersions(
+                file,
+                allowFileNameFallback: !identity.IsModpack);
             foreach (var version in gameVersions)
             {
                 supportedGameVersions.Add(version);
@@ -4391,7 +4411,11 @@ public sealed class RemoteCatalogService
         return string.Empty;
     }
 
-    private static List<string> ResolveCurseforgeGameVersions(JsonElement item, string summary, string name)
+    private static List<string> ResolveCurseforgeGameVersions(
+        JsonElement item,
+        string summary,
+        string name,
+        bool allowTextFallback = true)
     {
         var versions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -4405,6 +4429,15 @@ public sealed class RemoteCatalogService
                     versions.Add(version);
                 }
             }
+        }
+
+        if (!allowTextFallback)
+        {
+            return versions
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .OrderByDescending(ParseVersionSortValue)
+                .ThenByDescending(item => item, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         foreach (var version in ParsePossibleGameVersions(summary).Concat(ParsePossibleGameVersions(name)))
@@ -4630,6 +4663,273 @@ public sealed class RemoteCatalogService
         var latest = await TryGetLatestSmapiReleaseAsync(GetHttpClient(), cancellationToken);
         latest ??= await TryGetLatestSmapiReleaseAsync(GetDirectHttpClient(), cancellationToken);
         return latest;
+    }
+
+    /// <summary>
+    /// 根据 manifest.json 的 GitHub UpdateKey 检查仓库最新稳定 Release。
+    /// GitHub Mod 没有 Nexus/CurseForge 那样的数字 ProjectID/FileID，仓库
+    /// owner/repo 就是它的稳定来源身份，发布资产 URL 则作为更新下载地址。
+    /// </summary>
+    public async Task<GitHubModUpdateResult> CheckGitHubModUpdateAsync(
+        string repository,
+        string localVersion,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryNormalizeGitHubRepository(repository, out var normalizedRepository))
+        {
+            return new GitHubModUpdateResult
+            {
+                Repository = repository?.Trim() ?? string.Empty,
+                Message = "GitHub 仓库格式无效，应为 owner/repo"
+            };
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = await TryGetGitHubModUpdateAsync(
+            GetHttpClient(),
+            normalizedRepository,
+            localVersion,
+            cancellationToken);
+
+        // 与 SMAPI 目录保持一致：用户配置的代理/证书线路失败时，再用直连
+        // 尝试一次。这样 GitHub 来源不会因为下载代理临时不可用而消失。
+        if (!result.IsChecked && _httpClientOverride == null)
+        {
+            var directResult = await TryGetGitHubModUpdateAsync(
+                GetDirectHttpClient(),
+                normalizedRepository,
+                localVersion,
+                cancellationToken);
+            if (directResult.IsChecked || !string.IsNullOrWhiteSpace(directResult.Message))
+            {
+                result = directResult;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>规范化 GitHub UpdateKey 中的仓库地址或仓库短名。</summary>
+    public static bool TryNormalizeGitHubRepository(string? value, out string repository)
+    {
+        repository = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var candidate = value.Trim();
+        if (candidate.StartsWith("github:", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = candidate["github:".Length..].Trim();
+        }
+
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+            uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = uri.AbsolutePath.Trim('/');
+            var releaseMarker = candidate.IndexOf("/releases", StringComparison.OrdinalIgnoreCase);
+            if (releaseMarker >= 0)
+            {
+                candidate = candidate[..releaseMarker];
+            }
+        }
+
+        candidate = candidate.Trim().Trim('/');
+        if (candidate.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = candidate[..^4];
+        }
+
+        var segments = candidate.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length != 2 ||
+            segments.Any(segment => segment is "." or ".." ||
+                                    segment.Any(char.IsWhiteSpace)) ||
+            !segments.All(segment => Regex.IsMatch(segment, "^[A-Za-z0-9_.-]+$")))
+        {
+            return false;
+        }
+
+        repository = $"{segments[0]}/{segments[1]}";
+        return true;
+    }
+
+    private static async Task<GitHubModUpdateResult> TryGetGitHubModUpdateAsync(
+        HttpClient httpClient,
+        string repository,
+        string localVersion,
+        CancellationToken cancellationToken)
+    {
+        var result = new GitHubModUpdateResult { Repository = repository };
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"https://api.github.com/repos/{repository}/releases?per_page=30");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+
+            using var response = await httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                result.Message = $"GitHub API 返回 {(int)response.StatusCode}";
+                return result;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                result.Message = "GitHub API 返回格式无效";
+                return result;
+            }
+
+            JsonElement? latestRelease = null;
+            DateTimeOffset latestPublished = DateTimeOffset.MinValue;
+            foreach (var release in document.RootElement.EnumerateArray())
+            {
+                if (TryGetPropertyIgnoreCase(release, "draft", out var draft) &&
+                    draft.ValueKind == JsonValueKind.True)
+                {
+                    continue;
+                }
+
+                if (TryGetPropertyIgnoreCase(release, "prerelease", out var prerelease) &&
+                    prerelease.ValueKind == JsonValueKind.True)
+                {
+                    continue;
+                }
+
+                var tag = TryGetString(release, "tag_name");
+                var name = TryGetString(release, "name");
+                var version = ExtractGitHubVersion(tag, name);
+                if (string.IsNullOrWhiteSpace(version))
+                {
+                    continue;
+                }
+
+                var published = DateTimeOffset.MinValue;
+                var publishedText = TryGetString(release, "published_at");
+                if (!DateTimeOffset.TryParse(publishedText, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out published))
+                {
+                    published = DateTimeOffset.MinValue;
+                }
+
+                if (!latestRelease.HasValue || published > latestPublished)
+                {
+                    latestRelease = release;
+                    latestPublished = published;
+                }
+            }
+
+            result.IsChecked = true;
+            if (!latestRelease.HasValue)
+            {
+                result.Message = "GitHub 未找到稳定 Release";
+                return result;
+            }
+
+            var selectedRelease = latestRelease.Value;
+            var tagName = TryGetString(selectedRelease, "tag_name");
+            result.LatestVersion = ExtractGitHubVersion(tagName, TryGetString(selectedRelease, "name"));
+            var fileName = string.Empty;
+            result.DownloadUrl = TryGetPropertyIgnoreCase(selectedRelease, "assets", out var assets)
+                ? SelectGitHubModArchiveUrl(assets, out fileName)
+                : string.Empty;
+            result.FileName = fileName;
+            result.HasUpdate = IsGitHubVersionNewer(localVersion, result.LatestVersion);
+            result.Message = result.HasUpdate && string.IsNullOrWhiteSpace(result.DownloadUrl)
+                ? "GitHub Release 没有可下载的 Mod 压缩包"
+                : string.Empty;
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            result.Message = $"GitHub 更新检查失败：{ex.Message}";
+            return result;
+        }
+    }
+
+    private static string SelectGitHubModArchiveUrl(JsonElement assets, out string fileName)
+    {
+        fileName = string.Empty;
+        if (assets.ValueKind != JsonValueKind.Array)
+        {
+            return string.Empty;
+        }
+
+        var candidate = assets.EnumerateArray()
+            .Select(asset => new
+            {
+                Name = TryGetString(asset, "name"),
+                Url = TryGetString(asset, "browser_download_url")
+            })
+            .Where(asset => !string.IsNullOrWhiteSpace(asset.Name) &&
+                            Uri.TryCreate(asset.Url, UriKind.Absolute, out var assetUri) &&
+                            (assetUri.Scheme == Uri.UriSchemeHttp || assetUri.Scheme == Uri.UriSchemeHttps) &&
+                            IsGitHubModArchiveName(asset.Name))
+            .OrderBy(asset => asset.Name.Contains("source", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(asset => asset.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+        if (candidate == null)
+        {
+            return string.Empty;
+        }
+
+        fileName = candidate.Name.Trim();
+        return candidate.Url.Trim();
+    }
+
+    private static bool IsGitHubModArchiveName(string name)
+    {
+        return name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith(".rar", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ExtractGitHubVersion(string? tag, string? releaseName)
+    {
+        foreach (var value in new[] { tag, releaseName })
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var match = Regex.Match(value, @"(?<!\d)v?(\d+(?:\.\d+){1,3})(?!\d)", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static bool IsGitHubVersionNewer(string? localVersion, string? remoteVersion)
+    {
+        if (string.IsNullOrWhiteSpace(remoteVersion))
+        {
+            return false;
+        }
+
+        var local = ExtractGitHubVersion(localVersion, null);
+        if (!Version.TryParse(remoteVersion, out var remote) || remote == null)
+        {
+            return false;
+        }
+
+        return !Version.TryParse(local, out var localParsed) ||
+               localParsed == null ||
+               remote > localParsed;
     }
 
     private static async Task<List<SmapiVersionEntry>> TryGetSmapiVersionsFromGithubAsync(
@@ -5047,4 +5347,22 @@ public sealed class CatalogPagedResult
     public List<ModSearchResultItem> Items { get; init; } = [];
 
     public bool HasMore { get; init; }
+}
+
+/// <summary>GitHub Mod 更新检查结果。Repository 使用 owner/repo 格式。</summary>
+public sealed class GitHubModUpdateResult
+{
+    public bool IsChecked { get; set; }
+
+    public bool HasUpdate { get; set; }
+
+    public string Repository { get; set; } = string.Empty;
+
+    public string LatestVersion { get; set; } = string.Empty;
+
+    public string DownloadUrl { get; set; } = string.Empty;
+
+    public string FileName { get; set; } = string.Empty;
+
+    public string Message { get; set; } = string.Empty;
 }

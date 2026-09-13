@@ -114,7 +114,8 @@ public sealed class ModpackInstallService
         string? FileName,
         string? ModId,
         string? ProjectId,
-        string? FileId);
+        string? FileId,
+        string? Repository);
 
     private readonly IGameInstallPathLocator _gameInstallPathLocator;
     private readonly ISmapiInstallService _smapiInstallService;
@@ -1681,6 +1682,139 @@ public sealed class ModpackInstallService
         }
     }
 
+    private static string ResolveInstallTargetName(
+        string manifestDirectory,
+        string extractionRoot,
+        string preferredName,
+        string? modsPath,
+        ISet<string> reservedTargetNames,
+        bool isSingleManifest,
+        int index)
+    {
+        var existingDirectory = FindExistingModDirectoryByManifestIdentity(
+            manifestDirectory,
+            modsPath,
+            reservedTargetNames);
+        if (!string.IsNullOrWhiteSpace(existingDirectory))
+        {
+            var existingName = SanitizeModDirectoryName(
+                Path.GetFileName(existingDirectory),
+                preferredName);
+            if (reservedTargetNames.Add(existingName))
+            {
+                return existingName;
+            }
+        }
+
+        var candidate = isSingleManifest
+            ? ResolveInstalledModDirectoryName(manifestDirectory, extractionRoot, preferredName)
+            : SanitizeModDirectoryName(Path.GetFileName(manifestDirectory), $"mod-{index}");
+        candidate = SanitizeModDirectoryName(candidate, $"mod-{index}");
+        if (reservedTargetNames.Add(candidate))
+        {
+            return candidate;
+        }
+
+        // 极少数归档会给多个 manifest 使用同名目录。不能让后一个清单
+        // 静默覆盖前一个，给它一个稳定的后缀以保留两个 Mod。
+        var suffix = 2;
+        var uniqueCandidate = $"{candidate}-{suffix}";
+        while (!reservedTargetNames.Add(uniqueCandidate))
+        {
+            suffix++;
+            uniqueCandidate = $"{candidate}-{suffix}";
+        }
+
+        return uniqueCandidate;
+    }
+
+    private static string? FindExistingModDirectoryByManifestIdentity(
+        string manifestDirectory,
+        string? modsPath,
+        ISet<string> reservedTargetNames)
+    {
+        if (string.IsNullOrWhiteSpace(modsPath) || !Directory.Exists(modsPath) ||
+            !TryReadModManifestIdentity(manifestDirectory, out var sourceName, out var sourceUniqueId))
+        {
+            return null;
+        }
+
+        List<string> directories;
+        try
+        {
+            directories = Directory.GetDirectories(modsPath)
+                .Where(path =>
+                {
+                    var leaf = Path.GetFileName(path);
+                    return !string.IsNullOrWhiteSpace(leaf) &&
+                           !reservedTargetNames.Contains(leaf) &&
+                           !string.Equals(leaf, "_downloads", StringComparison.OrdinalIgnoreCase) &&
+                           !string.Equals(leaf, "_staging", StringComparison.OrdinalIgnoreCase) &&
+                           IsInstalledModDirectory(path);
+                })
+                .ToList();
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceUniqueId))
+        {
+            foreach (var directory in directories)
+            {
+                if (TryReadModManifestIdentity(directory, out _, out var existingUniqueId) &&
+                    string.Equals(sourceUniqueId, existingUniqueId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return directory;
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceName))
+        {
+            foreach (var directory in directories)
+            {
+                if (TryReadModManifestIdentity(directory, out var existingName, out _) &&
+                    string.Equals(sourceName, existingName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return directory;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryReadModManifestIdentity(
+        string modDirectory,
+        out string name,
+        out string uniqueId)
+    {
+        name = string.Empty;
+        uniqueId = string.Empty;
+        try
+        {
+            var manifestPath = FindManifestPath(modDirectory);
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                return false;
+            }
+
+            using var document = JsonDocument.Parse(
+                ReadTextFileWithBom(manifestPath),
+                ManifestJsonOptions);
+            var root = document.RootElement;
+            name = GetJsonString(root, "Name", "name") ?? string.Empty;
+            uniqueId = GetJsonString(root, "UniqueID", "UniqueId", "unique_id") ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(name) || !string.IsNullOrWhiteSpace(uniqueId);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool LooksLikeGeneratedModDirectoryName(string? directoryName)
     {
         if (string.IsNullOrWhiteSpace(directoryName))
@@ -2007,6 +2141,7 @@ public sealed class ModpackInstallService
         installedNames = [];
         failedNames = [];
         var manifestDirectories = GetInstallableManifestDirectories(sourceDirectory);
+        var reservedTargetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (manifestDirectories.Count == 0)
         {
             failedNames.Add(preferredName);
@@ -2023,9 +2158,14 @@ public sealed class ModpackInstallService
                 continue;
             }
 
-            var targetName = manifestDirectories.Count == 1
-                ? ResolveInstalledModDirectoryName(manifestDirectory, sourceDirectory, preferredName)
-                : SanitizeModDirectoryName(Path.GetFileName(manifestDirectory), $"mod-{i + 1}");
+            var targetName = ResolveInstallTargetName(
+                manifestDirectory,
+                sourceDirectory,
+                preferredName,
+                modsPath,
+                reservedTargetNames,
+                manifestDirectories.Count == 1,
+                i + 1);
             var targetDirectory = Path.Combine(modsPath, targetName);
 
             try
@@ -2068,6 +2208,7 @@ public sealed class ModpackInstallService
         {
             ExtractModArchive(zipPath, stagingDirectory);
             var manifestDirectories = GetInstallableManifestDirectories(stagingDirectory);
+            var reservedTargetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (manifestDirectories.Count == 0)
             {
                 return false;
@@ -2083,9 +2224,14 @@ public sealed class ModpackInstallService
                     continue;
                 }
 
-                var targetName = manifestDirectories.Count == 1
-                    ? ResolveInstalledModDirectoryName(manifestDirectory, stagingDirectory, preferredName)
-                    : SanitizeModDirectoryName(Path.GetFileName(manifestDirectory), $"mod-{i + 1}");
+                var targetName = ResolveInstallTargetName(
+                    manifestDirectory,
+                    stagingDirectory,
+                    preferredName,
+                    modsPath,
+                    reservedTargetNames,
+                    manifestDirectories.Count == 1,
+                    i + 1);
                 var targetDirectory = Path.Combine(modsPath, targetName);
 
                 ReplaceDirectoryFromSource(manifestDirectory, targetDirectory, modsPath);
@@ -2107,6 +2253,101 @@ public sealed class ModpackInstallService
                 }
             }
             catch { }
+        }
+    }
+
+    /// <summary>
+    /// 预览一个 Mod 目录/归档最终会写入的一级目录名。
+    /// 安装前先调用此方法可以发现“更新/覆盖”目标，避免在没有提示的情况下
+    /// 直接替换已有 Mod。预览使用独立临时目录，不会修改 Mods 目录。
+    /// </summary>
+    internal static IReadOnlyList<string> GetInstallTargetNames(string sourcePath, string preferredName)
+    {
+        return GetInstallTargetNames(sourcePath, preferredName, null);
+    }
+
+    /// <summary>
+    /// 预览安装目录名，并在可能时复用目标 Mods 中已有的同一 Mod 目录。
+    /// 复合压缩包的外层目录名不一定等于 manifest 的 Name；例如一个归档同时
+    /// 包含多个子 Mod 时，必须先按 UniqueID/Name 找到现有目录，才能执行更新而
+    /// 不是另建一个包装目录，导致旧版本继续被游戏加载。
+    /// </summary>
+    internal static IReadOnlyList<string> GetInstallTargetNames(
+        string sourcePath,
+        string preferredName,
+        string? modsPath)
+    {
+        var temporaryDirectory = string.Empty;
+        try
+        {
+            string root;
+            if (Directory.Exists(sourcePath))
+            {
+                root = sourcePath;
+            }
+            else if (File.Exists(sourcePath) && IsValidModArchive(sourcePath))
+            {
+                temporaryDirectory = Path.Combine(
+                    Path.GetTempPath(),
+                    "SVL",
+                    "mod-install-preview",
+                    Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(temporaryDirectory);
+                ExtractModArchive(sourcePath, temporaryDirectory);
+                root = temporaryDirectory;
+            }
+            else
+            {
+                return [];
+            }
+
+            var manifestDirectories = GetInstallableManifestDirectories(root);
+            var names = new List<string>();
+            var reservedTargetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < manifestDirectories.Count; i++)
+            {
+                var manifestDirectory = manifestDirectories[i];
+                if (!IsInstalledModDirectory(manifestDirectory))
+                {
+                    continue;
+                }
+
+                var targetName = ResolveInstallTargetName(
+                    manifestDirectory,
+                    root,
+                    preferredName,
+                    modsPath,
+                    reservedTargetNames,
+                    manifestDirectories.Count == 1,
+                    i + 1);
+                if (!string.IsNullOrWhiteSpace(targetName))
+                {
+                    names.Add(targetName);
+                }
+            }
+
+            return names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(temporaryDirectory))
+            {
+                try
+                {
+                    if (Directory.Exists(temporaryDirectory))
+                    {
+                        Directory.Delete(temporaryDirectory, true);
+                    }
+                }
+                catch
+                {
+                    // 临时目录清理失败不应阻断安装前的冲突确认。
+                }
+            }
         }
     }
 
@@ -2992,6 +3233,27 @@ public sealed class ModpackInstallService
         var platform = descriptor.Platform ?? string.Empty;
         var projectId = descriptor.ProjectId;
         var fileId = descriptor.FileId;
+        var repository = descriptor.Repository;
+
+        if (IsGitHubPlatform(platform) &&
+            string.IsNullOrWhiteSpace(downloadUrl) &&
+            RemoteCatalogService.TryNormalizeGitHubRepository(repository, out var normalizedRepository))
+        {
+            var githubRelease = await _remoteCatalogService.CheckGitHubModUpdateAsync(
+                normalizedRepository,
+                string.Empty,
+                ct);
+            if (!githubRelease.IsChecked || string.IsNullOrWhiteSpace(githubRelease.DownloadUrl))
+            {
+                return ModSourceDownloadResult.Failed(
+                    string.IsNullOrWhiteSpace(githubRelease.Message)
+                        ? $"GitHub 仓库 {normalizedRepository} 没有可下载的稳定 Release"
+                        : githubRelease.Message);
+            }
+
+            repository = normalizedRepository;
+            downloadUrl = githubRelease.DownloadUrl;
+        }
 
         if (IsCurseforgePlatform(platform) &&
             TryParsePositiveLong(projectId, out var cachedProjectId) &&
@@ -3068,7 +3330,7 @@ public sealed class ModpackInstallService
                     safeModName,
                     out var cachedInstalledNames))
             {
-                WriteModpackSourceCredentials(
+                WriteModpackSourceCredentialsWithRepository(
                     modsPath,
                     cachedInstalledNames,
                     "NexusMods",
@@ -3087,7 +3349,8 @@ public sealed class ModpackInstallService
                     descriptor.FileName,
                     sourcePlatform: string.IsNullOrWhiteSpace(platform) ? descriptor.Platform : platform,
                     sourceProjectId: ParsePositiveLongOrNull(projectId),
-                    sourceFileId: ParsePositiveLongOrNull(fileId))
+                    sourceFileId: ParsePositiveLongOrNull(fileId),
+                    sourceRepository: repository)
                 ? ModSourceDownloadResult.Success()
                 : ModSourceDownloadResult.Failed("直链下载或 Mod 解压校验失败");
         }
@@ -3281,7 +3544,7 @@ public sealed class ModpackInstallService
             {
                 // 缓存命中也必须写回来源凭证。否则第一次下载后的缓存重装虽然成功，
                 // 但 Mod 目录没有 FileID，后续导出会再次丢失 Nexus 精确文件信息。
-                WriteModpackSourceCredentials(
+                WriteModpackSourceCredentialsWithRepository(
                     modsPath,
                     cachedInstalledNames,
                     "NexusMods",
@@ -3392,7 +3655,7 @@ public sealed class ModpackInstallService
         JsonElement sourceEntry,
         out ModSourceDescriptor descriptor)
     {
-        descriptor = new ModSourceDescriptor(null, null, null, null, null, null);
+        descriptor = new ModSourceDescriptor(null, null, null, null, null, null, null);
         if (sourceEntry.ValueKind != JsonValueKind.Object)
         {
             return false;
@@ -3463,6 +3726,22 @@ public sealed class ModpackInstallService
             fileName = logicalFileName;
         }
 
+        var repository = GetJsonString(
+            credential,
+            "repository",
+            "repo",
+            "githubRepository",
+            "github_repository");
+        if (string.IsNullOrWhiteSpace(repository) && isNestedObject)
+        {
+            repository = GetJsonString(
+                sourceEntry,
+                "repository",
+                "repo",
+                "githubRepository",
+                "github_repository");
+        }
+
         var modId = GetPositiveIdString(credential, "modId", "mod_id", "nexusModId", "nexus_mod_id");
         if (string.IsNullOrWhiteSpace(modId) && isNestedObject)
         {
@@ -3523,6 +3802,19 @@ public sealed class ModpackInstallService
             {
                 platform = sourceText;
             }
+
+            if (sourceText.StartsWith("github:", StringComparison.OrdinalIgnoreCase))
+            {
+                platform = "GitHub";
+                repository = sourceText["github:".Length..].Trim();
+            }
+        }
+
+        if (string.Equals(platform, "github", StringComparison.OrdinalIgnoreCase) &&
+            RemoteCatalogService.TryNormalizeGitHubRepository(repository, out var normalizedRepository))
+        {
+            platform = "GitHub";
+            repository = normalizedRepository;
         }
 
         // 仅当 Unknown 同时伴随 URL 时将其视为缺失，允许从 URL 推断平台；
@@ -3648,7 +3940,9 @@ public sealed class ModpackInstallService
                     System.Globalization.CultureInfo.InvariantCulture);
             }
 
-            if (string.IsNullOrWhiteSpace(fileId) && urlCurseforgeFileId > 0)
+            if (urlCurseforgeFileId > 0 &&
+                (!TryParsePositiveLong(fileId, out var existingUrlFileId) ||
+                 existingUrlFileId != urlCurseforgeFileId))
             {
                 fileId = urlCurseforgeFileId.ToString(
                     System.Globalization.CultureInfo.InvariantCulture);
@@ -3687,12 +3981,14 @@ public sealed class ModpackInstallService
             fileName,
             modId,
             projectId,
-            fileId);
+            fileId,
+            repository);
         return hasSource ||
                !string.IsNullOrWhiteSpace(platform) ||
                !string.IsNullOrWhiteSpace(downloadUrl) ||
                !string.IsNullOrWhiteSpace(projectId) ||
-               !string.IsNullOrWhiteSpace(fileId);
+               !string.IsNullOrWhiteSpace(fileId) ||
+               !string.IsNullOrWhiteSpace(repository);
     }
 
     private static long? ParsePositiveLongOrNull(string? value)
@@ -3756,6 +4052,12 @@ public sealed class ModpackInstallService
         return string.Equals(platform, "Curseforge", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(platform, "CurseForge", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(platform, "Curse", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGitHubPlatform(string? platform)
+    {
+        return string.Equals(platform, "GitHub", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(platform, "Github", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryParseCurseforgeToken(
@@ -3999,6 +4301,10 @@ public sealed class ModpackInstallService
 
         var hasProjectId = TryParsePositiveLong(descriptor.ProjectId, out _);
         var hasFileId = TryParsePositiveLong(descriptor.FileId, out _);
+        if (IsGitHubPlatform(descriptor.Platform))
+        {
+            return RemoteCatalogService.TryNormalizeGitHubRepository(descriptor.Repository, out _);
+        }
         if (IsNexusPlatform(descriptor.Platform))
         {
             // Nexus 旧清单允许只保存 ModID，后续可通过 API/浏览器回调补齐
@@ -4027,7 +4333,8 @@ public sealed class ModpackInstallService
         long? nexusFileId = null,
         string? sourcePlatform = null,
         long? sourceProjectId = null,
-        long? sourceFileId = null)
+        long? sourceFileId = null,
+        string? sourceRepository = null)
     {
         if (!Uri.TryCreate(downloadUrl, UriKind.Absolute, out var uri) ||
             (uri.Scheme != "http" && uri.Scheme != "https"))
@@ -4104,7 +4411,7 @@ public sealed class ModpackInstallService
                 // 必须使用解压器实际返回的目录名。Nexus/CurseForge 压缩包常带
                 // 外层发行包目录，不能假设它一定等于任务名，否则 FileID 会写到
                 // 不存在的路径，导出时仍然看不到来源文件信息。
-                WriteModpackSourceCredentials(
+                WriteModpackSourceCredentialsWithRepository(
                     modsPath,
                     installedNames,
                     string.IsNullOrWhiteSpace(effectiveSourcePlatform)
@@ -4113,7 +4420,8 @@ public sealed class ModpackInstallService
                     effectiveSourceProjectId ?? 0,
                     effectiveSourceFileId ?? 0,
                     downloadUrl,
-                    suggestedFileName);
+                    suggestedFileName,
+                    sourceRepository);
             }
 
             return installed;
@@ -4127,6 +4435,22 @@ public sealed class ModpackInstallService
     internal static bool TryInstallCachedCurseforgeMod(
         long projectId, long fileId, string modsPath, string modName)
     {
+        return TryInstallCachedCurseforgeMod(
+            projectId,
+            fileId,
+            modsPath,
+            modName,
+            out _);
+    }
+
+    internal static bool TryInstallCachedCurseforgeMod(
+        long projectId,
+        long fileId,
+        string modsPath,
+        string modName,
+        out IReadOnlyList<string> installedNames)
+    {
+        installedNames = [];
         // 当前实例的未完成/待整理归档优先于共享缓存，保证恢复任务继续使用
         // 自己已经下载的内容；全局缓存仅作为回退。
         var localCachedPath = Path.Combine(
@@ -4146,12 +4470,13 @@ public sealed class ModpackInstallService
             return false;
         }
 
-        if (!InstallDownloadedModArchive(cachedPath, modsPath, modName, out var installedNames))
+        if (!InstallDownloadedModArchive(cachedPath, modsPath, modName, out var names))
         {
             return false;
         }
 
-        WriteModpackSourceCredentials(modsPath, installedNames, "Curseforge", projectId, fileId);
+        installedNames = names;
+        WriteModpackSourceCredentials(modsPath, names, "Curseforge", projectId, fileId);
         return true;
     }
 
@@ -4378,6 +4703,19 @@ public sealed class ModpackInstallService
         {
             System.Diagnostics.Debug.WriteLine(
                 $"[Modpack] 复用已安装的 CurseForge Mod project={projectId}, file={fileId}");
+            // 兼容旧版本已经安装的条目：即使无需重新解压，也要把旧的
+            // sourceKind=modpack 升级为逐 Mod 的 modpack-entry，并补齐压缩包
+            // 内部的 parentMod/childMods 关系，否则管理页仍会沿用旧的来源
+            // 状态，嵌套子 Mod 也无法在导出/恢复时还原父级。
+            WriteCurseforgeModpackSourceCredentials(
+                modsPath,
+                existingDirectories.Select(Path.GetFileName)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name!)
+                    .ToList(),
+                "Curseforge",
+                projectId,
+                fileId);
             return (true, "已复用已安装 Mod");
         }
 
@@ -4394,7 +4732,7 @@ public sealed class ModpackInstallService
                 fileName,
                 out var cachedInstalledNames))
         {
-            WriteModpackSourceCredentials(
+            WriteCurseforgeModpackSourceCredentials(
                 modsPath,
                 cachedInstalledNames,
                 "Curseforge",
@@ -4417,7 +4755,7 @@ public sealed class ModpackInstallService
                     fileName,
                     out var globalCachedInstalledNames))
             {
-                WriteModpackSourceCredentials(
+                WriteCurseforgeModpackSourceCredentials(
                     modsPath,
                     globalCachedInstalledNames,
                     "Curseforge",
@@ -4460,7 +4798,7 @@ public sealed class ModpackInstallService
                         fileId,
                         zipPath,
                         IsValidModArchiveFile);
-                    WriteModpackSourceCredentials(
+                    WriteCurseforgeModpackSourceCredentials(
                         modsPath,
                         installedNames,
                         "Curseforge",
@@ -4520,10 +4858,121 @@ public sealed class ModpackInstallService
         string? downloadUrl = null,
         string? fileName = null)
     {
+        WriteModpackSourceCredentialsWithRepository(
+            modsPath,
+            installedNames,
+            platform,
+            projectId,
+            fileId,
+            downloadUrl,
+            fileName,
+            repository: null);
+    }
+
+    private static void WriteModpackSourceCredentialsWithRepository(
+        string modsPath,
+        IReadOnlyList<string> installedNames,
+        string? platform,
+        long projectId,
+        long fileId,
+        string? downloadUrl = null,
+        string? fileName = null,
+        string? repository = null)
+    {
+        WriteModpackSourceCredentialsCore(
+            modsPath,
+            installedNames,
+            platform,
+            projectId,
+            fileId,
+            downloadUrl,
+            fileName,
+            repository,
+            isModpackSource: false);
+    }
+
+    private static void WriteCurseforgeModpackSourceCredentials(
+        string modsPath,
+        IReadOnlyList<string> installedNames,
+        string platform,
+        long projectId,
+        long fileId)
+    {
+        WriteModpackSourceCredentialsCore(
+            modsPath,
+            installedNames,
+            platform,
+            projectId,
+            fileId,
+            downloadUrl: null,
+            fileName: null,
+            isModpackSource: true);
+    }
+
+    private static void WriteModpackSourceCredentialsCore(
+        string modsPath,
+        IReadOnlyList<string> installedNames,
+        string? platform,
+        long projectId,
+        long fileId,
+        string? downloadUrl = null,
+        string? fileName = null,
+        string? repository = null,
+        bool isModpackSource = false)
+    {
         if (string.IsNullOrWhiteSpace(platform) && string.IsNullOrWhiteSpace(downloadUrl) ||
             installedNames == null ||
             installedNames.Count == 0)
         {
+            return;
+        }
+
+        var effectiveFileId = fileId;
+        if (IsCurseforgePlatform(platform) &&
+            TryParseCurseforgeFileIdFromCdnUrl(downloadUrl, out var cdnFileId))
+        {
+            effectiveFileId = cdnFileId;
+        }
+
+        // 一个下载归档可能同时包含“父 Mod + 多个 ContentPack”。解压器会
+        // 将这些 manifest 分别整理到 Mods 一级目录，单纯按 installedName
+        // 逐个写来源会把每个子 Mod 都误标成独立来源。先尝试从 manifest
+        // 的 ContentPackFor 关系恢复归档内的父子树；失败时再沿用旧的
+        // 单目录/真正嵌套目录逻辑。
+        var installedDirectories = installedNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => Path.Combine(modsPath, name))
+            .Where(IsInstalledModDirectory)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (TryBuildCompositeInstalledModTree(
+                installedDirectories,
+                out var compositeParentDirectory,
+                out var compositeChildDirectories))
+        {
+            var compositeSource = BuildInstalledSourceCredentialNode(
+                platform,
+                projectId,
+                effectiveFileId,
+                downloadUrl,
+                fileName,
+                repository,
+                isModpackSource ? "modpack-entry" : null);
+            var compositeAllDirectories = new[] { compositeParentDirectory }
+                .Concat(compositeChildDirectories)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var compositeChildrenByParent = compositeAllDirectories.ToDictionary(
+                directory => directory,
+                _ => new List<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            compositeChildrenByParent[compositeParentDirectory].AddRange(compositeChildDirectories);
+            WriteNestedSourceCredentialTree(
+                modsPath,
+                compositeParentDirectory,
+                compositeSource,
+                compositeChildrenByParent,
+                compositeAllDirectories);
             return;
         }
 
@@ -4542,42 +4991,411 @@ public sealed class ModpackInstallService
                     continue;
                 }
 
-                var source = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                if (!string.IsNullOrWhiteSpace(platform))
+                // CurseForge manifest.files 是“整合包内每个文件”的映射，
+                // 这里的 project/file ID 应写到本次实际安装出来的每个 Mod，
+                // 而不是把整个 Modpack 当成一个无来源的项目。
+                var source = BuildInstalledSourceCredentialNode(
+                    platform,
+                    projectId,
+                    effectiveFileId,
+                    downloadUrl,
+                    fileName,
+                    repository,
+                    isModpackSource ? "modpack-entry" : null);
+
+                // 一个下载文件也可能是“父 Mod + 多个嵌套子 Mod”。安装器会
+                // 保留这棵目录树，因此来源凭证也必须按同样的树写入：父目录
+                // 持有真实来源，子目录只记录 parentMod，避免把父文件误当成
+                // 子 Mod 的独立更新源。
+                var nestedDirectories = FindNestedInstalledModDirectories(modDir);
+                var allDirectories = new[] { modDir }
+                    .Concat(nestedDirectories)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var childDirectoriesByParent = allDirectories.ToDictionary(
+                    directory => directory,
+                    _ => new List<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var childDirectory in nestedDirectories)
                 {
-                    source["platform"] = NormalizeSourcePlatform(platform);
+                    var parentDirectory = allDirectories
+                        .Where(candidate =>
+                            !string.Equals(candidate, childDirectory, StringComparison.OrdinalIgnoreCase) &&
+                            IsPathUnderDirectory(childDirectory, candidate))
+                        .OrderByDescending(candidate => candidate.Length)
+                        .FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(parentDirectory) &&
+                        childDirectoriesByParent.TryGetValue(parentDirectory, out var children))
+                    {
+                        children.Add(childDirectory);
+                    }
                 }
 
-                if (projectId > 0)
-                {
-                    source["projectId"] = projectId.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture);
-                }
-
-                if (fileId > 0)
-                {
-                    source["fileId"] = fileId.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture);
-                }
-
-                if (!string.IsNullOrWhiteSpace(downloadUrl))
-                {
-                    source["downloadUrl"] = downloadUrl.Trim();
-                }
-
-                if (!string.IsNullOrWhiteSpace(fileName))
-                {
-                    source["fileName"] = fileName.Trim();
-                }
-
-                AtomicFileWriter.WriteUtf8(
-                    Path.Combine(modDir, "svl-source.json"),
-                    JsonSerializer.Serialize(source, new JsonSerializerOptions { WriteIndented = true }));
+                WriteNestedSourceCredentialTree(
+                    modsPath,
+                    modDir,
+                    source,
+                    childDirectoriesByParent,
+                    allDirectories);
             }
             catch
             {
                 // 来源凭证是增强信息，写入失败不应让 Modpack 安装失败。
             }
+        }
+    }
+
+    private static JsonObject BuildInstalledSourceCredentialNode(
+        string? platform,
+        long projectId,
+        long fileId,
+        string? downloadUrl,
+        string? fileName,
+        string? repository,
+        string? sourceKind)
+    {
+        var source = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(platform))
+        {
+            source["platform"] = NormalizeSourcePlatform(platform);
+        }
+
+        if (projectId > 0)
+        {
+            source["projectId"] = projectId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (fileId > 0)
+        {
+            source["fileId"] = fileId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (!string.IsNullOrWhiteSpace(downloadUrl))
+        {
+            source["downloadUrl"] = downloadUrl.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(fileName))
+        {
+            source["fileName"] = fileName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(repository))
+        {
+            source["repository"] = repository.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(sourceKind))
+        {
+            source["sourceKind"] = sourceKind;
+        }
+
+        return source;
+    }
+
+    private static List<string> FindNestedInstalledModDirectories(string rootDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory))
+        {
+            return [];
+        }
+
+        try
+        {
+            return EnumerateFilesSafe(rootDirectory, "manifest.json")
+                .Select(path => Path.GetDirectoryName(path))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(path!))
+                .Where(path => !string.Equals(path, rootDirectory, StringComparison.OrdinalIgnoreCase))
+                .Where(path => IsInstalledModDirectory(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path.Length)
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// 从同一归档实际安装出的多个一级 Mod 中识别唯一的父 Mod。
+    ///
+    /// 许多 CurseForge/Nexus 发布包的目录结构是：一个 DLL Mod 加上多个
+    /// ContentPack，解压整理后它们是兄弟目录，不能依赖路径嵌套判断。只有
+    /// “恰好一个无 ContentPackFor 的根 + 其余全部带 ContentPackFor”时才
+    /// 自动建立父子关系，避免把一个同时打包的多个独立 DLL Mod 错合并。
+    /// </summary>
+    private static bool TryBuildCompositeInstalledModTree(
+        IReadOnlyCollection<string> installedDirectories,
+        out string parentDirectory,
+        out List<string> childDirectories)
+    {
+        parentDirectory = string.Empty;
+        childDirectories = [];
+        if (installedDirectories == null || installedDirectories.Count < 2)
+        {
+            return false;
+        }
+
+        var roots = new List<string>();
+        var children = new List<string>();
+        foreach (var directory in installedDirectories)
+        {
+            if (!TryReadContentPackForFlag(directory, out var isContentPack))
+            {
+                return false;
+            }
+
+            if (isContentPack)
+            {
+                children.Add(directory);
+            }
+            else
+            {
+                roots.Add(directory);
+            }
+        }
+
+        if (roots.Count != 1 || children.Count == 0 ||
+            roots.Count + children.Count != installedDirectories.Count)
+        {
+            return false;
+        }
+
+        parentDirectory = roots[0];
+        childDirectories = children;
+        return true;
+    }
+
+    private static bool TryReadContentPackForFlag(
+        string modDirectory,
+        out bool isContentPack)
+    {
+        isContentPack = false;
+        try
+        {
+            var manifestPath = FindManifestPath(modDirectory);
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                return false;
+            }
+
+            using var document = JsonDocument.Parse(
+                ReadTextFileWithBom(manifestPath),
+                ManifestJsonOptions);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !TryGetJsonPropertyIgnoreCase(
+                    document.RootElement,
+                    "ContentPackFor",
+                    out var contentPackFor))
+            {
+                return true;
+            }
+
+            isContentPack = contentPackFor.ValueKind switch
+            {
+                JsonValueKind.Object => contentPackFor.EnumerateObject().Any(),
+                JsonValueKind.String => !string.IsNullOrWhiteSpace(contentPackFor.GetString()),
+                _ => false
+            };
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void WriteNestedSourceCredentialTree(
+        string modsPath,
+        string rootDirectory,
+        JsonObject rootSource,
+        IReadOnlyDictionary<string, List<string>> childDirectoriesByParent,
+        IReadOnlyCollection<string> allDirectories)
+    {
+        var sourceByDirectory = new Dictionary<string, JsonObject>(StringComparer.OrdinalIgnoreCase)
+        {
+            [rootDirectory] = rootSource
+        };
+
+        foreach (var directory in allDirectories.Where(path =>
+                     !string.Equals(path, rootDirectory, StringComparison.OrdinalIgnoreCase)))
+        {
+            var parentDirectory = childDirectoriesByParent
+                .Where(pair => pair.Value.Any(child =>
+                    string.Equals(child, directory, StringComparison.OrdinalIgnoreCase)))
+                .Select(pair => pair.Key)
+                .FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(parentDirectory))
+            {
+                continue;
+            }
+
+            var parentReference = CreateParentModReference(modsPath, parentDirectory);
+            var childSource = ReadSourceCredentialNode(directory) ?? new JsonObject();
+
+            // 当前归档中的嵌套目录都是父文件的一部分，不能用旧的
+            // project/file ID 伪装成可单独更新的子 Mod。无论来源是
+            // Modpack、Collection 还是普通 Mod 下载，都统一记录父级来源；
+            // 这样更新父包或撤回更新时不会因子目录名称变化而丢失关系。
+            RemoveIndependentSourceFields(childSource);
+            childSource["sourceKind"] = "parent-inherited";
+
+            childSource["isParentMod"] = HasChildren(childDirectoriesByParent, directory);
+            childSource["parentMod"] = parentReference;
+            childSource["childMods"] = BuildChildReferences(
+                modsPath,
+                childDirectoriesByParent.TryGetValue(directory, out var children) ? children : []);
+            sourceByDirectory[directory] = childSource;
+        }
+
+        foreach (var pair in childDirectoriesByParent)
+        {
+            if (!sourceByDirectory.TryGetValue(pair.Key, out var source))
+            {
+                continue;
+            }
+
+            var children = pair.Value;
+            source["isParentMod"] = children.Count > 0;
+            source["childMods"] = BuildChildReferences(modsPath, children);
+        }
+
+        foreach (var directory in allDirectories)
+        {
+            if (!sourceByDirectory.TryGetValue(directory, out var source))
+            {
+                continue;
+            }
+
+            try
+            {
+                AtomicFileWriter.WriteUtf8(
+                    Path.Combine(directory, "svl-source.json"),
+                    source.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch
+            {
+                // 来源凭证是增强信息，写入失败不应让 Modpack 安装失败。
+            }
+        }
+
+        // 更新包可能带多个来源文件。清理整棵目录，避免旧子 Mod 的
+        // hasUpdate=true 在安装完成后再次被管理页读出。复合归档整理后
+        // 子 Mod 可能是 rootDirectory 的兄弟目录，也必须逐一清理。
+        foreach (var directory in allDirectories)
+        {
+            ClearPersistedModUpdateState(directory);
+        }
+    }
+
+    private static bool HasChildren(
+        IReadOnlyDictionary<string, List<string>> childDirectoriesByParent,
+        string directory)
+    {
+        return childDirectoriesByParent.TryGetValue(directory, out var children) && children.Count > 0;
+    }
+
+    private static JsonArray BuildChildReferences(
+        string modsPath,
+        IReadOnlyCollection<string> childDirectories)
+    {
+        var references = new JsonArray();
+        foreach (var childDirectory in childDirectories)
+        {
+            TryReadModManifestIdentity(childDirectory, out var name, out var uniqueId);
+            var relativePath = Path.GetRelativePath(modsPath, childDirectory)
+                .Replace(Path.DirectorySeparatorChar, '/')
+                .Replace(Path.AltDirectorySeparatorChar, '/');
+            references.Add(new JsonObject
+            {
+                ["id"] = string.IsNullOrWhiteSpace(uniqueId) ? relativePath : uniqueId,
+                ["name"] = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(childDirectory) : name,
+                ["relativePath"] = relativePath,
+                ["uniqueId"] = uniqueId
+            });
+        }
+
+        return references;
+    }
+
+    private static JsonObject CreateParentModReference(string modsPath, string parentDirectory)
+    {
+        TryReadModManifestIdentity(parentDirectory, out var name, out var uniqueId);
+        var relativePath = Path.GetRelativePath(modsPath, parentDirectory)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+        return new JsonObject
+        {
+            ["id"] = string.IsNullOrWhiteSpace(uniqueId) ? relativePath : uniqueId,
+            ["name"] = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(parentDirectory) : name,
+            ["relativePath"] = relativePath
+        };
+    }
+
+    private static JsonObject? ReadSourceCredentialNode(string modDirectory)
+    {
+        try
+        {
+            var sourcePath = Path.Combine(modDirectory, "svl-source.json");
+            return File.Exists(sourcePath)
+                ? JsonNode.Parse(ReadTextFileWithBom(sourcePath)) as JsonObject
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool HasIndependentSourceCredential(JsonObject source)
+    {
+        var platform = GetJsonNodeString(source, "platform");
+        var projectId = GetJsonNodeString(source, "projectId", "project_id", "modId");
+        var repository = GetJsonNodeString(source, "repository", "repo", "githubRepository");
+        var downloadUrl = GetJsonNodeString(source, "downloadUrl", "download_url", "url");
+        return !string.IsNullOrWhiteSpace(downloadUrl) ||
+               (IsGitHubPlatform(platform) &&
+                RemoteCatalogService.TryNormalizeGitHubRepository(repository, out _)) ||
+               ((IsNexusPlatform(platform) || IsCurseforgePlatform(platform)) &&
+                TryParsePositiveLong(projectId, out _));
+    }
+
+    private static string GetJsonNodeString(JsonObject source, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!source.TryGetPropertyValue(propertyName, out var value) || value is not JsonValue jsonValue)
+            {
+                continue;
+            }
+
+            if (jsonValue.TryGetValue<string>(out var text) && !string.IsNullOrWhiteSpace(text))
+            {
+                return text.Trim();
+            }
+
+            if (jsonValue.TryGetValue<long>(out var number) && number > 0)
+            {
+                return number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static void RemoveIndependentSourceFields(JsonObject source)
+    {
+        foreach (var propertyName in new[]
+                 {
+                     "platform", "projectId", "project_id", "modId", "mod_id", "fileId", "file_id",
+                     "downloadUrl", "download_url", "url", "fileName", "file_name", "hasUpdate",
+                     "latestVersion", "updateStatus", "updateUrl", "updateFileId"
+                 })
+        {
+            source.Remove(propertyName);
         }
     }
 
@@ -4595,68 +5413,205 @@ public sealed class ModpackInstallService
         string? downloadUrl = null,
         string? fileName = null)
     {
-        if (string.IsNullOrWhiteSpace(modsPath) ||
-            installedNames == null ||
-            installedNames.Count == 0)
+        WriteSourceCredentialForInstalledModWithRepository(
+            modsPath,
+            installedNames,
+            platform,
+            projectId,
+            fileId,
+            downloadUrl,
+            fileName,
+            repository: null);
+    }
+
+    internal static void WriteSourceCredentialForInstalledModWithRepository(
+        string modsPath,
+        IReadOnlyList<string> installedNames,
+        string? platform,
+        long? projectId,
+        long? fileId,
+        string? downloadUrl,
+        string? fileName,
+        string? repository)
+    {
+        // Collection 的清单没有 SVL sources.json 那样的条目映射，但一个
+        // Collection 归档同样可能解出父 Mod 和多个 ContentPack。复用统一
+        // 的来源树写入逻辑，保证 Collection 与 Modpack 的更新/回滚语义一致。
+        WriteModpackSourceCredentialsCore(
+            modsPath,
+            installedNames,
+            platform,
+            projectId.GetValueOrDefault(),
+            fileId.GetValueOrDefault(),
+            downloadUrl,
+            fileName,
+            repository,
+            isModpackSource: false);
+    }
+
+    /// <summary>
+    /// 清理安装包目录及其子 Mod 的持久化更新快照。
+    ///
+    /// hasUpdate/latestVersion/updateStatus 等字段是本地检测缓存，不属于
+    /// 下载包的来源凭证。安装新包后必须清掉整棵复合目录，等待下一次更新检测
+    /// 根据新 manifest 的版本重新计算；否则旧包内携带的 svl-source.json 会
+    /// 在重载 Mod 管理页时把“可更新”恢复出来。
+    /// </summary>
+    internal static void ClearPersistedModUpdateState(string modDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(modDirectory) || !Directory.Exists(modDirectory))
         {
             return;
         }
 
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(platform))
+        foreach (var sourcePath in EnumerateFilesSafe(modDirectory, "svl-source.json"))
         {
-            values["platform"] = NormalizeSourcePlatform(platform);
-        }
-
-        if (projectId is > 0)
-        {
-            values["projectId"] = projectId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        if (fileId is > 0)
-        {
-            values["fileId"] = fileId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        if (!string.IsNullOrWhiteSpace(downloadUrl))
-        {
-            values["downloadUrl"] = downloadUrl.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(fileName))
-        {
-            values["fileName"] = fileName.Trim();
-        }
-
-        // Collection 的直链条目可能没有平台和数字 ID，但仍然是可重新下载、
-        // 可导出的有效来源。没有任何来源字段时才跳过，避免写出空凭证。
-        if (values.Count == 0)
-        {
-            return;
-        }
-
-        var json = JsonSerializer.Serialize(values, new JsonSerializerOptions { WriteIndented = true });
-        foreach (var installedName in installedNames.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(installedName))
-            {
-                continue;
-            }
-
             try
             {
-                var modDirectory = Path.Combine(modsPath, installedName);
-                if (!Directory.Exists(modDirectory))
+                using var document = JsonDocument.Parse(ReadTextFileWithBom(sourcePath));
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
                 {
                     continue;
                 }
 
-                AtomicFileWriter.WriteUtf8(Path.Combine(modDirectory, "svl-source.json"), json);
+                var values = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    values[property.Name] = property.Value.Clone();
+                }
+
+                values["hasUpdate"] = JsonSerializer.SerializeToElement(false);
+                values["latestVersion"] = JsonSerializer.SerializeToElement(string.Empty);
+                values["updateStatus"] = JsonSerializer.SerializeToElement("未检查");
+                values["updateUrl"] = JsonSerializer.SerializeToElement(string.Empty);
+                values["updateFileId"] = JsonSerializer.SerializeToElement(string.Empty);
+                AtomicFileWriter.WriteUtf8(
+                    sourcePath,
+                    JsonSerializer.Serialize(values, new JsonSerializerOptions { WriteIndented = true }));
             }
             catch
             {
-                // 来源凭证是增强信息，写入失败不应让已经成功安装的 Mod 失败。
+                // 单个旧来源文件损坏或被占用时，不影响其它子 Mod 的清理。
             }
+        }
+    }
+
+    /// <summary>
+    /// 修复旧版本把同一归档中的父 Mod、ContentPack 分别记录成独立来源
+    /// 的情况。
+    ///
+    /// 旧数据经常只保留 projectId，不同子条目还带着旧 fileId；因此按
+    /// “平台 + 项目 ID”分组，再用 manifest 的 ContentPackFor 形态确认
+    /// “恰好一个父 Mod + 一个或多个 ContentPack”。只修改来源凭证，不
+    /// 移动、删除或覆盖用户 Mod 文件。
+    /// </summary>
+    internal static void RepairCompositeSourceCredentials(string modsPath)
+    {
+        if (string.IsNullOrWhiteSpace(modsPath) || !Directory.Exists(modsPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var candidates = EnumerateTopLevelDirectoriesSafe(modsPath)
+                .Where(IsInstalledModDirectory)
+                .Select(directory => new
+                {
+                    Directory = directory,
+                    Source = ReadSourceCredentialNode(directory)
+                })
+                .Where(item => item.Source != null)
+                .Select(item =>
+                {
+                    var platform = NormalizeSourcePlatform(
+                        GetJsonNodeString(item.Source!, "platform", "provider", "site") ?? string.Empty);
+                    var projectId = GetJsonNodeString(
+                        item.Source!,
+                        "projectId",
+                        "project_id",
+                        "modId",
+                        "mod_id") ?? string.Empty;
+                    return new
+                    {
+                        item.Directory,
+                        item.Source,
+                        Platform = platform,
+                        ProjectId = projectId
+                    };
+                })
+                .Where(item =>
+                    !string.IsNullOrWhiteSpace(item.Platform) &&
+                    TryParsePositiveLong(item.ProjectId, out _))
+                .GroupBy(
+                    item => $"{item.Platform}:{item.ProjectId}",
+                    StringComparer.OrdinalIgnoreCase);
+
+            foreach (var group in candidates)
+            {
+                var directories = group
+                    .Select(item => item.Directory)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (!TryBuildCompositeInstalledModTree(
+                        directories,
+                        out var parentDirectory,
+                        out var childDirectories))
+                {
+                    continue;
+                }
+
+                var parentSource = ReadSourceCredentialNode(parentDirectory) ??
+                                   group.Select(item => item.Source)
+                                       .FirstOrDefault(source => source != null)?
+                                       .DeepClone() as JsonObject;
+                if (parentSource == null)
+                {
+                    continue;
+                }
+
+                var needsRepair =
+                    !string.Equals(
+                        GetJsonNodeString(parentSource, "sourceKind"),
+                        "modpack-entry",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    childDirectories.Any(childDirectory =>
+                    {
+                        var childSource = ReadSourceCredentialNode(childDirectory);
+                        return childSource == null ||
+                               !string.Equals(
+                                   GetJsonNodeString(childSource, "sourceKind"),
+                                   "parent-inherited",
+                                   StringComparison.OrdinalIgnoreCase);
+                    });
+                if (!needsRepair)
+                {
+                    continue;
+                }
+
+                parentSource["sourceKind"] = "modpack-entry";
+                parentSource.Remove("parentMod");
+                var allDirectories = new[] { parentDirectory }
+                    .Concat(childDirectories)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var childrenByParent = allDirectories.ToDictionary(
+                    directory => directory,
+                    _ => new List<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+                childrenByParent[parentDirectory].AddRange(childDirectories);
+                WriteNestedSourceCredentialTree(
+                    modsPath,
+                    parentDirectory,
+                    parentSource,
+                    childrenByParent,
+                    allDirectories);
+            }
+        }
+        catch
+        {
+            // 旧来源修复是增强性的兼容迁移；单个实例目录异常不应阻断
+            // Mod 管理页加载或其它实例操作。
         }
     }
 
@@ -4668,6 +5623,7 @@ public sealed class ModpackInstallService
             var value when value.Equals("nexusmods", StringComparison.OrdinalIgnoreCase) => "NexusMods",
             var value when value.Equals("curseforge", StringComparison.OrdinalIgnoreCase) => "Curseforge",
             var value when value.Equals("curse", StringComparison.OrdinalIgnoreCase) => "Curseforge",
+            var value when value.Equals("github", StringComparison.OrdinalIgnoreCase) => "GitHub",
             var value => value
         };
     }
@@ -4675,7 +5631,10 @@ public sealed class ModpackInstallService
     /// <summary>从 sources.json 的 source 字段写 svl-source.json 到各 mod 目录。</summary>
     private static void WriteSourceCredentials(List<JsonElement> sourcesList, string modsPath)
     {
-        foreach (var source in sourcesList)
+        // 导出清单可能同时包含父条目和“逐 Mod”子条目。先处理带有
+        // childMods/parentMod 关系的父条目，后续才能保护已经写好的继承凭证。
+        foreach (var source in sourcesList
+                     .OrderByDescending(HasExplicitCompositeSourceRelation))
         {
             try
             {
@@ -4698,7 +5657,8 @@ public sealed class ModpackInstallService
                 if (string.IsNullOrWhiteSpace(descriptor.Platform) &&
                     string.IsNullOrWhiteSpace(descriptor.DownloadUrl) &&
                     string.IsNullOrWhiteSpace(descriptor.ProjectId) &&
-                    string.IsNullOrWhiteSpace(descriptor.FileId))
+                    string.IsNullOrWhiteSpace(descriptor.FileId) &&
+                    string.IsNullOrWhiteSpace(descriptor.Repository))
                 {
                     continue;
                 }
@@ -4723,6 +5683,15 @@ public sealed class ModpackInstallService
                 {
                     var sourceFilePath = Path.Combine(modDir, "svl-source.json");
 
+                    // 父归档已经为该目录写入 parent-inherited 后，清单中的
+                    // 子 Mod 独立条目不能再次覆盖它，否则下一次更新会把
+                    // 子 Mod 当成独立来源。显式父条目仍允许写入自己的根目录。
+                    if (!HasExplicitCompositeSourceRelation(source) &&
+                        HasPersistedParentSourceRelation(modDir))
+                    {
+                        continue;
+                    }
+
                     // 浏览器回退可能已经写入了真实 fileId。不要让导入包中
                     // fileId 为空的旧 source 再次覆盖它，否则下一次导出仍然
                     // 会丢失可直接复用的 Nexus 文件定位信息。
@@ -4746,9 +5715,201 @@ public sealed class ModpackInstallService
                     }
 
                     AtomicFileWriter.WriteUtf8(sourceFilePath, sourceJson);
+                    WriteInheritedChildSourceCredentials(modsPath, modDir, source);
                 }
             }
             catch { }
+        }
+    }
+
+    private static bool HasExplicitCompositeSourceRelation(JsonElement source)
+    {
+        if (TryGetJsonPropertyIgnoreCase(source, "childMods", out var childMods) &&
+            childMods.ValueKind == JsonValueKind.Array &&
+            childMods.GetArrayLength() > 0)
+        {
+            return true;
+        }
+
+        return TryGetJsonPropertyIgnoreCase(source, "parentMod", out var parentMod) &&
+               parentMod.ValueKind == JsonValueKind.Object;
+    }
+
+    private static bool HasPersistedParentSourceRelation(string modDirectory)
+    {
+        var source = ReadSourceCredentialNode(modDirectory);
+        if (source == null)
+        {
+            return false;
+        }
+
+        if (string.Equals(
+                GetJsonNodeString(source, "sourceKind"),
+                "parent-inherited",
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                GetJsonNodeString(source, "sourceKind"),
+                "modpack-parent-inherited",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return source.TryGetPropertyValue("parentMod", out var parentMod) &&
+               parentMod is JsonObject;
+    }
+
+    private static void WriteInheritedChildSourceCredentials(
+        string modsPath,
+        string parentDirectory,
+        JsonElement sourceEntry)
+    {
+        if (!TryGetJsonPropertyIgnoreCase(sourceEntry, "childMods", out var childMods) ||
+            childMods.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var parentReference = CreateParentModReference(modsPath, parentDirectory);
+        foreach (var childReference in childMods.EnumerateArray())
+        {
+            var childDirectory = ResolveInheritedChildDirectory(
+                modsPath,
+                parentDirectory,
+                childReference);
+            if (string.IsNullOrWhiteSpace(childDirectory))
+            {
+                continue;
+            }
+
+            var childSource = ReadSourceCredentialNode(childDirectory) ?? new JsonObject();
+            // childMods 是父文件内部目录映射的权威关系。即使旧版本曾经给
+            // 子目录写过独立 project/file，也必须清掉，避免它在下一次更新
+            // 检查时被误认为可独立下载的来源；真正可撤回的信息由 parentMod
+            // 和父级来源共同提供。
+            RemoveIndependentSourceFields(childSource);
+            childSource["sourceKind"] = "parent-inherited";
+
+            childSource["parentMod"] = parentReference.DeepClone();
+            childSource["isParentMod"] = false;
+            childSource["childMods"] = new JsonArray();
+            try
+            {
+                AtomicFileWriter.WriteUtf8(
+                    Path.Combine(childDirectory, "svl-source.json"),
+                    childSource.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch
+            {
+                // 单个嵌套子 Mod 的凭证写入失败，不应让其它来源条目失败。
+            }
+        }
+    }
+
+    private static string? ResolveInheritedChildDirectory(
+        string modsPath,
+        string parentDirectory,
+        JsonElement childReference)
+    {
+        var relativePath = GetJsonString(childReference, "relativePath", "path");
+        if (!string.IsNullOrWhiteSpace(relativePath))
+        {
+            var candidate = ResolveModRelativePath(modsPath, relativePath);
+            if (!string.IsNullOrWhiteSpace(candidate) &&
+                IsInstalledModDirectory(candidate) &&
+                IsMatchingChildManifest(candidate, childReference))
+            {
+                return candidate;
+            }
+        }
+
+        // 导入时目录名可能已经从 cf-项目ID-文件ID 或旧父目录名整理成
+        // manifest.Name。用 UniqueID 优先、Name 次之扫描父目录和 Mods 根下
+        // 的真实 Mod。后者用于“一个归档解出多个一级 Mod”被展平后的兄弟目录。
+        var expectedUniqueId = GetJsonString(childReference, "uniqueId", "uniqueID", "unique_id");
+        var expectedName = GetJsonString(childReference, "name", "modName", "displayName");
+        var fallbackDirectories = FindNestedInstalledModDirectories(parentDirectory)
+            .Concat(EnumerateTopLevelDirectoriesSafe(modsPath))
+            .Where(directory =>
+                !string.Equals(directory, parentDirectory, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var directory in fallbackDirectories)
+        {
+            if (!TryReadModManifestIdentity(directory, out var actualName, out var actualUniqueId))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(expectedUniqueId) &&
+                string.Equals(expectedUniqueId, actualUniqueId, StringComparison.OrdinalIgnoreCase))
+            {
+                return directory;
+            }
+
+            if (!string.IsNullOrWhiteSpace(expectedName) &&
+                string.Equals(expectedName, actualName, StringComparison.OrdinalIgnoreCase))
+            {
+                return directory;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateTopLevelDirectoriesSafe(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        try
+        {
+            return Directory.GetDirectories(directory);
+        }
+        catch
+        {
+            // 兼容回退扫描是增强能力；单个目录无权限时不应阻断其它来源。
+            return [];
+        }
+    }
+
+    private static bool IsMatchingChildManifest(
+        string directory,
+        JsonElement childReference)
+    {
+        var expectedUniqueId = GetJsonString(childReference, "uniqueId", "uniqueID", "unique_id");
+        var expectedName = GetJsonString(childReference, "name", "modName", "displayName");
+        if (string.IsNullOrWhiteSpace(expectedUniqueId) && string.IsNullOrWhiteSpace(expectedName))
+        {
+            return true;
+        }
+
+        if (!TryReadModManifestIdentity(directory, out var actualName, out var actualUniqueId))
+        {
+            return false;
+        }
+
+        return (!string.IsNullOrWhiteSpace(expectedUniqueId) &&
+                string.Equals(expectedUniqueId, actualUniqueId, StringComparison.OrdinalIgnoreCase)) ||
+               (!string.IsNullOrWhiteSpace(expectedName) &&
+                string.Equals(expectedName, actualName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? ResolveModRelativePath(string modsPath, string relativePath)
+    {
+        try
+        {
+            var normalizedRelativePath = relativePath
+                .Replace('/', Path.DirectorySeparatorChar)
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var candidate = Path.GetFullPath(Path.Combine(modsPath, normalizedRelativePath));
+            return IsPathUnderDirectory(candidate, modsPath) ? candidate : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -4775,6 +5936,15 @@ public sealed class ModpackInstallService
             {
                 values[relationPropertyName] = relationValue.Clone();
             }
+        }
+
+        // sources.json 的每一条记录都代表一个可独立定位的整合包 Mod。
+        // 没有显式 sourceKind 的旧导出也要标记为 modpack-entry，避免导入后
+        // 被兼容逻辑误判成“只有整合包来源、没有 Mod 来源”。嵌套子 Mod
+        // 随后会由 WriteInheritedChildSourceCredentials 改为 parent-inherited。
+        if (!values.Keys.Any(name => string.Equals(name, "sourceKind", StringComparison.OrdinalIgnoreCase)))
+        {
+            values["sourceKind"] = JsonSerializer.SerializeToElement("modpack-entry");
         }
 
         if (!string.IsNullOrWhiteSpace(descriptor.Platform))
@@ -4810,6 +5980,12 @@ public sealed class ModpackInstallService
             values["downloadUrl"] = JsonSerializer.SerializeToElement(descriptor.DownloadUrl);
         }
 
+        if (!string.IsNullOrWhiteSpace(descriptor.Repository) &&
+            !values.ContainsKey("repository"))
+        {
+            values["repository"] = JsonSerializer.SerializeToElement(descriptor.Repository);
+        }
+
         // 没有 source 包装时，descriptor 已经从条目顶层提取完毕；仅写标准凭证字段，
         // 不把 name/directoryName 等整合包元数据误写进 Mod 目录。
         return JsonSerializer.Serialize(values, new JsonSerializerOptions { WriteIndented = true });
@@ -4834,6 +6010,10 @@ public sealed class ModpackInstallService
 
         foreach (var candidate in exactCandidates)
         {
+            // sources.json 的显式 directoryName 是安装器刚刚整理出的目标目录；
+            // 写凭证阶段允许它暂时只有文件（旧版导出与测试夹具都可能没有
+            // manifest），而“按来源复用已有安装”仍由下面的扫描分支严格要求
+            // IsInstalledModDirectory，避免空目录跳过真实下载。
             if (Directory.Exists(candidate))
             {
                 result.Add(candidate);

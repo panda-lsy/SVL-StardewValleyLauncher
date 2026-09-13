@@ -88,7 +88,7 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>拖放释放时：取首个受支持的整合包文件路径交给 ViewModel 处理。</summary>
+    /// <summary>拖放释放时：优先识别 Mod，其次把整合包交给统一导入流程。</summary>
     private async void MainWindow_Drop(object? sender, DragEventArgs e)
     {
         e.Handled = true;
@@ -98,12 +98,27 @@ public partial class MainWindow : Window
             return;
         }
 
-        string? modpackPath = null;
-        foreach (var file in files)
-        {
-            var path = file.Path.IsAbsoluteUri
+        var paths = files
+            .Select(file => file.Path.IsAbsoluteUri
                 ? Uri.UnescapeDataString(file.Path.LocalPath)
-                : file.Path.ToString();
+                : file.Path.ToString())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var modPaths = paths
+            .Where(path => ModArchiveDetector.LooksLikeModInstallSource(path) &&
+                           !IsRecognizedModpack(path))
+            .ToList();
+        if (DataContext is MainWindowViewModel modVm && modPaths.Count > 0)
+        {
+            await modVm.HandleModInstallDropAsync(modPaths);
+            return;
+        }
+
+        string? modpackPath = null;
+        foreach (var path in paths)
+        {
             if (ModpackTypeDetector.IsSupportedFile(path))
             {
                 modpackPath = path;
@@ -120,6 +135,22 @@ public partial class MainWindow : Window
         {
             await vm.HandleModpackDropAsync(modpackPath);
         }
+    }
+
+    private static bool IsRecognizedModpack(string path)
+    {
+        if (!ModpackTypeDetector.IsSupportedFile(path))
+        {
+            return false;
+        }
+
+        var detection = ModpackTypeDetector.Detect(path);
+        if (!string.IsNullOrWhiteSpace(detection.TempExtractPath))
+        {
+            ModpackTypeDetector.CleanupTempDirectory(detection.TempExtractPath);
+        }
+
+        return detection.Type != ModpackType.Unknown;
     }
 
     private void MinimizeButton_Click(object? sender, RoutedEventArgs e)

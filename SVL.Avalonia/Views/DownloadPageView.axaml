@@ -11,7 +11,7 @@
              x:DataType="vm:DownloadPageViewModel">
   <Grid ColumnDefinitions="280,*">
     <Border Grid.Column="0" Classes="panel">
-      <ScrollViewer>
+      <ScrollViewer Classes="downloadSidebar">
         <StackPanel Spacing="8">
         <TextBlock Text="{Binding DownloadCategoryTitleText}" Classes="sectionTitle" />
         <Button Classes="downloadCategory" Command="{Binding SelectCategoryCommand}" CommandParameter="{x:Static model:DownloadCategory.Game}">

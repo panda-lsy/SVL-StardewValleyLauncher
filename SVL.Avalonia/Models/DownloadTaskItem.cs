@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace SVL.Avalonia.Models;
 
@@ -47,6 +48,70 @@ public enum DownloadTaskState
     Cancelled
 }
 
+/// <summary>整合包中单个 Mod 的安装状态。</summary>
+public enum CollectionModTaskState
+{
+    Pending,
+    Downloading,
+    Installed,
+    Failed,
+    Skipped
+}
+
+/// <summary>任务详情中展示的整合包 Mod 子任务。</summary>
+public partial class CollectionModTaskItem : ObservableObject
+{
+    [ObservableProperty]
+    private string _name = string.Empty;
+
+    [ObservableProperty]
+    private int _phase = 1;
+
+    [ObservableProperty]
+    private bool _optional;
+
+    [ObservableProperty]
+    private CollectionModTaskState _state = CollectionModTaskState.Pending;
+
+    [ObservableProperty]
+    private string _message = string.Empty;
+
+    /// <summary>清单中提供的手动来源地址，仅用于打开来源页，不作为压缩包直接下载。</summary>
+    [ObservableProperty]
+    private string _sourceUrl = string.Empty;
+
+    /// <summary>该条目需要用户先在浏览器中完成下载或补充来源。</summary>
+    [ObservableProperty]
+    private bool _requiresManualAction;
+
+    public bool IsFinished => State is CollectionModTaskState.Installed or CollectionModTaskState.Failed or CollectionModTaskState.Skipped;
+
+    public bool HasOpenableSourceUrl =>
+        Uri.TryCreate(SourceUrl, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    public string DisplayStateText => State switch
+    {
+        CollectionModTaskState.Pending => "等待中",
+        CollectionModTaskState.Downloading => "处理中",
+        CollectionModTaskState.Installed => "已安装",
+        CollectionModTaskState.Failed => "失败",
+        CollectionModTaskState.Skipped => "已跳过",
+        _ => "未知"
+    };
+
+    partial void OnStateChanged(CollectionModTaskState value)
+    {
+        OnPropertyChanged(nameof(IsFinished));
+        OnPropertyChanged(nameof(DisplayStateText));
+    }
+
+    partial void OnSourceUrlChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasOpenableSourceUrl));
+    }
+}
+
 public partial class DownloadTaskItem : ObservableObject
 {
     [ObservableProperty]
@@ -78,6 +143,9 @@ public partial class DownloadTaskItem : ObservableObject
 
     /// <summary>下载来源平台（NexusMods / Curseforge）。</summary>
     public string SourcePlatform { get; set; } = string.Empty;
+
+    /// <summary>GitHub 来源仓库（owner/repo）；GitHub 不使用数字 ProjectID。</summary>
+    public string SourceRepository { get; set; } = string.Empty;
 
     /// <summary>Nexus Collection 的稳定缓存身份；revision 为 -1 时表示 latest。</summary>
     public string CollectionSlug { get; set; } = string.Empty;
@@ -136,6 +204,13 @@ public partial class DownloadTaskItem : ObservableObject
     [ObservableProperty]
     private string _customIconPath = string.Empty;
 
+    /// <summary>
+    /// 批量更新任务使用的无交互覆盖模式。开启后安装阶段不再重复弹出冲突窗口，
+    /// 而是在覆盖前自动备份已有 Mod；备份失败时任务直接失败并保留可重试状态。
+    /// </summary>
+    [ObservableProperty]
+    private bool _skipConflictPrompt;
+
     /// <summary>下载速度文本（如 "2.3 MB/s"），由下载进度回调填充。空表示无速度信息。</summary>
     [ObservableProperty]
     private string _speedText = string.Empty;
@@ -166,6 +241,79 @@ public partial class DownloadTaskItem : ObservableObject
 
     /// <summary>多线程分片进度（每个线程一条，进度条分块显示）。必须在 UI 线程上同步。</summary>
     public ObservableCollection<DownloadSegmentItem> SegmentItems { get; } = [];
+
+    /// <summary>整合包逐 Mod 状态。该集合随任务状态文件一起保存，重启后仍可查看失败项。</summary>
+    public ObservableCollection<CollectionModTaskItem> CollectionModItems { get; } = [];
+
+    public bool HasCollectionModItems => CollectionModItems.Count > 0;
+
+    public int CollectionModTotalCount => CollectionModItems.Count;
+
+    public int CollectionModFinishedCount => CollectionModItems.Count(item => item.IsFinished);
+
+    public int CollectionModFailedCount => CollectionModItems.Count(item => item.State == CollectionModTaskState.Failed);
+
+    public int CollectionModProgress => CollectionModItems.Count == 0
+        ? -1
+        : (int)Math.Round(CollectionModFinishedCount * 100d / CollectionModItems.Count);
+
+    public string CollectionModProgressText => CollectionModItems.Count == 0
+        ? string.Empty
+        : $"{CollectionModFinishedCount}/{CollectionModItems.Count} 个 Mod 已处理";
+
+    /// <summary>同步一个整合包 Mod 的状态。调用方必须在 UI 线程执行。</summary>
+    public void SyncCollectionModProgress(
+        string name,
+        int phase,
+        bool optional,
+        CollectionModTaskState state,
+        string? message = null,
+        string? sourceUrl = null,
+        bool requiresManualAction = false)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        var item = CollectionModItems.FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (item == null)
+        {
+            item = new CollectionModTaskItem { Name = name.Trim() };
+            CollectionModItems.Add(item);
+        }
+
+        item.Phase = phase > 0 ? phase : 1;
+        item.Optional = optional;
+        item.State = state;
+        item.Message = message?.Trim() ?? string.Empty;
+        item.SourceUrl = sourceUrl?.Trim() ?? string.Empty;
+        item.RequiresManualAction = requiresManualAction;
+        OnPropertyChanged(nameof(HasCollectionModItems));
+        OnPropertyChanged(nameof(CollectionModTotalCount));
+        OnPropertyChanged(nameof(CollectionModFinishedCount));
+        OnPropertyChanged(nameof(CollectionModFailedCount));
+        OnPropertyChanged(nameof(CollectionModProgress));
+        OnPropertyChanged(nameof(CollectionModProgressText));
+    }
+
+    /// <summary>重试整合包前清空上一次的逐 Mod 运行状态。</summary>
+    public void ResetCollectionModProgress()
+    {
+        if (CollectionModItems.Count == 0)
+        {
+            return;
+        }
+
+        CollectionModItems.Clear();
+        OnPropertyChanged(nameof(HasCollectionModItems));
+        OnPropertyChanged(nameof(CollectionModTotalCount));
+        OnPropertyChanged(nameof(CollectionModFinishedCount));
+        OnPropertyChanged(nameof(CollectionModFailedCount));
+        OnPropertyChanged(nameof(CollectionModProgress));
+        OnPropertyChanged(nameof(CollectionModProgressText));
+    }
 
     /// <summary>是否有分片进度可展示（多于 1 个线程时）。</summary>
     public bool HasSegmentProgress => SegmentItems.Count > 1;
@@ -235,6 +383,14 @@ public partial class DownloadTaskItem : ObservableObject
 
     /// <summary>是否有安装目录可打开。</summary>
     public bool HasInstalledDirectory => !string.IsNullOrWhiteSpace(InstalledDirectory);
+
+    /// <summary>任务仍可定位到 Nexus 来源页时允许重新打开浏览器。</summary>
+    public bool CanOpenBrowserPage =>
+        ((TaskKind is DownloadTaskKind.NxmMod or DownloadTaskKind.NxmCollection) ||
+         string.Equals(SourcePlatform, "NexusMods", StringComparison.OrdinalIgnoreCase)) &&
+        (((TaskKind is DownloadTaskKind.NxmCollection or DownloadTaskKind.NexusCollection) &&
+          !string.IsNullOrWhiteSpace(CollectionSlug)) ||
+         SourceModId is > 0);
 
     public bool IsRunning =>
         TaskState is DownloadTaskState.Resolving or DownloadTaskState.Downloading or DownloadTaskState.Installing;
