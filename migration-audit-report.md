@@ -1,13 +1,13 @@
 # SVL Avalonia 迁移审计
 
-更新时间：2026-09-13
+更新时间：2026-09-14
 
 本报告以当前工作树为准，重点覆盖 Avalonia 主流程与 WPF 旧配置兼容，不把
 `SVL.sln` 中与 Avalonia 无关的旧 WPF/SMAPI 编译问题误计入迁移结果。
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`44a21b2`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`bbd2bf3`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -48,7 +48,7 @@
 | 详情下载项校验 | 说明文本（暂无文件、登录提示、NXM 指引）不再显示为可安装版本；保留 Nexus/CurseForge 仅有 FileID、由解析器获取直链的合法项 | `FeaturePagesViewModels`、`ModDetailsPageView` |
 | 已安装 Mod 更新确认 | 详情页点击“升级/回退/重新安装”前会读取当前实例的已安装版本，展示当前/目标版本并要求确认；取消不会创建下载任务 | `FeaturePagesViewModels`、`DialogService`、`Controls/ModUpdateConfirmDialog` |
 | 下载缓存与来源凭证 | Nexus Mod 按 ModID/FileID 缓存，Collection 本体按 slug/revision 缓存；命中后跳过 API/浏览器与重复下载；`CollectionInstallService` 直接入口也会在登录检查前复用稳定缓存；缓存写入前会校验归档格式，HTML/错误响应不会污染缓存；归档识别以文件签名为准，`.7z` 扩展名但实际为 ZIP 的下载包不会走错解压器；兼容 WPF/Core 旧目录 `SVL/cache/nexusmods/downloads/mod_<ModID>_<FileID>.zip`，命中后自动提升到 Avalonia 缓存；命中后仍写入 `svl-source.json`，导出可保留 FileID | `NexusDownloadCache`、`NexusCollectionDownloadCache`、`ArchiveExtractor`、`ModpackInstallService`、`CollectionInstallService`、`DownloadPageViewModel` |
-| 缓存管理 | 设置页可查看各类缓存统计，支持按保留时长清理过期文件、全量清理和打开 SVL 缓存目录；搜索/汉化缓存 TTL 与下载归档缓存 TTL 分开，后者默认 7 天；过期清理跳过正在占用的文件 | `CacheManagementService`、`SettingsPageViewModel`、`SettingsPageView` |
+| 缓存管理 | 设置页可查看各类缓存统计，支持按保留时长清理过期文件、全量清理和打开 SVL 缓存目录；搜索/汉化缓存 TTL 与下载归档缓存 TTL 分开，后者默认 7 天；过期清理跳过正在占用的文件；远程 Mod、Modpack、SMAPI 图片统一显示为“图片/图标缓存”，沿用旧目录名以兼容已有缓存 | `CacheManagementService`、`SettingsPageViewModel`、`SettingsPageView`、`AssetImageConverter` |
 | Mod 目录整理 | 以 `manifest.json` 实际目录为安装根，去掉发行包外层目录；管理页读取 manifest 时跳过空的旧字段别名，继续尝试 `modVersion`/`releaseVersion` 等字段，并保留文件名回退；单个损坏/无权限 Mod 目录不会中断其余目录扫描；内置 Mod 解压失败会进入整合包失败列表，不再静默计入成功 | `InstallDownloadedModArchive`、`InstallBundledModDirectory`、`FeaturePagesViewModels` |
 | Mod 依赖启用 | 启用单个或批量 Mod 前会汇总已安装但禁用的必需依赖，统一询问用户；确认后先启用依赖，再启用目标 Mod，取消则保留原状态 | `FeaturePagesViewModels`、`DialogService`、`Controls/DependencyEnableDialog` |
 | 本地 Mod 冲突检测 | Mod 管理页可按需检测启用 Mod 的重复 UniqueID、缺失/禁用/版本不满足的必需前置，以及真实相对文件路径冲突；检测结果会在启用状态或列表刷新后失效，避免显示过期结论 | `Services/ModConflictAnalyzer`、`FeaturePagesViewModels`、`Views/VersionSettingsPageView.axaml` |
@@ -153,3 +153,9 @@ Unix 主机对应的 `scripts/package-avalonia.sh` 入口也已补齐，统一�
 本轮继续收口 Collection 失败重试：显式重试会保留已成功条目的临时状态，
 并由安装服务再次校验来源凭证或有效 `manifest.json` 后跳过；已安装条目不再
 因其它 Mod 失败而重复下载/覆盖，残缺目录仍会回到正常安装流程。
+
+本轮审计补充：`upstream/main` 在共同祖先之后仍只有 README 说明提交，没有新的
+WPF/Core 业务功能；Avalonia 设置页已将实际共用的远程图片缓存从“SMAPI 图标缓存”
+更正为“图片/图标缓存”，保留 `smapi-icon-cache` 目录名以兼容历史文件。复合来源
+回归测试扩展为一个父 Mod 加六个 ContentPack 子 Mod，覆盖实际 `Blissful Valley`
+的多子 Mod 形态。

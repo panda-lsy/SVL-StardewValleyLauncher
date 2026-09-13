@@ -11,8 +11,8 @@ public enum CacheCategory
     SmapiDownloads,
     /// <summary>下载安装临时文件。</summary>
     DownloadInstall,
-    /// <summary>SMAPI 图标缓存。</summary>
-    SmapiIcons,
+    /// <summary>远程图片与图标缓存（Mod、Modpack、SMAPI 等共用）。</summary>
+    Images,
     /// <summary>下载文件缓存（按 URL 哈希，重复下载免下载）。</summary>
     DownloadsCache,
     /// <summary>游戏本体下载缓存（SteamCMD depot 下载产物）。</summary>
@@ -184,7 +184,7 @@ public static class CacheManagementService
         CacheCategory.CommunityLocalization => "社区汉化缓存",
         CacheCategory.SmapiDownloads => "SMAPI 下载缓存",
         CacheCategory.DownloadInstall => "下载安装临时文件",
-        CacheCategory.SmapiIcons => "SMAPI 图标缓存",
+        CacheCategory.Images => "图片/图标缓存",
         CacheCategory.DownloadsCache => "下载文件缓存",
         CacheCategory.Game => "游戏本体下载缓存",
         CacheCategory.Nexus => "Nexus 下载缓存",
@@ -203,7 +203,8 @@ public static class CacheManagementService
             CacheCategory.CommunityLocalization => Path.Combine(appDataRoot, "cache", "community-localization"),
             CacheCategory.SmapiDownloads => Path.Combine(Path.GetTempPath(), "SVL", "smapi"),
             CacheCategory.DownloadInstall => Path.Combine(appDataRoot, "InstalledMods"),
-            CacheCategory.SmapiIcons => Path.Combine(appDataRoot, "smapi-icon-cache"),
+            // 历史目录名保持不变，避免升级后丢失已有的远程图片缓存。
+            CacheCategory.Images => Path.Combine(appDataRoot, "smapi-icon-cache"),
             CacheCategory.DownloadsCache => DownloadFileCache.CacheDirectory,
             CacheCategory.Game => SteamCmdService.GameCacheRoot,
             CacheCategory.Nexus => NexusDownloadCache.Root,

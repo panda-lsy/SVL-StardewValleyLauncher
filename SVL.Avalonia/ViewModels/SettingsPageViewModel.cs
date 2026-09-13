@@ -258,7 +258,7 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _downloadInstallCacheSizeText = "-";
 
     [ObservableProperty]
-    private string _smapiIconsCacheSizeText = "-";
+    private string _imageCacheSizeText = "-";
 
     [ObservableProperty]
     private string _downloadsCacheSizeText = "-";
@@ -884,7 +884,7 @@ public partial class SettingsPageViewModel : ObservableObject
                 CommunityLocalization = CacheManagementService.GetStatistics(CacheCategory.CommunityLocalization),
                 SmapiDownloads = CacheManagementService.GetStatistics(CacheCategory.SmapiDownloads),
                 DownloadInstall = CacheManagementService.GetStatistics(CacheCategory.DownloadInstall),
-                SmapiIcons = CacheManagementService.GetStatistics(CacheCategory.SmapiIcons),
+                Images = CacheManagementService.GetStatistics(CacheCategory.Images),
                 Downloads = CacheManagementService.GetStatistics(CacheCategory.DownloadsCache),
                 Game = CacheManagementService.GetStatistics(CacheCategory.Game),
                 Nexus = CacheManagementService.GetStatistics(CacheCategory.Nexus)
@@ -899,7 +899,7 @@ public partial class SettingsPageViewModel : ObservableObject
             CommunityLocalizationCacheSizeText = statistics.CommunityLocalization.DisplaySize;
             SmapiDownloadsCacheSizeText = statistics.SmapiDownloads.DisplaySize;
             DownloadInstallCacheSizeText = statistics.DownloadInstall.DisplaySize;
-            SmapiIconsCacheSizeText = statistics.SmapiIcons.DisplaySize;
+            ImageCacheSizeText = statistics.Images.DisplaySize;
             DownloadsCacheSizeText = statistics.Downloads.DisplaySize;
             GameDownloadCacheSizeText = statistics.Game.DisplaySize;
             NexusDownloadCacheSizeText = statistics.Nexus.DisplaySize;
@@ -942,12 +942,12 @@ public partial class SettingsPageViewModel : ObservableObject
         _ = RefreshCacheStatisticsAsync();
     }
 
-    /// <summary>清理 SMAPI 图标缓存。</summary>
+    /// <summary>清理远程图片与图标缓存。</summary>
     [RelayCommand]
-    private void ClearSmapiIconsCache()
+    private void ClearImageCache()
     {
-        CacheManagementService.Clear(CacheCategory.SmapiIcons);
-        StatusMessage = "SMAPI 图标缓存已清理";
+        CacheManagementService.Clear(CacheCategory.Images);
+        StatusMessage = "图片/图标缓存已清理";
         _ = RefreshCacheStatisticsAsync();
     }
 

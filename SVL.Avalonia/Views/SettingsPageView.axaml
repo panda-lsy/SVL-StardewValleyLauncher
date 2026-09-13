@@ -229,9 +229,9 @@
                   <Button Content="清理" Command="{Binding ClearDownloadInstallCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="2">
-                  <TextBlock Text="SMAPI 图标" Opacity="0.85" />
-                  <TextBlock Text="{Binding SmapiIconsCacheSizeText}" />
-                  <Button Content="清理" Command="{Binding ClearSmapiIconsCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
+                  <TextBlock Text="图片/图标" Opacity="0.85" />
+                  <TextBlock Text="{Binding ImageCacheSizeText}" />
+                  <Button Content="清理" Command="{Binding ClearImageCacheCommand}" HorizontalAlignment="Left" MinWidth="80" Margin="0,2,0,0" />
                 </StackPanel>
               </Grid>
               <Grid ColumnDefinitions="*,*,*" Margin="0,2,0,2">
