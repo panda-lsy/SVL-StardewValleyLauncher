@@ -12,6 +12,7 @@ public partial class UpdateDialog : Window
     private LauncherUpdateService? _updateService;
     private CancellationTokenSource? _downloadCts;
     private string? _downloadedFilePath;
+    private bool _autoDownloadOnOpen;
 
     public UpdateDialog()
         : this(new Version(0, 0, 0, 0), new LauncherReleaseInfo(), "-")
@@ -21,6 +22,7 @@ public partial class UpdateDialog : Window
     public UpdateDialog(Version currentVersion, LauncherReleaseInfo releaseInfo, string source)
     {
         InitializeComponent();
+        Opened += UpdateDialog_Opened;
 
         _releaseInfo = releaseInfo;
 
@@ -49,9 +51,21 @@ public partial class UpdateDialog : Window
     }
 
     /// <summary>注入更新服务以支持应用内下载（由 DialogService 调用）。</summary>
-    internal void InitializeForDownload(LauncherUpdateService updateService)
+    internal void InitializeForDownload(LauncherUpdateService updateService, bool autoDownload = false)
     {
         _updateService = updateService;
+        _autoDownloadOnOpen = autoDownload;
+    }
+
+    private async void UpdateDialog_Opened(object? sender, EventArgs e)
+    {
+        if (!_autoDownloadOnOpen)
+        {
+            return;
+        }
+
+        _autoDownloadOnOpen = false;
+        await StartDownloadAsync(automatic: true);
     }
 
     private void Later_Click(object? sender, RoutedEventArgs e)
@@ -74,6 +88,11 @@ public partial class UpdateDialog : Window
 
     private async void DownloadButton_Click(object? sender, RoutedEventArgs e)
     {
+        await StartDownloadAsync();
+    }
+
+    private async Task StartDownloadAsync(bool automatic = false)
+    {
         if (_updateService == null || _releaseInfo == null || _releaseInfo.Assets.Count == 0)
         {
             Close(UpdateDialogAction.OpenRelease);
@@ -83,7 +102,7 @@ public partial class UpdateDialog : Window
         var asset = _releaseInfo.Assets[0];
         _downloadCts = new CancellationTokenSource();
         DownloadButton.IsEnabled = false;
-        DownloadButton.Content = "下载中...";
+        DownloadButton.Content = automatic ? "自动下载中..." : "下载中...";
         CancelDownloadButton.IsVisible = true;
         ProgressPanel.IsVisible = true;
         DownloadProgress.Value = 0;
@@ -123,7 +142,7 @@ public partial class UpdateDialog : Window
         catch (System.Exception ex)
         {
             DownloadButton.IsEnabled = true;
-            DownloadButton.Content = "重试下载";
+            DownloadButton.Content = automatic ? "应用内下载" : "重试下载";
             CancelDownloadButton.IsVisible = false;
             ProgressText.Text = $"下载失败: {ex.Message}";
         }

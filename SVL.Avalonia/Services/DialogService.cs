@@ -162,14 +162,19 @@ public sealed class DialogService
         return await dialog.ShowDialog<NexusLoginResult?>(owner);
     }
 
-    public async Task<UpdateDialogAction> ShowUpdateDialogAsync(Version currentVersion, LauncherReleaseInfo releaseInfo, string source, LauncherUpdateService? updateService = null)
+    public async Task<UpdateDialogAction> ShowUpdateDialogAsync(
+        Version currentVersion,
+        LauncherReleaseInfo releaseInfo,
+        string source,
+        LauncherUpdateService? updateService = null,
+        bool autoDownload = false)
     {
         var dialog = new UpdateDialog(currentVersion, releaseInfo, source);
 
         // 注入更新服务以启用应用内下载
         if (updateService != null)
         {
-            dialog.InitializeForDownload(updateService);
+            dialog.InitializeForDownload(updateService, autoDownload);
         }
 
         var owner = GetMainWindow();

@@ -95,6 +95,9 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _autoUpdateCheckLabelText = "启动时自动检查更新";
 
     [ObservableProperty]
+    private string _autoDownloadUpdateLabelText = "发现新版本时自动下载";
+
+    [ObservableProperty]
     private string _updateChannelLabelText = "更新通道";
 
     [ObservableProperty]
@@ -189,6 +192,9 @@ public partial class SettingsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _enableAutoUpdateCheck = true;
+
+    [ObservableProperty]
+    private bool _autoDownloadUpdate;
 
     [ObservableProperty]
     private string _selectedUpdateChannel = "稳定版";
@@ -461,6 +467,7 @@ public partial class SettingsPageViewModel : ObservableObject
         DownloadProxyPassword = settings.DownloadProxyPassword;
         EnableDownloadFloatingTaskButton = settings.EnableDownloadFloatingTaskButton;
         EnableAutoUpdateCheck = settings.EnableAutoUpdateCheck;
+        AutoDownloadUpdate = settings.AutoDownloadUpdate;
         SelectedUpdateChannel = string.IsNullOrWhiteSpace(settings.UpdateChannel) ? "稳定版" : settings.UpdateChannel;
         SelectedUpdateSource = string.IsNullOrWhiteSpace(settings.PreferredUpdateSource) ? "GitHub (推荐)" : settings.PreferredUpdateSource;
         SkippedUpdateVersion = settings.SkippedLauncherVersion;
@@ -518,6 +525,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.DownloadProxyPassword = DownloadProxyPassword ?? string.Empty;
         settings.EnableDownloadFloatingTaskButton = EnableDownloadFloatingTaskButton;
         settings.EnableAutoUpdateCheck = EnableAutoUpdateCheck;
+        settings.AutoDownloadUpdate = AutoDownloadUpdate;
         settings.UpdateChannel = SelectedUpdateChannel;
         settings.PreferredUpdateSource = SelectedUpdateSource;
         settings.SkippedLauncherVersion = SkippedUpdateVersion;
@@ -571,6 +579,7 @@ public partial class SettingsPageViewModel : ObservableObject
         OperationPathHint = _localizationService.Get("Settings.OperationPath");
         UpdateCardTitleText = _localizationService.Get("Settings.Card.Update");
         AutoUpdateCheckLabelText = _localizationService.Get("Settings.Update.AutoCheck");
+        AutoDownloadUpdateLabelText = _localizationService.Get("Settings.Update.AutoDownload");
         UpdateChannelLabelText = _localizationService.Get("Settings.Update.Channel");
         UpdateSourcePreferenceLabelText = _localizationService.Get("Settings.Update.SourcePreference");
         CheckUpdateButtonText = _localizationService.Get("Settings.Update.CheckNow");
@@ -755,6 +764,12 @@ public partial class SettingsPageViewModel : ObservableObject
     partial void OnEnableAutoUpdateCheckChanged(bool value)
     {
         StatusMessage = value ? "已启用自动检查更新（已自动保存）" : "已禁用自动检查更新（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnAutoDownloadUpdateChanged(bool value)
+    {
+        StatusMessage = value ? "已启用自动下载更新（已自动保存）" : "已禁用自动下载更新（已自动保存）";
         ScheduleAutoSave();
     }
 
@@ -1359,7 +1374,12 @@ public partial class SettingsPageViewModel : ObservableObject
             UpdateStatusText = string.Format(_localizationService.Get("Settings.Update.Found"), release.TagName);
             StatusMessage = UpdateStatusText;
 
-            var action = await _dialogService.ShowUpdateDialogAsync(result.CurrentVersion, release, result.Source, _launcherUpdateService);
+            var action = await _dialogService.ShowUpdateDialogAsync(
+                result.CurrentVersion,
+                release,
+                result.Source,
+                _launcherUpdateService,
+                autoDownload: AutoDownloadUpdate);
             if (action == UpdateDialogAction.SkipVersion)
             {
                 SkippedUpdateVersion = release.TagName;
@@ -1425,7 +1445,12 @@ public partial class SettingsPageViewModel : ObservableObject
             UpdateStatusText = string.Format(_localizationService.Get("Settings.Update.Found"), releaseTag);
             StatusMessage = UpdateStatusText;
 
-            var action = await _dialogService.ShowUpdateDialogAsync(result.CurrentVersion, release, result.Source, _launcherUpdateService);
+            var action = await _dialogService.ShowUpdateDialogAsync(
+                result.CurrentVersion,
+                release,
+                result.Source,
+                _launcherUpdateService,
+                autoDownload: AutoDownloadUpdate);
             if (action == UpdateDialogAction.SkipVersion)
             {
                 SkippedUpdateVersion = releaseTag;

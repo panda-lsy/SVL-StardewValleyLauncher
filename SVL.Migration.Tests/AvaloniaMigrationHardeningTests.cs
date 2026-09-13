@@ -619,7 +619,8 @@ public sealed class AvaloniaMigrationHardeningTests
                   "WindowSizeMode": "Maximized",
                   "ThemeMode": "Dark",
                   "CheckPrereleaseUpdates": true,
-                  "PreferredUpdateSource": "Gitee"
+                  "PreferredUpdateSource": "Gitee",
+                  "AutoDownloadUpdate": true
                 }
                 """, System.Text.Encoding.Unicode);
             File.WriteAllText(
@@ -642,6 +643,7 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual("深色", settings.ThemeMode);
             Assert.AreEqual("预览版", settings.UpdateChannel);
             Assert.AreEqual("Gitee (国内加速)", settings.PreferredUpdateSource);
+            Assert.IsTrue(settings.AutoDownloadUpdate);
             Assert.AreEqual(gamePath, settings.PreferredInstancePath);
         }
         finally
