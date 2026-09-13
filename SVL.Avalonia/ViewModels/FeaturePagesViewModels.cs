@@ -123,6 +123,19 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
     public bool SelectedTaskHasCollectionMods => SelectedTask?.HasCollectionModItems ?? false;
     public string SelectedTaskCollectionModProgressText => SelectedTask?.CollectionModProgressText ?? string.Empty;
     public int SelectedTaskCollectionModFailedCount => SelectedTask?.CollectionModFailedCount ?? 0;
+    public string SelectedTaskCurrentCollectionModText
+    {
+        get
+        {
+            var current = SelectedTask?.CollectionModItems.FirstOrDefault(item => item.IsCurrent);
+            return current == null
+                ? string.Empty
+                : $"当前：{current.Name} · {current.PhaseText} · {current.RequirementText}";
+        }
+    }
+
+    public bool SelectedTaskHasCurrentCollectionMod =>
+        !string.IsNullOrWhiteSpace(SelectedTaskCurrentCollectionModText);
 
     public bool IsRunningState => HasSelectedTask && !IsFailedState && !IsCompletedState && !IsCancelledState;
     public bool ShowMainStateContent => !IsEmptyState;
@@ -652,6 +665,8 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
         OnPropertyChanged(nameof(SelectedTaskHasCollectionMods));
         OnPropertyChanged(nameof(SelectedTaskCollectionModProgressText));
         OnPropertyChanged(nameof(SelectedTaskCollectionModFailedCount));
+        OnPropertyChanged(nameof(SelectedTaskCurrentCollectionModText));
+        OnPropertyChanged(nameof(SelectedTaskHasCurrentCollectionMod));
     }
 
     private DownloadTaskItem? _previousSelectedTask;
@@ -717,6 +732,8 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
                 OnPropertyChanged(nameof(SelectedTaskHasCollectionMods));
                 OnPropertyChanged(nameof(SelectedTaskCollectionModProgressText));
                 OnPropertyChanged(nameof(SelectedTaskCollectionModFailedCount));
+                OnPropertyChanged(nameof(SelectedTaskCurrentCollectionModText));
+                OnPropertyChanged(nameof(SelectedTaskHasCurrentCollectionMod));
                 break;
             case nameof(DownloadTaskItem.Progress):
                 ProgressPercent = task.IsCompleted && task.Progress >= 100

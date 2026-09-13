@@ -86,6 +86,13 @@ public partial class CollectionModTaskItem : ObservableObject
 
     public bool IsFinished => State is CollectionModTaskState.Installed or CollectionModTaskState.Failed or CollectionModTaskState.Skipped;
 
+    /// <summary>当前正在处理的 Collection 条目，用于任务详情突出显示。</summary>
+    public bool IsCurrent => State == CollectionModTaskState.Downloading;
+
+    public string PhaseText => $"Phase {Math.Max(1, Phase)}";
+
+    public string RequirementText => Optional ? "可选" : "必需";
+
     public bool HasOpenableSourceUrl =>
         Uri.TryCreate(SourceUrl, UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
@@ -103,7 +110,18 @@ public partial class CollectionModTaskItem : ObservableObject
     partial void OnStateChanged(CollectionModTaskState value)
     {
         OnPropertyChanged(nameof(IsFinished));
+        OnPropertyChanged(nameof(IsCurrent));
         OnPropertyChanged(nameof(DisplayStateText));
+    }
+
+    partial void OnPhaseChanged(int value)
+    {
+        OnPropertyChanged(nameof(PhaseText));
+    }
+
+    partial void OnOptionalChanged(bool value)
+    {
+        OnPropertyChanged(nameof(RequirementText));
     }
 
     partial void OnSourceUrlChanged(string value)
