@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`bbd2bf3`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`1868923`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -159,3 +159,7 @@ WPF/Core 业务功能；Avalonia 设置页已将实际共用的远程图片缓�
 更正为“图片/图标缓存”，保留 `smapi-icon-cache` 目录名以兼容历史文件。复合来源
 回归测试扩展为一个父 Mod 加六个 ContentPack 子 Mod，覆盖实际 `Blissful Valley`
 的多子 Mod 形态。
+
+本轮继续补齐旧图片缓存迁移：读取、统计、过期清理和全量清理同时兼容 WPF 的
+`%LocalAppData%\\SVL\\cache\\images`；新下载仍写入 Avalonia 缓存目录，并保留旧版
+按原始 URL 计算 SHA-256 的文件名规则，升级后无需重新下载已有远程图片。
