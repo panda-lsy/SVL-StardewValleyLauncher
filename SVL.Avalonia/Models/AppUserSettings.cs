@@ -121,6 +121,9 @@ public sealed class AppUserSettings
     /// <summary>Mod 更新检测并发数。</summary>
     public int MaxConcurrentModUpdateChecks { get; set; } = 4;
 
+    /// <summary>Mod 汉化检测并发数。</summary>
+    public int MaxConcurrentModLocalizationChecks { get; set; } = 4;
+
     /// <summary>SMAPI 默认下载源（GitHub/NexusMods）。</summary>
     public string DefaultSmapiSource { get; set; } = "GitHub";
 

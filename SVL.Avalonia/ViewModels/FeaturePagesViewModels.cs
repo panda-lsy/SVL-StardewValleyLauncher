@@ -6218,7 +6218,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 return;
             }
 
-            var maxThreads = GetModCheckConcurrency();
+            var maxThreads = GetModCheckConcurrency(localization: true);
             var foundCount = 0;
             var checkedCount = 0;
             var outdatedCount = 0;
@@ -14616,10 +14616,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         return "auto";
     }
 
-    private int GetModCheckConcurrency()
+    private int GetModCheckConcurrency(bool localization = false)
     {
         var settings = _settingsStore.Load();
-        var configured = settings.MaxConcurrentModUpdateChecks;
+        var configured = localization
+            ? settings.MaxConcurrentModLocalizationChecks
+            : settings.MaxConcurrentModUpdateChecks;
         if (configured <= 0)
         {
             configured = 4;

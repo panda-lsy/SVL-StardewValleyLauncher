@@ -284,6 +284,8 @@ public sealed class LegacyConfigurationMigrationService
             value => settings.DownloadSegmentThreads = Math.Clamp(value, 1, 16), result, ref hadCurrentSettings);
         changed |= ImportInt(root, "MaxConcurrentModUpdateChecks", settings.MaxConcurrentModUpdateChecks, defaults.MaxConcurrentModUpdateChecks,
             value => settings.MaxConcurrentModUpdateChecks = Math.Clamp(value, 1, 16), result, ref hadCurrentSettings);
+        changed |= ImportInt(root, "MaxConcurrentModLocalizationChecks", settings.MaxConcurrentModLocalizationChecks, defaults.MaxConcurrentModLocalizationChecks,
+            value => settings.MaxConcurrentModLocalizationChecks = Math.Clamp(value, 1, 16), result, ref hadCurrentSettings);
         changed |= ImportBool(root, "EnableNexusModsSearchCache", settings.EnableNexusModsSearchCache, defaults.EnableNexusModsSearchCache,
             value => settings.EnableNexusModsSearchCache = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "EnableDownloadCache", settings.EnableDownloadCache, defaults.EnableDownloadCache,

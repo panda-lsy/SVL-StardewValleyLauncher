@@ -233,6 +233,12 @@ public partial class SettingsPageViewModel : ObservableObject
     private int _selectedDownloadThreads = 4;
 
     [ObservableProperty]
+    private int _selectedModUpdateConcurrency = 4;
+
+    [ObservableProperty]
+    private int _selectedModLocalizationConcurrency = 4;
+
+    [ObservableProperty]
     private string _selectedThemeMode = "跟随系统";
 
     [ObservableProperty]
@@ -356,6 +362,9 @@ public partial class SettingsPageViewModel : ObservableObject
     /// <summary>下载线程数可选项（多线程分片下载）。</summary>
     public ObservableCollection<int> DownloadThreadOptions { get; } = [1, 2, 3, 4, 6, 8, 12, 16];
 
+    /// <summary>Mod 更新/汉化检测的并发线程数选项。</summary>
+    public ObservableCollection<int> ModCheckConcurrencyOptions { get; } = [1, 2, 3, 4, 6, 8, 12, 16];
+
     public bool IsNexusLoggedIn => !string.IsNullOrWhiteSpace(NexusApiKey) || !string.IsNullOrWhiteSpace(NexusOAuthAccessToken);
 
     public bool ShowNexusLoginGuide => !IsNexusLoggedIn;
@@ -478,6 +487,8 @@ public partial class SettingsPageViewModel : ObservableObject
             : settings.CollectionInstallConflictStrategy;
         SelectedCollectionDownloadParallelism = Math.Clamp(settings.CollectionDownloadParallelism, 1, 8);
         SelectedDownloadThreads = SnapToDownloadThreadOption(settings.DownloadSegmentThreads);
+        SelectedModUpdateConcurrency = Math.Clamp(settings.MaxConcurrentModUpdateChecks, 1, 16);
+        SelectedModLocalizationConcurrency = Math.Clamp(settings.MaxConcurrentModLocalizationChecks, 1, 16);
         SelectedThemeMode = settings.ThemeMode;
         IsDarkMode = ThemeService.IsDarkMode;
 
@@ -533,6 +544,8 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.CollectionInstallConflictStrategy = SelectedCollectionConflictStrategy;
         settings.CollectionDownloadParallelism = Math.Clamp(SelectedCollectionDownloadParallelism, 1, 8);
         settings.DownloadSegmentThreads = Math.Clamp(SelectedDownloadThreads, 1, 16);
+        settings.MaxConcurrentModUpdateChecks = Math.Clamp(SelectedModUpdateConcurrency, 1, 16);
+        settings.MaxConcurrentModLocalizationChecks = Math.Clamp(SelectedModLocalizationConcurrency, 1, 16);
         settings.ThemeMode = SelectedThemeMode;
         settings.UiLanguage = SelectedUiLanguage;
 
@@ -764,6 +777,18 @@ public partial class SettingsPageViewModel : ObservableObject
     partial void OnEnableAutoUpdateCheckChanged(bool value)
     {
         StatusMessage = value ? "已启用自动检查更新（已自动保存）" : "已禁用自动检查更新（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnSelectedModUpdateConcurrencyChanged(int value)
+    {
+        StatusMessage = $"Mod 更新检测并发切换为：{Math.Clamp(value, 1, 16)}（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnSelectedModLocalizationConcurrencyChanged(int value)
+    {
+        StatusMessage = $"Mod 汉化检测并发切换为：{Math.Clamp(value, 1, 16)}（已自动保存）";
         ScheduleAutoSave();
     }
 
