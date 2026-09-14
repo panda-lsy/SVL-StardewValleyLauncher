@@ -228,6 +228,7 @@ public sealed class ModpackInstallService
 
             string? smapiVersion;
             string? modpackName;
+            string? modpackVersion;
             List<JsonElement> manifestModEntries = [];
             using (var doc = JsonDocument.Parse(
                        await ReadTextFileWithBomAsync(modpackJsonPath, cancellationToken),
@@ -240,6 +241,7 @@ public sealed class ModpackInstallService
 
                 smapiVersion = GetJsonString(doc.RootElement, "smapi_version", "smapiVersion");
                 modpackName = GetJsonString(doc.RootElement, "name", "title");
+                modpackVersion = GetJsonString(doc.RootElement, "version", "modpackVersion");
                 if (TryGetJsonPropertyIgnoreCase(doc.RootElement, "mods", out var manifestMods) &&
                     manifestMods.ValueKind == JsonValueKind.Array)
                 {
@@ -326,6 +328,7 @@ public sealed class ModpackInstallService
             cancellationToken.ThrowIfCancellationRequested();
 
             var bundledModNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var bundledInstallGroups = new List<List<string>>();
             var modsSourceDir = FindDirectoryByNameIgnoreCase(packageRoot, "mods");
 
             void InstallBundledModOrRecordFailure(string modDirectory)
@@ -342,6 +345,11 @@ public sealed class ModpackInstallService
                     {
                         bundledModNames.Add(installedName);
                         installedMods.Add(installedName);
+                    }
+
+                    if (installedNames.Count > 0)
+                    {
+                        bundledInstallGroups.Add(installedNames.ToList());
                     }
                 }
 
@@ -599,6 +607,16 @@ public sealed class ModpackInstallService
 
             // 写 svl-source.json 到各 mod 目录（从 sources.json 中的 source 字段恢复）
             WriteSourceCredentials(sourcesList, modsPath);
+            // 内置 Mod 没有独立下载来源，但仍属于当前整合包。保留这个来源类别，
+            // 让管理页显示“整合包内置”而不是“缺少来源信息”；它不包含 platform/
+            // projectId/fileId，因此不会被更新检查误当成可下载来源。
+            foreach (var group in bundledInstallGroups)
+            {
+                WriteBundledModpackSourceCredentials(
+                    group.Select(name => Path.Combine(modsPath, name)),
+                    modpackName,
+                    modpackVersion);
+            }
             // 导入完成后立即修复旧导出/部分写入造成的复合来源断链，
             // 不要求用户先离开再重新进入 Mod 管理页才能看到正确状态。
             RepairCompositeSourceCredentials(modsPath);
@@ -944,6 +962,29 @@ public sealed class ModpackInstallService
                         if (!string.IsNullOrWhiteSpace(targetParent)) Directory.CreateDirectory(targetParent);
                         File.Copy(entry, target, true);
                     }
+                }
+
+                // CurseForge 的 overrides/Mods 是随整合包交付的内置内容，通常
+                // 不在 manifest.files 中，也没有独立的 ProjectID/FileID。为这些
+                // 实际安装出来的 Mod 写入整合包归属，避免管理页把它们误报为
+                // “缺少来源”；来源只存放在 modpack 对象中，不参与 Mod 更新解析。
+                var overrideModsDir = FindDirectoryByNameIgnoreCase(overridesDir, "Mods");
+                if (!string.IsNullOrWhiteSpace(overrideModsDir) &&
+                    Directory.Exists(overrideModsDir))
+                {
+                    var overrideModDirectories = GetInstallableManifestDirectories(overrideModsDir)
+                        .Select(directory =>
+                        {
+                            var relative = Path.GetRelativePath(overrideModsDir, directory);
+                            return Path.GetFullPath(Path.Combine(modsPath, relative));
+                        })
+                        .Where(IsInstalledModDirectory)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    WriteBundledModpackSourceCredentials(
+                        overrideModDirectories,
+                        manifest.Name,
+                        manifest.Version);
                 }
             }
 
@@ -5408,6 +5449,168 @@ public sealed class ModpackInstallService
     }
 
     /// <summary>
+    /// 为随整合包本体解压/覆盖的 Mod 保存归属信息。
+    ///
+    /// 这不是可下载来源：不写 platform/projectId/fileId，更新检查仍会按“无
+    /// 独立更新源”处理。已有真实来源或明确的父级继承关系优先保留，避免
+    /// overrides 覆盖了一个用户单独安装的 Mod 时丢失它的更新链。
+    /// </summary>
+    private static void WriteBundledModpackSourceCredentials(
+        IEnumerable<string> modDirectories,
+        string? modpackName,
+        string? modpackVersion)
+    {
+        var topLevelDirectories = modDirectories
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(IsInstalledModDirectory)
+            .ToList();
+        if (topLevelDirectories.Count == 0)
+        {
+            return;
+        }
+
+        var processedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 一个整合包条目可能同时解出一个父 Mod 和多个同级 ContentPack。
+        // 这与普通下载归档的来源树规则完全相同：父级保留整合包归属，子级
+        // 只保存 parentMod，不写入伪造的独立更新来源。
+        if (TryBuildCompositeInstalledModTree(
+                topLevelDirectories,
+                out var compositeParentDirectory,
+                out var compositeChildDirectories) &&
+            CanWriteBundledModpackSource(compositeParentDirectory))
+        {
+            var allDirectories = topLevelDirectories
+                .Concat(topLevelDirectories.SelectMany(FindNestedInstalledModDirectories))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path.Length)
+                .ToList();
+            var childrenByParent = allDirectories.ToDictionary(
+                directory => directory,
+                _ => new List<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var childDirectory in compositeChildDirectories)
+            {
+                childrenByParent[compositeParentDirectory].Add(childDirectory);
+            }
+
+            foreach (var directory in allDirectories.Where(path =>
+                         !string.Equals(path, compositeParentDirectory, StringComparison.OrdinalIgnoreCase) &&
+                         !compositeChildDirectories.Contains(path, StringComparer.OrdinalIgnoreCase)))
+            {
+                var parentDirectory = allDirectories
+                    .Where(candidate =>
+                        !string.Equals(candidate, directory, StringComparison.OrdinalIgnoreCase) &&
+                        IsPathUnderDirectory(directory, candidate))
+                    .OrderByDescending(candidate => candidate.Length)
+                    .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(parentDirectory) &&
+                    childrenByParent.TryGetValue(parentDirectory, out var children))
+                {
+                    children.Add(directory);
+                }
+            }
+
+            WriteNestedSourceCredentialTree(
+                modsPath: Path.GetDirectoryName(compositeParentDirectory)!,
+                rootDirectory: compositeParentDirectory,
+                rootSource: BuildBundledModpackSourceCredential(
+                    compositeParentDirectory,
+                    modpackName,
+                    modpackVersion),
+                childDirectoriesByParent: childrenByParent,
+                allDirectories: allDirectories);
+            processedDirectories.UnionWith(allDirectories);
+        }
+
+        foreach (var modDirectory in topLevelDirectories)
+        {
+            if (processedDirectories.Contains(modDirectory) ||
+                !CanWriteBundledModpackSource(modDirectory))
+            {
+                continue;
+            }
+
+            try
+            {
+                var nestedDirectories = FindNestedInstalledModDirectories(modDirectory);
+                var allDirectories = new[] { modDirectory }
+                    .Concat(nestedDirectories)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(path => path.Length)
+                    .ToList();
+                var childrenByParent = allDirectories.ToDictionary(
+                    directory => directory,
+                    _ => new List<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (var childDirectory in nestedDirectories)
+                {
+                    var parentDirectory = allDirectories
+                        .Where(candidate =>
+                            !string.Equals(candidate, childDirectory, StringComparison.OrdinalIgnoreCase) &&
+                            IsPathUnderDirectory(childDirectory, candidate))
+                        .OrderByDescending(candidate => candidate.Length)
+                        .FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(parentDirectory) &&
+                        childrenByParent.TryGetValue(parentDirectory, out var children))
+                    {
+                        children.Add(childDirectory);
+                    }
+                }
+
+                WriteNestedSourceCredentialTree(
+                    modsPath: Path.GetDirectoryName(modDirectory)!,
+                    rootDirectory: modDirectory,
+                    rootSource: BuildBundledModpackSourceCredential(
+                        modDirectory,
+                        modpackName,
+                        modpackVersion),
+                    childDirectoriesByParent: childrenByParent,
+                    allDirectories: allDirectories);
+                processedDirectories.UnionWith(allDirectories);
+            }
+            catch
+            {
+                // 单个内置 Mod 的归属写入失败不应阻断整合包安装。
+            }
+        }
+    }
+
+    private static bool CanWriteBundledModpackSource(string modDirectory)
+    {
+        var source = ReadSourceCredentialNode(modDirectory);
+        return source == null ||
+               (!HasIndependentSourceCredential(source) &&
+                !HasPersistedParentSourceRelation(modDirectory));
+    }
+
+    private static JsonObject BuildBundledModpackSourceCredential(
+        string modDirectory,
+        string? modpackName,
+        string? modpackVersion)
+    {
+        var source = ReadSourceCredentialNode(modDirectory) ?? new JsonObject();
+        source["sourceKind"] = "modpack-bundled";
+        source["schemaVersion"] = 3;
+        source["isParentMod"] = false;
+        source["childMods"] = new JsonArray();
+        source.Remove("parentMod");
+        source["modpack"] = new JsonObject
+        {
+            ["name"] = modpackName ?? string.Empty,
+            ["version"] = modpackVersion ?? string.Empty
+        };
+        source["hasUpdate"] = false;
+        source["latestVersion"] = string.Empty;
+        source["updateStatus"] = "整合包内置";
+        source["updateUrl"] = string.Empty;
+        source["updateFileId"] = string.Empty;
+        return source;
+    }
+
+    /// <summary>
     /// 将单个外部下载条目的来源凭证写入实际安装出来的 Mod 目录。
     /// Collection 的清单没有 SVL sources.json 那样的条目映射，因此由
     /// CollectionInstallService 在每个归档成功整理后调用本方法。
@@ -5490,7 +5693,14 @@ public sealed class ModpackInstallService
 
                 values["hasUpdate"] = JsonSerializer.SerializeToElement(false);
                 values["latestVersion"] = JsonSerializer.SerializeToElement(string.Empty);
-                values["updateStatus"] = JsonSerializer.SerializeToElement("未检查");
+                var sourceKind = values.TryGetValue("sourceKind", out var sourceKindValue) &&
+                                 sourceKindValue.ValueKind == JsonValueKind.String
+                    ? sourceKindValue.GetString()
+                    : null;
+                values["updateStatus"] = JsonSerializer.SerializeToElement(
+                    string.Equals(sourceKind, "modpack-bundled", StringComparison.OrdinalIgnoreCase)
+                        ? "整合包内置"
+                        : "未检查");
                 values["updateUrl"] = JsonSerializer.SerializeToElement(string.Empty);
                 values["updateFileId"] = JsonSerializer.SerializeToElement(string.Empty);
                 AtomicFileWriter.WriteUtf8(
@@ -5744,6 +5954,22 @@ public sealed class ModpackInstallService
 
                 if (!TryGetModSourceDescriptor(source, out var descriptor))
                 {
+                    // SVL 导出会保留随整合包提供、但没有独立下载来源的 Mod。
+                    // 这类条目不能进入下载队列，但如果它已经由 mods/ 解压完成，
+                    // 仍应写入“整合包内置”归属，避免回导后再次显示为无来源。
+                    if (TryGetJsonPropertyIgnoreCase(source, "bundled", out var bundled) &&
+                        bundled.ValueKind == JsonValueKind.True)
+                    {
+                        var bundledDirectories = FindInstalledModDirectories(
+                            modsPath,
+                            directoryName,
+                            modName,
+                            GetJsonString(source, "uniqueId", "uniqueID", "unique_id"));
+                        WriteBundledModpackSourceCredentials(
+                            bundledDirectories,
+                            modpackName: null,
+                            modpackVersion: null);
+                    }
                     continue;
                 }
 

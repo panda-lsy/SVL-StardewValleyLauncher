@@ -78,7 +78,7 @@
 | 夜间主题与窗口控制区 | 主要弹窗使用动态主题资源；右键菜单显式走 Popup 主题并在应用级覆盖 `ContextMenu/MenuFlyoutPresenter`，避免独立 Popup 回落到浅色；控制按钮使用固定等宽列、统一 40×48 单元格、24×24 内容画布和布局取整，三种图形共用第 24 像素中心线；版本删除会清理只读属性，遇到短暂文件锁时先移出 `versions` 再后台重试；“跟随系统”现在读取 Avalonia 系统主题并监听后续切换 | `Controls/*.axaml`、`InstancesPageView.axaml`、`MainWindow.axaml`、`Resources/Theme.axaml`、`Services/ThemeService.cs`、`FeaturePagesViewModels` |
 
 下面的 293/308 条统计是早期审计快照；当前验证结果以本段为准。
-当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **313 总计，其中 311 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。
+当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **315 总计，其中 313 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时验证了整合包内置 Mod 的父包归属凭证不会伪装成独立更新来源，且已有独立来源保持不变；将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。
 上一轮测试统计（含 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim/旧缓存路径、API 限额快照、失效 Token 资料保留及限额事件订阅异常隔离回归）：迁移测试 **308 总计，其中 306 通过、2 跳过**。
 本轮界面回退：撤销此前生成式 PNG 图标替换，恢复 `Resources/Icons.axaml` 中的原有矢量资源及动态颜色绑定；标题栏仍保留统一 24×24 画布和等宽控制列，避免回退图标后重新引入三个窗口按钮的对齐问题，并新增回归断言禁止视图重新引用 `Assets/Icons/Generated`。
 本轮修复：Modpack/Collection 的游戏版本只接受 API 明确字段，不再从整合包名称、摘要或文件名推断版本；普通 Mod 仍保留文本兜底。
@@ -235,8 +235,14 @@ Upsert，避免并行任务的读-改-写互相覆盖；新增 32 个并发实�
 
 本轮来源写入修复：旧 Core 在复合归档根目录自身包含 `manifest.json` 时，不再把父
 目录再次作为 ContentPack 写入，避免父 Mod 的来源凭据被覆盖成指向自身的
-`parentMod`；后续更新、导出和回滚可以继续识别父级来源。旧 Core 本地构建通过，
+ `parentMod`；后续更新、导出和回滚可以继续识别父级来源。旧 Core 本地构建通过，
 Avalonia 迁移回归测试为 **313 总计，其中 311 通过、2 跳过**。
+
+本轮继续补齐整合包内置 Mod 的来源归属：SVL/CurseForge 整合包中随包解压或从
+`overrides/Mods` 覆盖的 Mod，现在写入 `sourceKind=modpack-bundled` 及整合包名称/
+版本；该标记不包含独立 ProjectID/FileID，因此不会触发错误的更新检查。随同一归档
+安装的父 Mod 与 ContentPack 会复用统一来源树，子 Mod 写入 `parent-inherited`，
+已有独立来源不会被覆盖；管理页显示“整合包内置”而非“缺少来源信息”。
 
 本轮补齐设置迁移：旧 WPF 的 `EnableAnimations` 已接入 Avalonia 设置页与运行时，
 通过动态过渡资源即时关闭/恢复已有页面动画，并新增 Headless 回归断言。

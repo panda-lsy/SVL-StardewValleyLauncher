@@ -9201,6 +9201,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return BuildInheritedSourceStatus(parentReference);
         }
 
+        if (IsBundledModpackSource(credential))
+        {
+            return "整合包内置";
+        }
+
         // 旧版本曾把有效的 Modpack 条目先写成“缺少来源信息”。来源修复后
         // 不能继续沿用这个持久化的错误状态，否则用户必须手动再检测一次
         // 才能看到正确结果。保留其它真实的更新状态。
@@ -9218,6 +9223,15 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     ? "可更新"
                     : $"可更新 -> {credential.LatestVersion}")
                 : "未检查");
+    }
+
+    private static bool IsBundledModpackSource(LocalSourceMetadata? credential)
+    {
+        return credential != null &&
+               string.Equals(
+                   credential.SourceKind?.Trim(),
+                   "modpack-bundled",
+                   StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildInheritedSourceStatus(LocalParentModReference? parentReference)
@@ -14770,6 +14784,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         [JsonPropertyName("sourceKind")]
         public string SourceKind { get; set; } = string.Empty;
 
+        /// <summary>整合包内置 Mod 的归属信息，不代表可独立更新来源。</summary>
+        [JsonPropertyName("modpack")]
+        public LocalModpackProvenance? Modpack { get; set; }
+
         [JsonPropertyName("hasUpdate")]
         public bool HasUpdate { get; set; }
 
@@ -14936,6 +14954,15 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         [JsonPropertyName("contributor")]
         public string Contributor { get; set; } = string.Empty;
+    }
+
+    private sealed class LocalModpackProvenance
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("version")]
+        public string Version { get; set; } = string.Empty;
     }
 
     private sealed class LocalCommunityLocalizationEntry

@@ -1667,6 +1667,89 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void ModpackInstall_ShouldPersistBundledModpackProvenanceWithoutUpdateSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-bundled-modpack-source-test-" + Guid.NewGuid().ToString("N"));
+        var modDirectory = Path.Combine(root, "Mods", "Bundled Mod");
+        try
+        {
+            Directory.CreateDirectory(modDirectory);
+            File.WriteAllText(
+                Path.Combine(modDirectory, "manifest.json"),
+                "{\"Name\":\"Bundled Mod\",\"UniqueID\":\"Example.Bundled\"}");
+
+            var writer = typeof(ModpackInstallService).GetMethod(
+                "WriteBundledModpackSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(writer);
+
+            writer!.Invoke(
+                null,
+                [new[] { modDirectory }, "Blissful Valley", "1.2.0"]);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(modDirectory, "svl-source.json")));
+            var source = document.RootElement;
+            Assert.AreEqual("modpack-bundled", source.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("Blissful Valley", source.GetProperty("modpack").GetProperty("name").GetString());
+            Assert.AreEqual("1.2.0", source.GetProperty("modpack").GetProperty("version").GetString());
+            Assert.IsFalse(source.GetProperty("hasUpdate").GetBoolean());
+            Assert.AreEqual("整合包内置", source.GetProperty("updateStatus").GetString());
+            Assert.IsFalse(source.TryGetProperty("platform", out _));
+            Assert.IsFalse(source.TryGetProperty("projectId", out _));
+            Assert.IsFalse(source.TryGetProperty("fileId", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ModpackInstall_ShouldPreserveIndependentSourceWhenWritingBundledProvenance()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-bundled-source-preserve-test-" + Guid.NewGuid().ToString("N"));
+        var modDirectory = Path.Combine(root, "Mods", "Downloaded Mod");
+        try
+        {
+            Directory.CreateDirectory(modDirectory);
+            File.WriteAllText(
+                Path.Combine(modDirectory, "manifest.json"),
+                "{\"Name\":\"Downloaded Mod\",\"UniqueID\":\"Example.Downloaded\"}");
+            File.WriteAllText(
+                Path.Combine(modDirectory, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"1012214\",\"fileId\":\"5312529\",\"sourceKind\":\"modpack-entry\"}");
+
+            var writer = typeof(ModpackInstallService).GetMethod(
+                "WriteBundledModpackSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(writer);
+
+            writer!.Invoke(
+                null,
+                [new[] { modDirectory }, "Blissful Valley", "1.2.0"]);
+
+            using var document = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(modDirectory, "svl-source.json")));
+            var source = document.RootElement;
+            Assert.AreEqual("modpack-entry", source.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("1012214", source.GetProperty("projectId").GetString());
+            Assert.AreEqual("5312529", source.GetProperty("fileId").GetString());
+            Assert.IsFalse(source.TryGetProperty("modpack", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void BackupComparison_ShouldIgnoreBackupAndUpdateChainMetadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-backup-comparison-test-" + Guid.NewGuid().ToString("N"));
