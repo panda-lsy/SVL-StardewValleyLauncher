@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`4d64668`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`f8fd705`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -189,3 +189,7 @@ Skipped，而是持久化为 NeedsDecision；任务详情提供“选择文件�
 可见性策略，旧 `app.json` 中的数值枚举和常见字符串枚举会迁移；实际启动时由主窗口
 响应游戏进程启动/退出事件，支持隐藏后恢复或关闭，且不把旧 net48 工程直接引用到
 Avalonia net10 工程。
+
+本轮补齐旧 WPF 的 `FontSize` 设置：保留 12/13/14/15/16/18/20 选项，旧配置迁移
+后绑定到 Avalonia 主窗口的字体继承链，设置页修改会自动保存并即时更新；无效值回退
+到 14，避免配置损坏导致界面失去字体大小选择。
