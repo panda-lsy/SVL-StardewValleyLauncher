@@ -1885,6 +1885,58 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void ExistingCompositeSources_ShouldRecoverChildWithoutSourceCredentialByManifestNamespace()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-composite-missing-child-source-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentPath = Path.Combine(modsPath, "Parent Mod");
+        var childPath = Path.Combine(modsPath, "Child Pack");
+        var unrelatedPath = Path.Combine(modsPath, "Unrelated Pack");
+        try
+        {
+            foreach (var directory in new[] { parentPath, childPath, unrelatedPath })
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllText(
+                Path.Combine(parentPath, "manifest.json"),
+                "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\",\"EntryDll\":\"Parent.dll\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "manifest.json"),
+                "{\"Name\":\"Parent Mod - Child Pack\",\"UniqueID\":\"Example.Parent.Child\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+            File.WriteAllText(
+                Path.Combine(unrelatedPath, "manifest.json"),
+                "{\"Name\":\"Unrelated Pack\",\"UniqueID\":\"Example.Unrelated\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+            File.WriteAllText(
+                Path.Combine(parentPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\"}");
+
+            var repair = typeof(ModpackInstallService).GetMethod(
+                "RepairCompositeSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(repair);
+            repair!.Invoke(null, [modsPath]);
+
+            using var childDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(childPath, "svl-source.json")));
+            var child = childDocument.RootElement;
+            Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("Parent Mod", child.GetProperty("parentMod").GetProperty("name").GetString());
+            Assert.IsFalse(child.TryGetProperty("projectId", out _));
+            Assert.IsFalse(child.TryGetProperty("fileId", out _));
+            Assert.IsFalse(File.Exists(Path.Combine(unrelatedPath, "svl-source.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void VersionSettings_ShouldIgnoreLegacyCurseforgeModpackSourceForContentPackUpdates()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-modpack-source-guard-test-" + Guid.NewGuid().ToString("N"));

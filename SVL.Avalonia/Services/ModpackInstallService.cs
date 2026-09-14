@@ -5514,8 +5514,10 @@ public sealed class ModpackInstallService
 
         try
         {
-            var candidates = EnumerateTopLevelDirectoriesSafe(modsPath)
+            var installedDirectories = EnumerateTopLevelDirectoriesSafe(modsPath)
                 .Where(IsInstalledModDirectory)
+                .ToList();
+            var candidates = installedDirectories
                 .Select(directory => new
                 {
                     Directory = directory,
@@ -5549,19 +5551,65 @@ public sealed class ModpackInstallService
 
             foreach (var group in candidates)
             {
-                var directories = group
+                var sourceDirectories = group
                     .Select(item => item.Directory)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var parentCandidates = sourceDirectories
+                    .Where(directory =>
+                        TryReadContentPackForFlag(directory, out var isContentPack) &&
+                        !isContentPack)
+                    .ToList();
+                if (parentCandidates.Count != 1)
+                {
+                    // 同一项目下存在多个独立根 Mod 时不能猜测父子关系。
+                    // 只有唯一的非 ContentPack 根目录才允许自动恢复。
+                    continue;
+                }
+
+                var parentDirectory = parentCandidates[0];
+                var directories = sourceDirectories
+                    .Where(directory =>
+                        string.Equals(directory, parentDirectory, StringComparison.OrdinalIgnoreCase) ||
+                        IsMatchingSourceCredential(
+                            directory,
+                            group.Key.Split(':', 2)[0],
+                            group.Key.Split(':', 2).Length == 2 ? group.Key.Split(':', 2)[1] : null,
+                            expectedFileId: null))
+                    .ToList();
+
+                // 旧导入可能只给父 Mod 写入来源，子 ContentPack 没有
+                // svl-source.json。用 manifest 的 UniqueID 命名空间补齐这些
+                // 同级子目录；不使用“同平台/同项目”作为唯一条件，避免把
+                // 同项目下的独立 Mod 错误合并到这棵来源树。
+                foreach (var directory in installedDirectories)
+                {
+                    if (string.Equals(directory, parentDirectory, StringComparison.OrdinalIgnoreCase) ||
+                        directories.Contains(directory, StringComparer.OrdinalIgnoreCase) ||
+                        !TryReadContentPackForFlag(directory, out var isContentPack) ||
+                        !isContentPack)
+                    {
+                        continue;
+                    }
+
+                    if (IsManifestNestedContentPackOf(parentDirectory, directory))
+                    {
+                        directories.Add(directory);
+                    }
+                }
+
+                directories = directories
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 if (!TryBuildCompositeInstalledModTree(
                         directories,
-                        out var parentDirectory,
+                        out var resolvedParentDirectory,
                         out var childDirectories))
                 {
                     continue;
                 }
 
-                var parentSource = ReadSourceCredentialNode(parentDirectory) ??
+                var parentSource = ReadSourceCredentialNode(resolvedParentDirectory) ??
                                    group.Select(item => item.Source)
                                        .FirstOrDefault(source => source != null)?
                                        .DeepClone() as JsonObject;
@@ -5591,7 +5639,7 @@ public sealed class ModpackInstallService
 
                 parentSource["sourceKind"] = "modpack-entry";
                 parentSource.Remove("parentMod");
-                var allDirectories = new[] { parentDirectory }
+                var allDirectories = new[] { resolvedParentDirectory }
                     .Concat(childDirectories)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
@@ -5599,10 +5647,10 @@ public sealed class ModpackInstallService
                     directory => directory,
                     _ => new List<string>(),
                     StringComparer.OrdinalIgnoreCase);
-                childrenByParent[parentDirectory].AddRange(childDirectories);
+                childrenByParent[resolvedParentDirectory].AddRange(childDirectories);
                 WriteNestedSourceCredentialTree(
                     modsPath,
-                    parentDirectory,
+                    resolvedParentDirectory,
                     parentSource,
                     childrenByParent,
                     allDirectories);
@@ -5613,6 +5661,30 @@ public sealed class ModpackInstallService
             // 旧来源修复是增强性的兼容迁移；单个实例目录异常不应阻断
             // Mod 管理页加载或其它实例操作。
         }
+    }
+
+    private static bool IsManifestNestedContentPackOf(
+        string parentDirectory,
+        string childDirectory)
+    {
+        if (!TryReadModManifestIdentity(parentDirectory, out var parentName, out var parentUniqueId) ||
+            !TryReadModManifestIdentity(childDirectory, out var childName, out var childUniqueId))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(parentUniqueId) &&
+            !string.IsNullOrWhiteSpace(childUniqueId) &&
+            childUniqueId.StartsWith(parentUniqueId + ".", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 少数旧 Mod 没有稳定 UniqueID，但会用“父名称 - 子名称”命名。
+        // 只有父名称非空且确实带分隔符时才启用这个较弱的回退。
+        return !string.IsNullOrWhiteSpace(parentName) &&
+               !string.IsNullOrWhiteSpace(childName) &&
+               childName.StartsWith(parentName + " - ", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeSourcePlatform(string platform)
