@@ -691,6 +691,7 @@ public sealed class AvaloniaMigrationHardeningTests
                   "LauncherVisibility": "HideAndCloseOnExit",
                   "WindowSizeMode": "Maximized",
                   "ThemeMode": "Dark",
+                  "PrimaryColor": "#abc",
                   "CheckPrereleaseUpdates": true,
                   "PreferredUpdateSource": "Gitee",
                   "AutoDownloadUpdate": true,
@@ -718,6 +719,7 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual(1, settings.LauncherVisibility);
             Assert.AreEqual("最大化", settings.WindowSizeMode);
             Assert.AreEqual("深色", settings.ThemeMode);
+            Assert.AreEqual("#AABBCC", settings.PrimaryColor);
             Assert.AreEqual("预览版", settings.UpdateChannel);
             Assert.AreEqual("Gitee (国内加速)", settings.PreferredUpdateSource);
             Assert.IsTrue(settings.AutoDownloadUpdate);

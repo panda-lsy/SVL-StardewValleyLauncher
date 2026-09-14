@@ -275,6 +275,12 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _selectedThemeStyle = "星露谷（默认）";
 
     [ObservableProperty]
+    private string _primaryColor = string.Empty;
+
+    [ObservableProperty]
+    private string _primaryColorStatus = "留空使用当前配色方案的默认强调色";
+
+    [ObservableProperty]
     private string _selectedColorScheme = "天空蓝";
 
     [ObservableProperty]
@@ -578,9 +584,13 @@ public partial class SettingsPageViewModel : ObservableObject
         var styleName = settings.ThemeStyleName ?? "Stardew";
         var schemeName = settings.ThemeColorScheme ?? "Blue";
         SelectedThemeStyle = ResolveThemeDisplayName(styleName, schemeName);
+        PrimaryColor = settings.PrimaryColor ?? string.Empty;
 
         // 恢复主题
         ThemeService.RestoreFromSettings(settings);
+        PrimaryColorStatus = string.IsNullOrWhiteSpace(ThemeService.CustomPrimaryColorHex)
+            ? "留空使用当前配色方案的默认强调色"
+            : $"当前强调色：{ThemeService.CustomPrimaryColorHex}";
 
         SelectedUiLanguage = string.IsNullOrWhiteSpace(settings.UiLanguage) ? "zh-CN" : settings.UiLanguage;
         ShowNotifications = settings.ShowNotifications;
@@ -659,6 +669,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.ThemeStyleName = styleName;
         settings.ThemeColorScheme = schemeName;
         ThemeService.SaveToSettings(settings);
+        settings.PrimaryColor = ThemeService.CustomPrimaryColorHex;
         settings.ShowNotifications = ShowNotifications;
         settings.ShowModTypeFilterDisabledNotice = ShowModTypeFilterDisabledNotice;
         settings.DebugMode = DebugMode;
@@ -891,6 +902,31 @@ public partial class SettingsPageViewModel : ObservableObject
     {
         StatusMessage = value ? "已启用自动检查更新（已自动保存）" : "已禁用自动检查更新（已自动保存）";
         ScheduleAutoSave();
+    }
+
+    [RelayCommand]
+    private void ApplyPrimaryColor()
+    {
+        if (!ThemeService.TrySetCustomPrimaryColor(PrimaryColor, out var errorMessage))
+        {
+            PrimaryColorStatus = errorMessage;
+            StatusMessage = errorMessage;
+            return;
+        }
+
+        PrimaryColor = ThemeService.CustomPrimaryColorHex;
+        PrimaryColorStatus = string.IsNullOrWhiteSpace(PrimaryColor)
+            ? "留空使用当前配色方案的默认强调色"
+            : $"当前强调色：{PrimaryColor}";
+        StatusMessage = "自定义强调色已应用（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    [RelayCommand]
+    private void ClearPrimaryColor()
+    {
+        PrimaryColor = string.Empty;
+        ApplyPrimaryColor();
     }
 
     partial void OnSelectedLauncherVisibilityIndexChanged(int value)

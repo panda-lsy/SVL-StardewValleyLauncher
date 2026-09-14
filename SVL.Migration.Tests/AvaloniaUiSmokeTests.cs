@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Animation;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SVL.Avalonia;
@@ -21,7 +22,7 @@ public sealed class AvaloniaUiSmokeTests
     [TestMethod]
     public void MainWindow_ShouldLoadAndKeepWindowButtonsOnSharedGrid()
     {
-        using var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
 
         session.Dispatch(() =>
         {
@@ -89,6 +90,51 @@ public sealed class AvaloniaUiSmokeTests
             finally
             {
                 window.Close();
+            }
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void ThemeService_ShouldApplyAndClearCustomPrimaryColor()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+
+        session.Dispatch(() =>
+        {
+            var previousDarkMode = ThemeService.IsDarkMode;
+            var previousFollowSystem = ThemeService.FollowSystemTheme;
+            var previousPrimaryColor = ThemeService.CustomPrimaryColorHex;
+
+            try
+            {
+                ThemeService.SetThemeMode(false, false);
+                Assert.IsTrue(
+                    ThemeService.TrySetCustomPrimaryColor("#123456", out var error),
+                    error);
+                Assert.AreEqual("#123456", ThemeService.CustomPrimaryColorHex);
+
+                var resources = Application.Current!.Resources;
+                var lightAccent = ((SolidColorBrush)resources["AccentBrush"]!).Color;
+                Assert.AreEqual((byte)0x12, lightAccent.R);
+                Assert.AreEqual((byte)0x34, lightAccent.G);
+                Assert.AreEqual((byte)0x56, lightAccent.B);
+
+                ThemeService.SetDarkMode(true);
+                var darkAccent = ((SolidColorBrush)resources["AccentBrush"]!).Color;
+                Assert.IsTrue(darkAccent.R > 0x12 || darkAccent.G > 0x34 || darkAccent.B > 0x56,
+                    "深色模式应提高自定义强调色的可读性");
+
+                Assert.IsFalse(ThemeService.TrySetCustomPrimaryColor("not-a-color", out _));
+                Assert.AreEqual("#123456", ThemeService.CustomPrimaryColorHex,
+                    "无效颜色不能覆盖已应用的颜色");
+
+                Assert.IsTrue(ThemeService.TrySetCustomPrimaryColor(string.Empty, out var clearError), clearError);
+                Assert.AreEqual(string.Empty, ThemeService.CustomPrimaryColorHex);
+            }
+            finally
+            {
+                ThemeService.TrySetCustomPrimaryColor(previousPrimaryColor, out _);
+                ThemeService.SetThemeMode(previousDarkMode, previousFollowSystem);
             }
         }, CancellationToken.None).GetAwaiter().GetResult();
     }

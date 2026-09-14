@@ -326,6 +326,13 @@
               <ComboBox ItemsSource="{Binding ThemeModes}" SelectedItem="{Binding SelectedThemeMode}" />
               <TextBlock Text="配色方案" />
               <ComboBox ItemsSource="{Binding ThemeStyleOptions}" SelectedItem="{Binding SelectedThemeStyle}" />
+              <TextBlock Text="自定义强调色（#RGB / #RRGGBB，可选）" />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBox Text="{Binding PrimaryColor}" Watermark="#D47748" Width="132" />
+                <Button Content="应用" Command="{Binding ApplyPrimaryColorCommand}" />
+                <Button Content="恢复默认" Command="{Binding ClearPrimaryColorCommand}" />
+              </StackPanel>
+              <TextBlock Text="{Binding PrimaryColorStatus}" Opacity="0.72" TextWrapping="Wrap" />
               <CheckBox Content="{Binding AnimationLabelText}" IsChecked="{Binding EnableAnimations}" />
               <CheckBox Content="{Binding TransparencyLabelText}" IsChecked="{Binding EnableTransparency}" />
               <TextBlock Text="{Binding FontSizeLabelText}" />

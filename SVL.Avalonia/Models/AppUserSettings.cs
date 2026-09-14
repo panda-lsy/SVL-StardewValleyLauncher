@@ -62,6 +62,12 @@ public sealed class AppUserSettings
 
     public string ThemeColorScheme { get; set; } = "Blue";
 
+    /// <summary>
+    /// 可选的自定义强调色（#RRGGBB）。为空时跟随当前配色方案。
+    /// 旧 WPF 的默认值 #7C4DFF 未实际应用，迁移时会按“未设置”处理。
+    /// </summary>
+    public string PrimaryColor { get; set; } = string.Empty;
+
     public string UiLanguage { get; set; } = "zh-CN";
 
     public bool ShowNotifications { get; set; } = true;

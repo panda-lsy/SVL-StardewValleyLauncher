@@ -29,7 +29,7 @@
 | 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，旧启动流程未消费；Avalonia 已迁移该设置并接入更新弹窗 | 发现新版本后可自动下载首个发布资产；下载完成仍需用户点击“安装并重启”，不会静默执行安装 |
 | 游戏启动后启动器可见性行为 | WPF 的 `LauncherVisibility` 五种行为此前只完成了配置对照，Avalonia 未接入实际启动生命周期 | 已迁移立即关闭、隐藏后随游戏退出关闭、隐藏后随游戏退出恢复、最小化、保持不变；旧枚举数值/字符串均可迁移，并由游戏进程退出事件驱动恢复 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
-| WPF 个性化字段 `PrimaryColor` | 旧配置和设置 ViewModel 有该字段，但旧 `ThemeService` 没有实际应用它；它不是 `main` 中可工作的独立功能 | 暂不按死字段迁移；若要支持自定义主色，需要先定义与 Stardew/Material 配色方案的覆盖规则，再补 UI、运行时资源和回归测试 |
+| WPF 个性化字段 `PrimaryColor` | 旧配置和设置 ViewModel 有该字段，但旧 `ThemeService` 没有实际应用它；它不是 `main` 中可工作的独立功能 | 已补齐为可选自定义强调色：设置页支持 `#RGB/#RRGGBB`，留空跟随当前主题；旧默认值 `#7C4DFF` 不会改变 Stardew 默认配色；主题/深浅色切换后保持覆盖，并有无效输入保护与回归测试 |
 | WPF `EnableTransparency` | 原先仅 Splash 使用透明窗口，主窗口没有动态透明开关 | 已补齐旧配置迁移、设置页开关、主题背景透明度和主窗口透明级别；不支持透明的窗口后端按资源层回退为不透明 |
 | WPF `EnableAnimations` | 旧 WPF 用它控制主题切换动画；Avalonia 配置模型曾保留字段，但设置页和运行时过渡没有接入 | 已补齐设置页开关、自动保存/旧配置读取，并通过动态 `Transitions` 资源即时控制导航、窗口控制、任务、Mod 行和通知动画；Headless 回归覆盖关闭与恢复 |
 | WPF `ShowUpdateNotification` | WPF 设置页保存了该字段；Avalonia 已迁移字段、旧配置导入、设置页自动保存，并在启动检查发现更新时尊重该开关；设置页手动检查不受影响 | 已完成；关闭后仅抑制启动更新通知，保留手动检查入口 |
@@ -78,7 +78,7 @@
 | 夜间主题与窗口控制区 | 主要弹窗使用动态主题资源；右键菜单显式走 Popup 主题并在应用级覆盖 `ContextMenu/MenuFlyoutPresenter`，避免独立 Popup 回落到浅色；控制按钮使用固定等宽列、统一 40×48 单元格、24×24 内容画布和布局取整，三种图形共用第 24 像素中心线；版本删除会清理只读属性，遇到短暂文件锁时先移出 `versions` 再后台重试；“跟随系统”现在读取 Avalonia 系统主题并监听后续切换 | `Controls/*.axaml`、`InstancesPageView.axaml`、`MainWindow.axaml`、`Resources/Theme.axaml`、`Services/ThemeService.cs`、`FeaturePagesViewModels` |
 
 下面的 293/308 条统计是早期审计快照；当前验证结果以本段为准。
-当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **316 总计，其中 314 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时验证了整合包内置 Mod 的父包归属凭证不会伪装成独立更新来源，完整覆盖同级父 Mod 与多个 ContentPack，且已有独立来源保持不变；将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。
+当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **317 总计，其中 315 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时验证了整合包内置 Mod 的父包归属凭证不会伪装成独立更新来源，完整覆盖同级父 Mod 与多个 ContentPack，且已有独立来源保持不变；本轮新增了旧 WPF 自定义强调色迁移、主题重应用、深色模式提亮、无效输入保护和清除恢复默认的 Headless 回归；将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。
 上一轮测试统计（含 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim/旧缓存路径、API 限额快照、失效 Token 资料保留及限额事件订阅异常隔离回归）：迁移测试 **308 总计，其中 306 通过、2 跳过**。
 本轮界面回退：撤销此前生成式 PNG 图标替换，恢复 `Resources/Icons.axaml` 中的原有矢量资源及动态颜色绑定；标题栏仍保留统一 24×24 画布和等宽控制列，避免回退图标后重新引入三个窗口按钮的对齐问题，并新增回归断言禁止视图重新引用 `Assets/Icons/Generated`。
 本轮修复：Modpack/Collection 的游戏版本只接受 API 明确字段，不再从整合包名称、摘要或文件名推断版本；普通 Mod 仍保留文本兜底。

@@ -41,6 +41,7 @@ public static class ThemeService
 {
     private static ThemeStyleType _currentStyle = ThemeStyleType.Stardew;
     private static MaterialScheme _currentScheme = MaterialScheme.Blue;
+    private static Color? _customPrimaryColor;
     private static bool _isDarkMode;
     private static bool _followSystemTheme;
     private static bool _transparencyEnabled = true;
@@ -62,6 +63,11 @@ public static class ThemeService
     public static MaterialScheme CurrentScheme => _currentScheme;
     public static bool IsDarkMode => _isDarkMode;
     public static bool FollowSystemTheme => _followSystemTheme;
+
+    /// <summary>当前自定义强调色；空字符串表示使用主题默认强调色。</summary>
+    public static string CustomPrimaryColorHex => _customPrimaryColor.HasValue
+        ? ToRgbHex(_customPrimaryColor.Value)
+        : string.Empty;
 
     /// <summary>当前是否启用主窗口透明/半透明背景。</summary>
     public static bool TransparencyEnabled => _transparencyEnabled;
@@ -113,6 +119,9 @@ public static class ThemeService
             ReapplyThemeAccent(theme);
         }
 
+        // 主题和暗色覆盖完成后再应用用户强调色，避免被后续覆盖重置。
+        ApplyCustomPrimaryColor();
+
         ApplyWindowBackgroundTransparency();
 
         ThemeChanged?.Invoke();
@@ -161,6 +170,9 @@ public static class ThemeService
                 }
             }
         }
+
+        // 暗色/浅色切换会重写整套资源，必须重新应用自定义强调色。
+        ApplyCustomPrimaryColor();
 
         ApplyWindowBackgroundTransparency();
 
@@ -382,6 +394,111 @@ public static class ThemeService
         resources["CategorySelectedBg"] = new SolidColorBrush(Color.Parse($"#33{rgbHex}"));
         resources["CategoryIndicator"] = new SolidColorBrush(lightened);
         resources["ColorBrush2"] = new SolidColorBrush(lightened);
+    }
+
+    /// <summary>
+    /// 应用用户自定义强调色。只覆盖强调色及其派生资源，背景、文字和告警色仍由主题负责，
+    /// 这样可以在不破坏深色模式可读性的前提下保留主题外观。
+    /// </summary>
+    private static void ApplyCustomPrimaryColor()
+    {
+        var resources = Application.Current?.Resources;
+        if (resources == null || !_customPrimaryColor.HasValue)
+        {
+            return;
+        }
+
+        var primary = _customPrimaryColor.Value;
+        var effective = _isDarkMode
+            ? LightenTowardsWhite(primary, 0.25)
+            : Color.FromArgb(0xFF, primary.R, primary.G, primary.B);
+        var lightVariant = LightenTowardsWhite(primary, 0.75);
+        var rgbHex = $"{effective.R:X2}{effective.G:X2}{effective.B:X2}";
+
+        resources["HeaderBackgroundBrush"] = new SolidColorBrush(effective);
+        resources["AccentBrush"] = new SolidColorBrush(effective);
+        resources["ColorBrush2"] = new SolidColorBrush(effective);
+        resources["ColorBrush3"] = new SolidColorBrush(lightVariant);
+        resources["CategoryIndicator"] = new SolidColorBrush(effective);
+        resources["PillBg"] = new SolidColorBrush(Color.Parse($"#33{rgbHex}"));
+        resources["CategorySelectedBg"] = new SolidColorBrush(Color.Parse($"#33{rgbHex}"));
+    }
+
+    private static Color LightenTowardsWhite(Color color, double amount)
+    {
+        amount = Math.Clamp(amount, 0, 1);
+        return Color.FromArgb(0xFF,
+            (byte)(color.R + (255 - color.R) * amount),
+            (byte)(color.G + (255 - color.G) * amount),
+            (byte)(color.B + (255 - color.B) * amount));
+    }
+
+    private static string ToRgbHex(Color color) =>
+        $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    /// <summary>
+    /// 设置自定义强调色。支持 #RGB/#RRGGBB；传入空值会恢复当前主题默认色。
+    /// </summary>
+    public static bool TrySetCustomPrimaryColor(string? value, out string errorMessage)
+    {
+        errorMessage = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _customPrimaryColor = null;
+            ApplyCustomPrimaryColorReset();
+            ThemeChanged?.Invoke();
+            return true;
+        }
+
+        var normalized = value.Trim();
+        if (!normalized.StartsWith('#'))
+        {
+            normalized = "#" + normalized;
+        }
+
+        if (normalized.Length == 4)
+        {
+            normalized = $"#{normalized[1]}{normalized[1]}{normalized[2]}{normalized[2]}{normalized[3]}{normalized[3]}";
+        }
+
+        if (normalized.Length != 7 || normalized.Skip(1).Any(ch => !Uri.IsHexDigit(ch)))
+        {
+            errorMessage = "颜色格式应为 #RGB 或 #RRGGBB";
+            return false;
+        }
+
+        try
+        {
+            _customPrimaryColor = Color.Parse(normalized);
+            ApplyCustomPrimaryColor();
+            ThemeChanged?.Invoke();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"无法解析颜色：{ex.Message}";
+            return false;
+        }
+    }
+
+    private static void ApplyCustomPrimaryColorReset()
+    {
+        var themes = GetAvailableThemes();
+        var theme = themes.FirstOrDefault(t =>
+            t.Style == _currentStyle &&
+            (!_currentStyle.Equals(ThemeStyleType.MaterialYou) || t.Scheme == _currentScheme));
+        if (theme == null)
+        {
+            return;
+        }
+
+        ApplyThemeResources(theme.Colors);
+        if (_isDarkMode)
+        {
+            ApplyDarkOverrides();
+            ReapplyThemeAccent(theme);
+        }
+        ApplyWindowBackgroundTransparency();
     }
 
     // 暗色覆盖资源键（静态字段，供 ApplyDarkOverrides 和 ClearDarkOverrides 共用）
@@ -689,6 +806,7 @@ public static class ThemeService
     public static void RestoreFromSettings(AppUserSettings settings)
     {
         _transparencyEnabled = settings.EnableTransparency;
+        _customPrimaryColor = TryParseCustomPrimaryColor(settings.PrimaryColor);
         _followSystemTheme = IsSystemThemeMode(settings.ThemeMode);
         ConfigurePlatformThemeMonitoring();
         _isDarkMode = _followSystemTheme
@@ -739,6 +857,40 @@ public static class ThemeService
     {
         settings.ThemeStyleName = _currentStyle.ToString();
         settings.ThemeColorScheme = _currentScheme.ToString();
+        settings.PrimaryColor = CustomPrimaryColorHex;
+    }
+
+    private static Color? TryParseCustomPrimaryColor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (!normalized.StartsWith('#'))
+        {
+            normalized = "#" + normalized;
+        }
+
+        if (normalized.Length == 4)
+        {
+            normalized = $"#{normalized[1]}{normalized[1]}{normalized[2]}{normalized[2]}{normalized[3]}{normalized[3]}";
+        }
+
+        if (normalized.Length != 7 || normalized.Skip(1).Any(ch => !Uri.IsHexDigit(ch)))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Color.Parse(normalized);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static Dictionary<string, Color> GetStardewColors()

@@ -269,6 +269,7 @@ public sealed class LegacyConfigurationMigrationService
             value => settings.ThemeStyleName = value, result, ref hadCurrentSettings);
         changed |= ImportString(root, "ThemeColorScheme", settings.ThemeColorScheme, defaults.ThemeColorScheme,
             value => settings.ThemeColorScheme = value, result, ref hadCurrentSettings);
+        changed |= ImportLegacyPrimaryColor(root, settings, result, ref hadCurrentSettings);
         changed |= ImportString(root, "Language", settings.UiLanguage, defaults.UiLanguage,
             value => settings.UiLanguage = value, result, ref hadCurrentSettings);
 
@@ -863,6 +864,46 @@ public sealed class LegacyConfigurationMigrationService
             result.ImportedSettingsCount++;
         }
 
+        return true;
+    }
+
+    private static bool ImportLegacyPrimaryColor(
+        JsonElement root,
+        AppUserSettings settings,
+        LegacyConfigurationMigrationResult result,
+        ref bool hadCurrentSettings)
+    {
+        if (!TryGetString(root, "PrimaryColor", out var value) ||
+            string.IsNullOrWhiteSpace(value) ||
+            (hadCurrentSettings && !string.IsNullOrWhiteSpace(settings.PrimaryColor)))
+        {
+            return false;
+        }
+
+        var normalized = value.Trim();
+        if (!normalized.StartsWith('#'))
+        {
+            normalized = "#" + normalized;
+        }
+
+        if (normalized.Length == 4)
+        {
+            normalized = $"#{normalized[1]}{normalized[1]}{normalized[2]}{normalized[2]}{normalized[3]}{normalized[3]}";
+        }
+
+        if (normalized.Length != 7 || normalized.Skip(1).Any(ch => !Uri.IsHexDigit(ch)))
+        {
+            return false;
+        }
+
+        // 旧 WPF 的默认值从未被 ThemeService 应用，不应让迁移后的默认 Stardew 主题变紫。
+        if (string.Equals(normalized, "#7C4DFF", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        settings.PrimaryColor = normalized.ToUpperInvariant();
+        result.ImportedSettingsCount++;
         return true;
     }
 
