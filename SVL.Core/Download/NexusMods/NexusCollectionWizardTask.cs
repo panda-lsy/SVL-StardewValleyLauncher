@@ -1245,6 +1245,27 @@ public class NexusCollectionWizardTask : DownloadTask
     }
 
     /// <summary>
+    /// 为“合并型”覆盖创建备份，但保留当前目录。
+    /// bundled 文件和 patches 只覆盖部分文件，不能像完整 Mod 替换那样
+    /// 先把整个目录移走，否则会丢失未被补丁包含的文件。
+    /// </summary>
+    private static bool TryBackupExistingModDirectory(string modsPath, string path)
+    {
+        if (!Directory.Exists(path))
+            return true;
+
+        var backupPath = ModBackupService.BackupDirectory(modsPath, path);
+        if (string.IsNullOrWhiteSpace(backupPath))
+        {
+            Log.Warn($"[CollectionWizard] 合并覆盖前备份失败，跳过本次操作: {path}");
+            return false;
+        }
+
+        Log.Info($"[CollectionWizard] 已创建合并覆盖前备份: {path} -> {backupPath}");
+        return true;
+    }
+
+    /// <summary>
     /// 递归复制目录（用于跨卷移动）
     /// </summary>
     private static void CopyDirectoryRecursive(string sourceDir, string targetDir)
@@ -1870,7 +1891,16 @@ public class NexusCollectionWizardTask : DownloadTask
 
                         Log.Info($"[CollectionWizard] 合并文件: {subDirName} -> Mods");
 
-                        // 直接合并目录（会自动替换重复文件）
+                        // bundled 是部分文件合并，保留当前目录以便继续合并；
+                        // 但在任何 File.Copy(..., overwrite: true) 发生前，
+                        // 必须先创建可从“备份”页恢复的快照。
+                        if (!TryBackupExistingModDirectory(_targetModsPath, destDir))
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        // 合并目录（重复文件会覆盖，旧目录已在上面完成备份）
                         CopyDirectoryRecursive(subDir, destDir);
                         replacedCount++;
                         Log.Info($"[CollectionWizard] ✓ 合并成功: {subDirName}");
@@ -1939,6 +1969,14 @@ public class NexusCollectionWizardTask : DownloadTask
                     }
 
                     Log.Info($"[CollectionWizard] 找到 Mod 目录: {Path.GetFileName(modInstallPath)} (原始名称: {mod.Name})");
+
+                    // patches 同样是对现有 Mod 的部分文件覆盖，不能移走整个
+                    // 目录；先建立完整备份，失败时跳过该 Mod，避免静默覆盖。
+                    if (!TryBackupExistingModDirectory(_targetModsPath, modInstallPath))
+                    {
+                        skippedCount++;
+                        continue;
+                    }
 
                     // 应用补丁
                     var success = CollectionPatchService.ApplyPatches(

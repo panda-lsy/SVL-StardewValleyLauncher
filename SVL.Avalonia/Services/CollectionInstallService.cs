@@ -125,6 +125,7 @@ public sealed class CollectionInstallService
     private readonly INxmLinkParser _nxmLinkParser;
     private readonly BrowserDownloadFallbackService _browserFallback;
     private readonly ModpackInstallService _modpackInstallService;
+    private readonly DownloadInstallService _downloadInstallService;
 
     public CollectionInstallService(
         IGameInstallPathLocator gameInstallPathLocator,
@@ -135,7 +136,8 @@ public sealed class CollectionInstallService
         NexusModDownloadResolverService nexusResolver,
         INxmLinkParser nxmLinkParser,
         BrowserDownloadFallbackService browserFallback,
-        ModpackInstallService modpackInstallService)
+        ModpackInstallService modpackInstallService,
+        DownloadInstallService? downloadInstallService = null)
     {
         _gameInstallPathLocator = gameInstallPathLocator;
         _smapiInstallService = smapiInstallService;
@@ -146,6 +148,7 @@ public sealed class CollectionInstallService
         _nxmLinkParser = nxmLinkParser;
         _browserFallback = browserFallback;
         _modpackInstallService = modpackInstallService;
+        _downloadInstallService = downloadInstallService ?? new DownloadInstallService(gameInstallPathLocator);
     }
 
     /// <summary>
@@ -863,7 +866,7 @@ public sealed class CollectionInstallService
     // 内部方法
     // ================================================================
 
-    private static CollectionPatchResult ApplyCollectionPatches(
+    private CollectionPatchResult ApplyCollectionPatches(
         string collectionRoot,
         string modsPath,
         NexusCollectionJsonMod mod,
@@ -904,6 +907,20 @@ public sealed class CollectionInstallService
         foreach (var name in candidateNames)
         {
             var modPath = Path.Combine(modsPath, name);
+
+            // patches 只覆盖现有 Mod 的部分文件，不能把整个目录移走；
+            // 但也不能直接覆盖用户文件。先写入 ModsBackup，失败时跳过
+            // 该目标并保留原内容，避免静默破坏可用安装。
+            if (!_downloadInstallService.TryBackupExistingModDirectory(
+                    modsPath,
+                    modPath,
+                    out _))
+            {
+                skipped += mod.Patches.Count;
+                messages.Add($"{name}: 补丁覆盖前备份失败，已跳过");
+                continue;
+            }
+
             var result = CollectionPatchService.ApplyPatches(
                 collectionRoot,
                 modPath,

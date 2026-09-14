@@ -241,9 +241,15 @@ Avalonia 迁移回归测试为 **313 总计，其中 311 通过、2 跳过**。
 本轮补齐设置迁移：旧 WPF 的 `EnableAnimations` 已接入 Avalonia 设置页与运行时，
 通过动态过渡资源即时关闭/恢复已有页面动画，并新增 Headless 回归断言。
 
-本轮继续审计旧 WPF Collection 安装器：内置 Bundled Mod、单根目录归档和 Bundled
-补丁覆盖现有 Mod 时，原目录现在会先创建 `ModsBackup` 备份，再移入系统回收站；
-缓存、临时解压目录和失败任务残留仍按生命周期清理，不纳入用户内容保护范围。
+本轮继续审计旧 WPF Collection 安装器：内置 Bundled Mod 和单根目录归档的完整替换
+仍会先创建 `ModsBackup` 备份，再将原目录移入系统回收站；而多文件 `bundled` 合并
+与 `patches` 部分覆盖会保留当前目录，并在任何覆盖前创建完整 `ModsBackup` 快照，
+避免把未被补丁包含的文件一起移走。缓存、临时解压目录和失败任务残留仍按生命周期
+清理，不纳入用户内容保护范围。
+
+当前 Avalonia Collection 安装器的 `patches` 路径也已统一复用 `DownloadInstallService`
+的备份实现：当缓存命中已存在的 Mod 并准备部分覆盖时，先创建 `ModsBackup` 快照；
+备份失败则跳过该补丁并保留原目录，不再直接改写用户文件。
 
 本轮再收口 Avalonia 整合包安装事务：替换已安装 Mod 后，事务暂存的旧目录现在
 必须进入系统回收站；回收站失败会恢复旧目录并让更新失败，避免旧版本随着 `_staging`

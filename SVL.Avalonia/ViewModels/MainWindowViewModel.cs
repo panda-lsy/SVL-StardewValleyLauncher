@@ -191,7 +191,7 @@ public partial class MainWindowViewModel : ObservableObject
         var collectionInstallService = new SVL.Avalonia.Services.CollectionInstallService(
             _gameInstallPathLocator, smapiInstallService, httpDownloadService, remoteCatalogService,
             _settingsStore, nexusModDownloadResolverService, nxmLinkParser, browserDownloadFallbackService,
-            modpackInstallService);
+            modpackInstallService, downloadInstallService);
         var launcherUpdateService = new LauncherUpdateService();
         _launcherUpdateService = launcherUpdateService;
         LaunchPage = new LaunchPageViewModel(_gameInstallPathLocator, externalProcessService, _settingsStore, _localizationService, _imageResourceService);
