@@ -599,6 +599,9 @@ public sealed class ModpackInstallService
 
             // 写 svl-source.json 到各 mod 目录（从 sources.json 中的 source 字段恢复）
             WriteSourceCredentials(sourcesList, modsPath);
+            // 导入完成后立即修复旧导出/部分写入造成的复合来源断链，
+            // 不要求用户先离开再重新进入 Mod 管理页才能看到正确状态。
+            RepairCompositeSourceCredentials(modsPath);
 
             // 提取整合包图标
             var iconPath = ExtractPackIcon(packageRoot, versionRoot, customIconPath, tempDir);
@@ -945,6 +948,11 @@ public sealed class ModpackInstallService
             }
 
             onProgress?.Invoke(new ModpackInstallProgress { Percent = 85, StepText = "overrides 应用完成" });
+
+            // CurseForge 清单按文件逐项安装；同一个归档仍可能展开为父 Mod
+            // 和多个同级 ContentPack。统一在安装收尾阶段整理来源树，避免
+            // 某个子 Mod 因单独写入来源而再次显示“缺少来源/可更新”。
+            RepairCompositeSourceCredentials(modsPath);
 
             // ===== 阶段 5: 保存实例配置 =====
             onProgress?.Invoke(new ModpackInstallProgress { Percent = 87, StepText = "保存实例配置" });
