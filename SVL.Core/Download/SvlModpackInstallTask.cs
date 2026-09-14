@@ -13,6 +13,7 @@ using SVL.Core.Config;
 using SVL.Core.Download.NexusMods;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Core.Stardew.ResourceProject.Modpack;
 using SVL.Core.Stardew.ResourceProject.NexusMods;
@@ -1401,15 +1402,22 @@ public class SvlModpackInstallTask : DownloadTask
                     }
                 }
 
-                // 删除整个版本目录
+                // 将本次创建的版本目录移入回收站；清理失败时保留目录，避免失败/取消
+                // 把用户可恢复的半成品变成不可恢复的物理删除。
                 try
                 {
-                    Directory.Delete(versionPath, recursive: true);
-                    Log.Info($"[SvlModpackInstallTask] ✓ 已删除版本目录: {versionPath}");
+                    if (ModBackupService.MovePathToRecycleBin(versionPath))
+                    {
+                        Log.Info($"[SvlModpackInstallTask] ✓ 已将版本目录移入回收站: {versionPath}");
+                    }
+                    else
+                    {
+                        Log.Warn($"[SvlModpackInstallTask] 版本目录未能移入回收站，已保留: {versionPath}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Log.Warn($"[SvlModpackInstallTask] 删除版本目录失败: {ex.Message}");
+                    Log.Warn($"[SvlModpackInstallTask] 移入回收站失败: {ex.Message}");
                 }
             });
         }

@@ -12,6 +12,7 @@ using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Core.Modpack;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
 
 namespace SVL.Core.Download;
@@ -985,7 +986,7 @@ public class CurseforgeModpackDownloadTask : DownloadTask
     }
 
     /// <summary>
-    /// 清理版本根目录（取消时删除所有内容，不论是否为空）
+    /// 清理版本根目录（取消时将本任务创建的内容移入回收站）
     /// </summary>
     private void CleanupVersionRootDirectory()
     {
@@ -1002,157 +1003,28 @@ public class CurseforgeModpackDownloadTask : DownloadTask
 
         try
         {
-            if (Directory.Exists(_versionRootPath))
+            if (!Directory.Exists(_versionRootPath))
             {
-                // 尝试多次删除，处理文件被占用的情况
-                bool deleted = false;
-                for (int i = 0; i < 5; i++)
-                {
-                    // 在每次重试前检查 _versionRootPath 是否为 null
-                    if (string.IsNullOrWhiteSpace(_versionRootPath))
-                    {
-                        Log.Info($"[CurseforgeModpackDownload] 版本路径已被清空，跳过后续删除尝试");
-                        break;
-                    }
+                Log.Info($"[CurseforgeModpackDownload] 版本目录不存在，无需清理: {_versionRootPath}");
+                return;
+            }
 
-                    try
-                    {
-                        // 先尝试递归删除
-                        Directory.Delete(_versionRootPath, true);
-                        deleted = true;
-                        Log.Info($"[CurseforgeModpackDownload] 已删除版本目录: {_versionRootPath}");
-                        break;  // 删除成功，立即退出循环
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warn($"[CurseforceModpackDownload] 删除版本目录失败（第 {i + 1} 次尝试）: {ex.Message}");
-
-                        // 检查是否是因为路径为 null
-                        if (string.IsNullOrWhiteSpace(_versionRootPath))
-                        {
-                            Log.Warn($"[CurseforgeModpackDownload] 版本路径为 null，停止删除尝试");
-                            break;
-                        }
-
-                        if (i < 4)
-                        {
-                            // 等待一小段时间后重试（每次增加等待时间）
-                            System.Threading.Thread.Sleep(200 * (i + 1));
-                        }
-                        else
-                        {
-                            // 最后一次尝试：逐个删除文件和子目录
-                            try
-                            {
-                                if (string.IsNullOrWhiteSpace(_versionRootPath))
-                                {
-                                    Log.Warn($"[CurseforgeModpackDownload] 版本路径为 null，跳过强制删除");
-                                    break;
-                                }
-
-                                ForceDeleteDirectory(_versionRootPath);
-                                deleted = true;
-                                Log.Info($"[CurseforgeModpackDownload] 已强制删除版本目录: {_versionRootPath}");
-                            }
-                            catch (Exception forceEx)
-                            {
-                                Log.Error($"[CurseforgeModpackDownload] 强制删除版本目录也失败: {forceEx.Message}");
-
-                                // 最后检查：如果目录仍然存在，记录警告
-                                if (!string.IsNullOrWhiteSpace(_versionRootPath) && Directory.Exists(_versionRootPath))
-                                {
-                                    Log.Error($"[CurseforgeModpackDownload] 版本目录仍然存在，可能被版本选择检测到: {_versionRootPath}");
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (!deleted && !string.IsNullOrWhiteSpace(_versionRootPath))
-                {
-                    Log.Warn($"[CurseforgeModpackDownload] 无法删除版本目录: {_versionRootPath}");
-
-                    // 最后检查：如果目录仍然存在，记录警告
-                    if (Directory.Exists(_versionRootPath))
-                    {
-                        Log.Error($"[CurseforgeModpackDownload] 版本目录仍然存在，可能被版本选择检测到: {_versionRootPath}");
-                    }
-                }
+            if (ModBackupService.MovePathToRecycleBin(_versionRootPath))
+            {
+                Log.Info($"[CurseforgeModpackDownload] 已将版本目录移入回收站: {_versionRootPath}");
             }
             else
             {
-                Log.Info($"[CurseforgeModpackDownload] 版本目录不存在，无需清理: {_versionRootPath}");
+                Log.Warn($"[CurseforgeModpackDownload] 版本目录未能移入回收站，已保留: {_versionRootPath}");
             }
         }
         catch (Exception ex)
         {
-            Log.Warn($"[CurseforgeModpackDownload] 清理版本目录失败: {ex.Message}");
-
-            // 最后检查：如果目录仍然存在，记录警告
-            if (!string.IsNullOrWhiteSpace(_versionRootPath) && Directory.Exists(_versionRootPath))
-            {
-                Log.Error($"[CurseforgeModpackDownload] 版本目录仍然存在，可能被版本选择检测到: {_versionRootPath}");
-            }
+            Log.Warn($"[CurseforgeModpackDownload] 移入回收站失败: {ex.Message}");
         }
         finally
         {
             _versionRootPath = null;  // 清除引用，避免重复处理
-        }
-    }
-
-    /// <summary>
-    /// 强制删除目录及其内容（逐个删除文件）
-    /// </summary>
-    private void ForceDeleteDirectory(string path)
-    {
-        try
-        {
-            // 先删除所有文件
-            var files = Directory.GetFiles(path, "*", SearchOption.AllDirectories);
-            foreach (var file in files)
-            {
-                try
-                {
-                    if (File.Exists(file))
-                    {
-                        File.Delete(file);
-                    }
-                }
-                catch
-                {
-                    // 忽略单个文件删除失败，继续删除其他文件
-                }
-            }
-
-            // 再删除所有子目录
-            var dirs = Directory.GetDirectories(path, "*", SearchOption.AllDirectories);
-            // 按深度排序，先删除深层目录
-            var sortedDirs = dirs.OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar));
-            foreach (var dir in sortedDirs)
-            {
-                try
-                {
-                    if (Directory.Exists(dir))
-                    {
-                        Directory.Delete(dir, false);
-                    }
-                }
-                catch
-                {
-                    // 忽略单个目录删除失败
-                }
-            }
-
-            // 最后删除根目录
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, false);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"[CurseforgeModpackDownload] 强制删除目录失败: {path}, {ex.Message}");
-            throw;
         }
     }
 

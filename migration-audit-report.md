@@ -258,3 +258,9 @@ Avalonia 迁移回归测试为 **313 总计，其中 311 通过、2 跳过**。
 本轮继续收口旧 WPF SMAPI 隔离实例清理：更新时移除附带 Mod、生成文件和非 Mods
 生成目录，以及失败/取消时本次创建的版本目录，均改为移入系统回收站；`Content`
 junction 仍只执行结构性断开，下载缓存和临时目录继续按生命周期物理清理。
+
+本轮继续收口失败/取消清理：Avalonia 的 SVL、CurseForge、Nexus Collection 新建版本
+目录，以及旧 Core 的 SVL/CurseForge 导入任务版本目录，不再通过 `Directory.Delete`
+物理删除；删除版本遇到文件锁后进入 `.svl-delete-*` 队列的目录，也会继续重试移入
+回收站，失败则保留待后续处理。缓存、临时归档、事务暂存和已搬空的 junction 仍属于
+生命周期/结构清理，不纳入用户内容回收范围。

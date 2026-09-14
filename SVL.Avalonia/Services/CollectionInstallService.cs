@@ -1894,7 +1894,11 @@ public sealed class CollectionInstallService
                 }
             }
 
-            Directory.Delete(versionRoot, true);
+            if (!RecycleBinService.TryMoveToRecycleBin(versionRoot, out _))
+            {
+                // 回收站不可用时保留目录，绝不能为了清理失败半成品而物理删除用户内容。
+                return;
+            }
         }
         catch { }
     }

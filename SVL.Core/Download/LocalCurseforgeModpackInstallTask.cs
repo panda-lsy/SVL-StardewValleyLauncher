@@ -12,6 +12,7 @@ using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Core.Modpack;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
 
 namespace SVL.Core.Download;
@@ -705,8 +706,14 @@ public class LocalCurseforgeModpackInstallTask : DownloadTask
                 var files = Directory.GetFiles(_versionRootPath, "*", SearchOption.AllDirectories);
                 if (files.Length == 0)
                 {
-                    Directory.Delete(_versionRootPath, true);
-                    Log.Info($"[LocalCurseforgeModpack] 已清理版本目录: {_versionRootPath}");
+                    if (ModBackupService.MovePathToRecycleBin(_versionRootPath))
+                    {
+                        Log.Info($"[LocalCurseforgeModpack] 已将空版本目录移入回收站: {_versionRootPath}");
+                    }
+                    else
+                    {
+                        Log.Warn($"[LocalCurseforgeModpack] 版本目录未能移入回收站，已保留: {_versionRootPath}");
+                    }
                 }
             }
         }

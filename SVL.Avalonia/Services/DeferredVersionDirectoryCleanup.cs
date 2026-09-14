@@ -76,8 +76,13 @@ public static class DeferredVersionDirectoryCleanup
             }
 
             ClearAttributes(path);
-            Directory.Delete(path, recursive: true);
-            Debug.WriteLine($"[DeferredCleanup] 已清理延后删除版本目录: {path}");
+            if (!RecycleBinService.TryMoveToRecycleBin(path, out var recycleMessage))
+            {
+                Debug.WriteLine($"[DeferredCleanup] 暂时无法将版本目录移入回收站: {path}, {recycleMessage}");
+                return false;
+            }
+
+            Debug.WriteLine($"[DeferredCleanup] 已将延后删除版本目录移入回收站: {path}");
             return true;
         }
         catch (Exception ex)

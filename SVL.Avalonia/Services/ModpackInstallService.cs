@@ -6352,7 +6352,10 @@ public sealed class ModpackInstallService
         catch { }
     }
 
-    /// <summary>取消/失败时清理版本隔离目录。参考旧架构先处理 Content junction 避免误删源目录。</summary>
+    /// <summary>
+    /// 取消/失败时清理本次新建的版本隔离目录。
+    /// 参考旧架构先处理 Content junction 避免误删源目录，再将用户可见目录移入回收站。
+    /// </summary>
     private static void CleanupVersionDirectory(string gamePath, string instanceName)
     {
         try
@@ -6373,7 +6376,11 @@ public sealed class ModpackInstallService
                 }
             }
 
-            Directory.Delete(versionRoot, true);
+            if (!RecycleBinService.TryMoveToRecycleBin(versionRoot, out _))
+            {
+                // 回收站不可用时保留目录，绝不能为了清理失败半成品而物理删除用户内容。
+                return;
+            }
         }
         catch { }
     }
