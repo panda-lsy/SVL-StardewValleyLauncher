@@ -1885,6 +1885,63 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void ExistingMarketTownCompositeSources_ShouldRepairRealFolderNames()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-market-town-composite-repair-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentPath = Path.Combine(modsPath, "[] MarketTown");
+        var childPath = Path.Combine(modsPath, "[CP] CloneNPC_RSV");
+        try
+        {
+            Directory.CreateDirectory(parentPath);
+            Directory.CreateDirectory(childPath);
+            File.WriteAllText(
+                Path.Combine(parentPath, "manifest.json"),
+                "{\"Name\":\"Market Town\",\"UniqueID\":\"d5a1lamdtd.MarketTown\",\"Version\":\"6.7.1\",\"EntryDll\":\"MarketTown.dll\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "manifest.json"),
+                "{\"Name\":\"MarketTown - Cloned NPC RSV\",\"UniqueID\":\"d5a1lamdtd.MarketTown.CloneNPC_RSV\",\"Version\":\"5.0.0\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+
+            File.WriteAllText(
+                Path.Combine(parentPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"sourceKind\":\"modpack-entry\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"5276101\",\"sourceKind\":\"modpack-entry\",\"hasUpdate\":true,\"latestVersion\":\"6.7.1\",\"updateStatus\":\"可更新 -> 6.7.1\"}");
+
+            var repair = typeof(ModpackInstallService).GetMethod(
+                "RepairCompositeSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(repair);
+            repair!.Invoke(null, [modsPath]);
+
+            using var parentDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(parentPath, "svl-source.json")));
+            var parent = parentDocument.RootElement;
+            Assert.AreEqual("modpack-entry", parent.GetProperty("sourceKind").GetString());
+            Assert.IsTrue(parent.GetProperty("isParentMod").GetBoolean());
+            Assert.AreEqual("[CP] CloneNPC_RSV", parent.GetProperty("childMods")[0].GetProperty("relativePath").GetString());
+
+            using var childDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(childPath, "svl-source.json")));
+            var child = childDocument.RootElement;
+            Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("[] MarketTown", child.GetProperty("parentMod").GetProperty("relativePath").GetString());
+            Assert.IsFalse(child.TryGetProperty("projectId", out _));
+            Assert.IsFalse(child.TryGetProperty("fileId", out _));
+            Assert.IsFalse(child.GetProperty("hasUpdate").GetBoolean());
+            Assert.AreEqual("未检查", child.GetProperty("updateStatus").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void ExistingCompositeSources_ShouldRecoverChildWithoutSourceCredentialByManifestNamespace()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-composite-missing-child-source-test-" + Guid.NewGuid().ToString("N"));
