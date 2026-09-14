@@ -1651,8 +1651,13 @@ public class ModManager : IModManager
                 foreach (var file in nestedDir.GetFiles())
                 {
                     var destPath = Path.Combine(parentDir.FullName, file.Name);
-                    if (File.Exists(destPath))
-                        File.Delete(destPath);
+                    if ((File.Exists(destPath) || Directory.Exists(destPath))
+                        && !MovePathToRecycleBin(destPath))
+                    {
+                        Log.Warn($"[NestedFolder] 修复中止: 无法将冲突路径移入回收站: {destPath}");
+                        return false;
+                    }
+
                     file.MoveTo(destPath);
                 }
 
@@ -1660,12 +1665,17 @@ public class ModManager : IModManager
                 foreach (var dir in nestedDir.GetDirectories())
                 {
                     var destPath = Path.Combine(parentDir.FullName, dir.Name);
-                    if (Directory.Exists(destPath))
-                        Directory.Delete(destPath, true);
+                    if ((File.Exists(destPath) || Directory.Exists(destPath))
+                        && !MovePathToRecycleBin(destPath))
+                    {
+                        Log.Warn($"[NestedFolder] 修复中止: 无法将冲突路径移入回收站: {destPath}");
+                        return false;
+                    }
+
                     dir.MoveTo(destPath);
                 }
 
-                // 删除空的嵌套文件夹
+                // 内容已移动完毕，删除空的结构性嵌套文件夹；这里不涉及用户文件。
                 try
                 {
                     Directory.Delete(issue.NestedFolderPath, false);
