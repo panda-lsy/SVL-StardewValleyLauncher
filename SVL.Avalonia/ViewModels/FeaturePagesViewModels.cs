@@ -9161,9 +9161,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return false;
         }
 
-        // 嵌套 ContentPack 的来源由父 Mod 提供，与平台无关。旧实现只对
-        // CurseForge 来源做判断，导致 Nexus/普通导入的子 Mod 在单独检查
-        // 更新时被错误显示为“缺少来源信息”。
+        // 嵌套 ContentPack 的来源由父 Mod 提供，与平台无关。这里必须有
+        // 明确的父子关系，不能仅凭 ContentPackFor 判断；ContentPackFor
+        // 只表示它依赖 Content Patcher 等框架，并不表示它是某个整合包
+        // 归档中的子 Mod。
         if (credential.ParentMod != null &&
             !string.IsNullOrWhiteSpace(credential.ParentMod.RelativePath))
         {
@@ -9177,64 +9178,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return true;
         }
 
-        // 兼容一类已经落盘的旧整合包数据：旧版本会把每个 ContentPack
-        // 逐条写成 sourceKind=modpack-entry，并复制父整合包的 project/file
-        // ID，但不会保存自己的 fileName/downloadUrl。此时 manifest 才是
-        // 判断“它是否为嵌套子 Mod”的可靠依据；不能因为 sourceKind 已有值
-        // 就继续把它当成独立更新源。真实的独立 Mod 条目仍要求有文件名或
-        // 下载地址，或者使用非 ContentPack 的 manifest。
-        if (string.Equals(sourceKind, "modpack-entry", StringComparison.OrdinalIgnoreCase) &&
-            string.IsNullOrWhiteSpace(credential.FileName) &&
-            string.IsNullOrWhiteSpace(credential.DownloadUrl) &&
-            HasContentPackManifest(modDirectory))
-        {
-            return true;
-        }
-
-        // 更早的导入格式没有 sourceKind，也没有下载文件名/URL；同样只在
-        // manifest 明确为 ContentPack 时认定为父级继承，不能仅凭 project/file
-        // ID 或一个模糊的 sourceKind=modpack 推断。
-        if (!string.IsNullOrWhiteSpace(sourceKind))
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(credential.FileName) ||
-            !string.IsNullOrWhiteSpace(credential.DownloadUrl) ||
-            string.IsNullOrWhiteSpace(modDirectory))
-        {
-            return false;
-        }
-
-        return HasContentPackManifest(modDirectory);
-    }
-
-    private static bool HasContentPackManifest(string modDirectory)
-    {
-        var manifestPath = FindManifestPath(modDirectory);
-        if (string.IsNullOrWhiteSpace(manifestPath))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = TryReadManifestDocument(manifestPath);
-            if (document == null || document.RootElement.ValueKind != JsonValueKind.Object ||
-                !TryGetJsonPropertyIgnoreCase(document.RootElement, "ContentPackFor", out var contentPackFor))
-            {
-                return false;
-            }
-
-            return contentPackFor.ValueKind == JsonValueKind.Object
-                ? contentPackFor.EnumerateObject().Any()
-                : contentPackFor.ValueKind == JsonValueKind.String &&
-                  !string.IsNullOrWhiteSpace(contentPackFor.GetString());
-        }
-        catch
-        {
-            return false;
-        }
+        // sourceKind=modpack-entry、项目/文件 ID、ContentPackFor 或缺少
+        // fileName/downloadUrl 都不能单独证明“继承父 Mod”。整合包导入
+        // 必须按清单逐个写入每个 Mod 的来源；只有上面的 parentMod 或
+        // parent-inherited 标记才允许跳过子 Mod 的独立更新检查。
+        return false;
     }
 
     private static string BuildInitialModUpdateStatus(

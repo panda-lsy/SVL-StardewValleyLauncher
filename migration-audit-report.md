@@ -148,14 +148,13 @@ Unix 主机对应的 `scripts/package-avalonia.sh` 入口也已补齐，统一�
 本轮验证统计更新：跨平台嵌套子 Mod 来源回归加入后，迁移测试为 **294 总计，其中 292 通过、2 跳过**。
 本轮冲突检测收敛：旧分析入口不再读取 Mod 文件，用户界面只依据社区 `hardConflicts`/`functionalOverlaps` 字段，`svl-source.json` 不会再制造文件冲突。
 
-本轮实际目录兼容修复：针对旧数据中 ContentPack 被错误写成
-`sourceKind=modpack-entry`、同时复制父整合包 project/file ID 且没有独立
-`fileName/downloadUrl` 的情况，更新检查现在会结合 manifest 的
-`ContentPackFor` 判定为父 Mod 的继承来源，不再把整合包版本误报成子 Mod
-的可更新版本；对应旧 `MarketTown` 目录形态已加入回归测试。
-
-本轮验证统计更正：加入旧 `modpack-entry` ContentPack 兼容回归后，迁移测试为
-**295 总计，其中 293 通过、2 跳过**。
+本轮来源判定收紧：`ContentPackFor` 只表示该 Mod 依赖 Content Patcher 等
+框架，不能单独证明它是某个整合包归档中的子 Mod。整合包导入的独立条目
+（包括 `sourceKind=modpack-entry`、仅带整合包 Project/File ID 的旧数据）
+仍按 Mod 单独保留来源和更新状态；只有明确的 `parentMod`/`parent-inherited`
+关系才继承父 Mod 来源并跳过子 Mod 的独立更新检查。这样可以修复实际
+`[CP] CloneNPC_RSV` 被误判为“缺少来源/父级”的问题，同时保留真实复合
+Mod 的父子树行为；对应独立条目、旧条目和显式父子关系均有回归测试。
 
 本轮新增 Collection 任务详情回归：验证处理中条目会显示为当前 Mod，并在完成后清除当前标记；当前迁移测试为
 **296 总计，其中 294 通过、2 跳过**。

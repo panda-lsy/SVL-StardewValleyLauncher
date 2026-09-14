@@ -1994,7 +1994,7 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
-    public void VersionSettings_ShouldIgnoreLegacyCurseforgeModpackSourceForContentPackUpdates()
+    public void VersionSettings_ShouldKeepStandaloneModpackEntryActionable()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-modpack-source-guard-test-" + Guid.NewGuid().ToString("N"));
         var modDirectory = Path.Combine(root, "[CP] CloneNPC_RSV");
@@ -2006,7 +2006,7 @@ public sealed class AvaloniaMigrationHardeningTests
                 "{\"Name\":\"MarketTown - Cloned NPC RSV\",\"UniqueID\":\"d5a1lamdtd.MarketTown.CloneNPC_RSV\",\"Version\":\"5.0.0\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\",\"MinimumVersion\":\"2.0.0\"}}");
             File.WriteAllText(
                 Path.Combine(modDirectory, "svl-source.json"),
-                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"5276101\",\"hasUpdate\":true,\"latestVersion\":\"6.7.1\"}");
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"modId\":\"994458\",\"fileId\":\"5276101\",\"sourceKind\":\"modpack-entry\",\"hasUpdate\":true,\"latestVersion\":\"6.7.1\",\"updateUrl\":\"https://edge.forgecdn.net/files/8390/242/MarketTown.zip\",\"updateFileId\":\"8390242\"}");
 
             var reader = typeof(VersionSettingsPageViewModel).GetMethod(
                 "TryReadSourceCredential",
@@ -2019,7 +2019,7 @@ public sealed class AvaloniaMigrationHardeningTests
 
             var credential = reader!.Invoke(null, [modDirectory]);
             Assert.IsNotNull(credential);
-            Assert.IsTrue((bool)guard!.Invoke(null, [modDirectory, credential])!);
+            Assert.IsFalse((bool)guard!.Invoke(null, [modDirectory, credential])!);
         }
         finally
         {
@@ -2031,7 +2031,7 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
-    public void VersionSettings_ShouldTreatLegacyModpackEntryContentPackAsInherited()
+    public void VersionSettings_ShouldNotInferParentFromLegacyModpackEntry()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-legacy-modpack-entry-content-pack-test-" + Guid.NewGuid().ToString("N"));
         try
@@ -2062,7 +2062,7 @@ public sealed class AvaloniaMigrationHardeningTests
 
             var credential = reader!.Invoke(null, [root]);
             Assert.IsNotNull(credential);
-            Assert.IsTrue((bool)guard!.Invoke(null, [root, credential])!);
+            Assert.IsFalse((bool)guard!.Invoke(null, [root, credential])!);
         }
         finally
         {
