@@ -463,7 +463,7 @@ public class SmapiDownloadTask : DownloadTask
                 Log.Info($"[DownloadManager]   游戏文件: {gameFilesPath}");
 
                 // *** 3秒后自动移除任务（给用户时间看到完成状态） ***
-                Task.Delay(3000).ContinueWith(_ =>
+                _ = Task.Delay(3000).ContinueWith(_ =>
                 {
                     try
                     {

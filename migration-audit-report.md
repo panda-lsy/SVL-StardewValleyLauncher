@@ -97,6 +97,8 @@ Collection 单 Mod 下载也复用同一失败重试策略：瞬时 CDN/网络/�
 
 本轮继续补齐启动器更新设置迁移：新增 `ShowUpdateNotification` 的 Avalonia 持久化字段、WPF 旧配置导入、设置页绑定和自动保存；启动时发现新版本时会按该开关决定是否显示通知，设置页手动检查仍可主动查看更新。
 
+本轮完成旧 WPF/Core 工程编译收口：`SVL.Core` 使用 nullable 注解上下文消除历史 `CS8632` 噪声，修复延迟清理任务的未等待告警，并补上 SVL 整合包任务在 Premium 回退前触发 `NexusPremiumRequired` 通知事件；`SVL.sln` 当前 Debug 构建为 0 警告、0 错误。
+
 另存为任务恢复时不再强制按 Mod manifest 校验最终文件；只要目标文件已完整落盘且不存在 `.part`/`.part.json`，即可跳过重复下载，仍在写入的半成品不会被误复用。
 
 本轮继续补齐旧 WPF 设置迁移：`MaxConcurrentModLocalizationChecks` 已加入 Avalonia 配置、旧配置导入和设置页，并与 Mod 更新检测并发数分开使用；两项均限制在 1-16 个线程并有回归覆盖。
@@ -135,7 +137,7 @@ Unix 主机对应的 `scripts/package-avalonia.sh` 入口也已补齐，统一�
 1. 使用真实导出的 SVL/CurseForge/Nexus fixture 做一次端到端导入→安装→导出→再次导入，重点确认来源缺失、下载失败和旧包布局不会静默“安装完成”。当前已补本地直链端到端 fixture、导出包回导 fixture（覆盖自定义 Icon、配置覆盖、Nexus 缓存和 FileID）、真实 Nexus 文件页来源（`mods/29868?tab=files&nmm=1` + `File 7448774_...zip`）缓存命中、旧 WPF Nexus 缓存自动提升、直链来源保存/导出、来源缺失与缺失 `modpack.json` 的显式失败、设置目录按 manifest 映射、损坏/兼容 manifest、数字/字符串 FileID 兼容、无扩展名 7z、ZIP 越界防护、大小写不同的 manifest/Icon、Collection 镜像择一下载、Collection 外层目录下 `bundled` 解析、Collection 旧 source 字符串/URL 兼容，以及部分失败重试的更新模式回归；任务状态还会保存安装目录、速度、大小与子进度。近期又补充了生成式目录名（`cf-项目ID-文件ID`/`File 文件ID_...`）按 manifest 名整理、选中任务状态实时刷新、失败进度封顶 99%，CurseForge 页面/API 地址禁止直接下载、迁移标记允许新旧来源增量补迁移、迁移目标丢失后按旧来源恢复、CurseForge manifest 数字/字符串 ID、`files: null` 与 Collection 单字符串 `gameVersions` 的回归，以及“默认 SMAPI 图标可被包内 Icon 替换、用户自定义图标在重试时保留”的回归；`sources.json` 现兼容数组、常见对象包装、单来源对象、key→source 映射和 key→URL 简写，并可回退读取 `modpack.json.mods`，同时兼容 `site/provider/project/file` 等常见来源别名和真实 CurseForge CDN 路径回填 FileID；本地 SMAPI 复用会跳过损坏/无权限候选继续尝试可用实例；新增覆盖外层非目标 JSON 遮蔽内层有效 CurseForge/Collection 清单、未知 SMAPI 缓存拒绝复用、重复浏览器等待者和任务重试报告归属的回归。导出端还会从旧 Nexus 文件名/URL、CurseForge `cf-project-file` 目录名补回本地 FileID，减少不必要的线上查询；新增回归确认导入清单中的 NXM 一次性凭据会保留到解析请求；Mod 缓存复用现在必须通过有效 manifest 校验，延迟删除目录也会在启动/刷新时再次清理；SMAPI 默认图标写入会在资源流关闭后验证目标文件与实际解析路径，并兼容框架尚未初始化时的显式资源加载；SMAPI 官方回退兼容 `4.5.1.0` 到 `4.5.1` 这类 Release 标签差异；迁移还会在当前应用目录、工作目录与相邻 `SVL.Desktop`/WPF 目录内有限探测旧 `SVL/instances.json`，覆盖并排发布场景；Collection 稳定缓存命中现在覆盖直接安装入口，且 `.7z` 文件名不会再覆盖实际 ZIP 签名判断；本轮又补充了残留 source-only 目录过滤、Collection 顶层/嵌套来源字段归一化、bundled Mod 部分失败的逐项报告，以及管理页/导出页遇到单个无权限或重解析点目录时继续扫描其它 Mod 的安全遍历。
 2. 补齐线上搜索的详情和下载选项回归；整合包分页已接入 CurseForge 服务端 index/pageSize，并让 Nexus 按目标页偏移增加候选拉取量，同时修正末页 HasMore 判断；Nexus 页面仅有 Mod ID 时已接入 API/浏览器回退；兼容搜索入口已补齐筛选项与热门整合包首屏加载。下载页目录项和遗留搜索入口已保留结构化资源身份，详情展开/跳转优先使用结构化请求；详情下载 URL 会先剥离 `~~` 元数据，避免浏览器打开入口与安装入口行为不一致；CurseForge 解析层现在统一拒绝文件页/API URL，详情安装、批量更新、Modpack/Collection 安装共享同一安全边界；SMAPI 目录请求新增代理失败后的直连回退，并兼容 CurseForge 响应的大小写、`data/result/files/items` 多层包装及字符串 ID；SMAPI 目录给出网页地址时会回退到稳定 Forge CDN 路径；本轮补充搜索/详情请求代次保护，旧响应不会覆盖新结果，来源未知或没有可安装文件时会显示明确提示；旧 SMAPI 任务若只保存版本路径或使用“SMAPI 版本 - 实例名”任务名，现在会恢复实例名并把目标路径归一化到 Base，避免下载后再次弹窗或生成嵌套 versions。Nexus/CurseForge 的真实下载仍需要用户登录状态或可用网络，当前只能做协议和解析层验证。
 3. 在可见的 Windows Avalonia 窗口中完成 UI 冒烟，确认三个窗口按钮的视觉中心、右键菜单命中区域、深色弹窗和透明开关实际渲染；代码侧已改为显式右键打开并把菜单样式提升到应用级，Icon 选择项、本地 Mod 详情、详情页图标/分隔线/加载遮罩、SMAPI 预发布标签和托管弹窗背景已统一使用动态主题资源，自动化环境目前仍无法稳定枚举原生 Avalonia 窗口。
-4. 清理旧 WPF 工程已暴露的历史警告；该项不应阻塞 `SVL.Avalonia.csproj` 和迁移测试。
+4. 旧 WPF/Core 工程的历史编译警告已清理；后续只需继续关注真实线上与可见 UI 验收。
 
 ## 下一轮顺序
 

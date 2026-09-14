@@ -21,7 +21,9 @@
     <UseWPF>true</UseWPF>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
-    <Nullable>disable</Nullable>
+    <!-- 旧 Core 已使用可空引用类型注解；仅启用注解上下文，避免一次性引入
+         大量流分析告警，同时消除 CS8632 的误导性编译警告。 -->
+    <Nullable>annotations</Nullable>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <OutputPath>bin\$(Configuration)-$(Platform)\</OutputPath>

@@ -902,6 +902,7 @@ public class SvlModpackInstallTask : DownloadTask
         {
             // 非 Premium 用户：走浏览器回退
             Log.Warn($"[SvlModpackInstallTask] 非 Premium 用户，浏览器回退: {modName} (modId={nexusModId}, fileId={nexusFileId})");
+            NexusPremiumRequired?.Invoke(modName);
             zipPath = await WaitForBrowserDownloadAsync(pex, modName);
             // 将 Status 恢复为 Installing（WaitForBrowserDownloadAsync 会设置为 Downloading）
             Status = DownloadTaskStatus.Installing;
