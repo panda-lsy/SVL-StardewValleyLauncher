@@ -459,6 +459,53 @@ public class ModBatchUpdateTask : DownloadTask
                     return false;
                 }
             }
+            else if (item.Platform == "GitHub")
+            {
+                if (string.IsNullOrEmpty(mod.UpdateUrl))
+                {
+                    Log.Error($"[ModBatchUpdate] [{item.Name}] GitHub UpdateUrl 为空");
+                    item.ErrorMessage = "GitHub Release 没有可下载的压缩包";
+                    return false;
+                }
+
+                var fileName = !string.IsNullOrWhiteSpace(mod.SourceFileName)
+                    ? Path.GetFileName(mod.SourceFileName)
+                    : $"{item.Name}-{item.NewVersion}.zip";
+
+                item.Status = ModBatchUpdateStatus.Downloading;
+                Status = DownloadTaskStatus.Downloading;
+                StatusMessage = $"正在下载 {item.Name}...";
+
+                downloadTask = new ModDownloadTask(
+                    modId: "github",
+                    modName: item.Name,
+                    fileName: fileName,
+                    downloadUrl: mod.UpdateUrl,
+                    gameBasePath: null,
+                    targetModsPath: _modsPath,
+                    saveOnly: false,
+                    sourcePlatform: "GitHub",
+                    sourceProjectId: item.Mod.Manifest?.UpdateKeys?
+                        .FirstOrDefault(key => key.StartsWith("GitHub:", StringComparison.OrdinalIgnoreCase))?
+                        .Substring("GitHub:".Length),
+                    sourceFileId: null,
+                    isModpack: false,
+                    parentCancellationToken: _cts.Token,
+                    updateTargetModPath: mod.ModPath
+                );
+
+                await DownloadManager.Instance.ExecuteInternalTaskAsync(downloadTask);
+                await WaitForTaskAsync(downloadTask);
+
+                if (downloadTask.Status != DownloadTaskStatus.Completed)
+                {
+                    item.ErrorMessage = downloadTask.StatusMessage ?? "下载失败";
+                    return false;
+                }
+
+                Log.Info($"[ModBatchUpdate] [{item.Name}] GitHub 下载并安装完成");
+                return true;
+            }
             else
             {
                 Log.Error($"[ModBatchUpdate] [{item.Name}] 不支持的更新来源: {item.Platform}");

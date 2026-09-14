@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Text.Json;
@@ -15,6 +17,7 @@ namespace SVL.Core.Stardew.Mod;
 
 public class ModManager : IModManager
 {
+    private static readonly HttpClient GitHubHttpClient = CreateGitHubHttpClient();
     private List<SdVMod> _loadedMods = [];
 
     public List<SdVMod> LoadedMods => _loadedMods;
@@ -909,9 +912,9 @@ public class ModManager : IModManager
 
                             Log.Info($"[CheckModUpdates] MOD {mod.Name} 找到 GitHub 源: {identifier}");
 
-                            // TODO: 调用GitHub API检查更新
-                            mod.HasUpdate = false;
-                            sourceResolved = true; // 已找到更新源
+                            sourceResolved = true;
+                            if (!await TryCheckGitHubUpdateAsync(mod, identifier))
+                                mod.HasUpdate = false;
                             break;
 
                         default:
@@ -1062,6 +1065,227 @@ public class ModManager : IModManager
 
         Log.Info($"[CheckModUpdates] MOD {mod.Name} Curseforge 当前={mod.Version}, 最新={latestVersion}, HasUpdate={hasUpdate}");
         return true;
+    }
+
+    private static HttpClient CreateGitHubHttpClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("SVL-StardewValleyLauncher/1.0");
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        return client;
+    }
+
+    /// <summary>
+    /// 使用 GitHub UpdateKey 检查最新的稳定 Release，并记录可直接安装的压缩包。
+    /// GitHub 没有 Nexus/CurseForge 那样的 FileID，因此仓库和 Release 资产 URL
+    /// 会一并保存到 SdVMod，供旧版批量更新入口继续使用。
+    /// </summary>
+    private static async Task<bool> TryCheckGitHubUpdateAsync(SdVMod mod, string repository)
+    {
+        if (!TryNormalizeGitHubRepository(repository, out var normalizedRepository))
+        {
+            Log.Warn($"[CheckModUpdates] MOD {mod.Name} GitHub 仓库格式无效: {repository}");
+            return false;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"https://api.github.com/repos/{normalizedRepository}/releases?per_page=30");
+            using var response = await GitHubHttpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Log.Warn($"[CheckModUpdates] MOD {mod.Name} GitHub API 返回 {(int)response.StatusCode}");
+                return false;
+            }
+
+            var body = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                Log.Warn($"[CheckModUpdates] MOD {mod.Name} GitHub API 返回格式无效");
+                return false;
+            }
+
+            JsonElement? latestRelease = null;
+            var latestPublished = DateTimeOffset.MinValue;
+            foreach (var release in document.RootElement.EnumerateArray())
+            {
+                if (TryGetBooleanProperty(release, "draft") ||
+                    TryGetBooleanProperty(release, "prerelease"))
+                {
+                    continue;
+                }
+
+                var version = ExtractGitHubVersion(
+                    TryGetStringProperty(release, "tag_name"),
+                    TryGetStringProperty(release, "name"));
+                if (string.IsNullOrWhiteSpace(version))
+                {
+                    continue;
+                }
+
+                var publishedText = TryGetStringProperty(release, "published_at");
+                var published = DateTimeOffset.MinValue;
+                DateTimeOffset.TryParse(publishedText, out published);
+                if (!latestRelease.HasValue || published > latestPublished)
+                {
+                    latestRelease = release;
+                    latestPublished = published;
+                }
+            }
+
+            if (!latestRelease.HasValue)
+            {
+                Log.Info($"[CheckModUpdates] MOD {mod.Name} GitHub 没有稳定 Release");
+                return false;
+            }
+
+            var selectedRelease = latestRelease.Value;
+            var latestVersion = ExtractGitHubVersion(
+                TryGetStringProperty(selectedRelease, "tag_name"),
+                TryGetStringProperty(selectedRelease, "name"));
+            var downloadUrl = string.Empty;
+            var sourceFileName = string.Empty;
+
+            if (TryGetPropertyIgnoreCase(selectedRelease, "assets", out var assets) &&
+                assets.ValueKind == JsonValueKind.Array)
+            {
+                var asset = assets.EnumerateArray()
+                    .Select(item => new
+                    {
+                        Name = TryGetStringProperty(item, "name"),
+                        Url = TryGetStringProperty(item, "browser_download_url")
+                    })
+                    .Where(item => IsGitHubArchive(item.Name) && Uri.TryCreate(item.Url, UriKind.Absolute, out _))
+                    .OrderBy(item => item.Name.IndexOf("source", StringComparison.OrdinalIgnoreCase) >= 0)
+                    .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+
+                if (asset != null)
+                {
+                    downloadUrl = asset.Url;
+                    sourceFileName = asset.Name;
+                }
+            }
+
+            mod.LatestVersion = latestVersion;
+            mod.UpdateUrl = downloadUrl;
+            mod.SourceFileName = sourceFileName;
+            mod.HasUpdate = IsVersionNewer(latestVersion, mod.Version);
+
+            Log.Info($"[CheckModUpdates] MOD {mod.Name} GitHub 当前={mod.Version}, 最新={latestVersion}, HasUpdate={mod.HasUpdate}, Asset={!string.IsNullOrWhiteSpace(downloadUrl)}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[CheckModUpdates] MOD {mod.Name} GitHub 更新检查失败: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool TryNormalizeGitHubRepository(string value, out string repository)
+    {
+        repository = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var candidate = value.Trim();
+        if (candidate.StartsWith("github:", StringComparison.OrdinalIgnoreCase))
+            candidate = candidate.Substring("github:".Length).Trim();
+
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
+            uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = uri.AbsolutePath.Trim('/');
+            var releaseMarker = candidate.IndexOf("/releases", StringComparison.OrdinalIgnoreCase);
+            if (releaseMarker >= 0)
+                candidate = candidate.Substring(0, releaseMarker);
+        }
+
+        candidate = candidate.Trim().Trim('/');
+        if (candidate.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            candidate = candidate.Substring(0, candidate.Length - 4);
+
+        var segments = candidate.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length != 2 ||
+            segments.Any(segment => string.IsNullOrWhiteSpace(segment) ||
+                                    segment == "." ||
+                                    segment == ".." ||
+                                    segment.Any(char.IsWhiteSpace) ||
+                                    !Regex.IsMatch(segment, "^[A-Za-z0-9_.-]+$")))
+        {
+            return false;
+        }
+
+        repository = segments[0] + "/" + segments[1];
+        return true;
+    }
+
+    private static string ExtractGitHubVersion(string tag, string name)
+    {
+        foreach (var value in new[] { tag, name })
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            var match = Regex.Match(
+                value,
+                @"(?<!\d)v?(\d+(?:\.\d+){1,3})(?!\d)",
+                RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            if (match.Success)
+                return match.Groups[1].Value;
+        }
+
+        return string.Empty;
+    }
+
+    private static bool IsGitHubArchive(string name)
+    {
+        return !string.IsNullOrWhiteSpace(name) &&
+               (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase) ||
+                name.EndsWith(".rar", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string TryGetStringProperty(JsonElement element, string name)
+    {
+        return TryGetPropertyIgnoreCase(element, name, out var value) &&
+               value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
+    }
+
+    private static bool TryGetBooleanProperty(JsonElement element, string name)
+    {
+        return TryGetPropertyIgnoreCase(element, name, out var value) &&
+               value.ValueKind == JsonValueKind.True;
     }
 
     private static bool IsNexusOptionalFile(NexusModFile file)

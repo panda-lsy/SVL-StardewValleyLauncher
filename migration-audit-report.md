@@ -23,7 +23,7 @@
 
 | 项目 | 对照结论 | 处理计划 |
 | --- | --- | --- |
-| `manifest.json` 的 `UpdateKeys=GitHub:...` 自动检查更新 | WPF/Core 的 `ModManager` 仍明确记录为 TODO；Avalonia 已补齐 GitHub 仓库/release 解析、稳定版本比较、Release 压缩包选择、任务状态/导出/整合包来源持久化，并覆盖回归测试 | 后续只需在真实 GitHub 仓库做一次端到端 UI 验收；无 Release 压缩包时会明确提示，不把源码包误当 Mod 安装包 |
+| `manifest.json` 的 `UpdateKeys=GitHub:...` 自动检查更新 | Avalonia 与旧 WPF/Core 的 `ModManager` 均已补齐 GitHub 仓库/release 解析、稳定版本比较和 Release 压缩包选择；旧版批量更新也会使用资产直链完成下载、安装和原目录替换 | 后续只需在真实 GitHub 仓库做一次端到端 UI 验收；无 Release 压缩包时会明确提示，不把源码包误当 Mod 安装包 |
 | Nexus Collection 的 `manual` 来源 | WPF 安装器仍是 TODO；Avalonia 已覆盖 NXM、API、浏览器回调及 HTTP 直链，并将 `manual` 网页/无来源条目标记为需手动处理；只有明确归档直链才自动下载 | 任务页保留来源地址并提供“打开来源”，用户完成下载后可拖入当前实例 Mods 页面；不把网页地址当压缩包 |
 | Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 继续使用统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；可选 Mod 自动失败现在进入“待处理”，用户可明确选择“选择文件并安装”或“跳过可选 Mod”，选择会持久化并在重试时生效；任务详情现已补齐 Collection Mod 列表分页、上一页/下一页导航，不改变统一队列的实际安装顺序 | 保持统一队列作为默认路径；后续仅需进行真实 Collection 的可见 UI 验收，不恢复旧任务类型 |
 | 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，旧启动流程未消费；Avalonia 已迁移该设置并接入更新弹窗 | 发现新版本后可自动下载首个发布资产；下载完成仍需用户点击“安装并重启”，不会静默执行安装 |
@@ -98,6 +98,8 @@ Collection 单 Mod 下载也复用同一失败重试策略：瞬时 CDN/网络/�
 本轮继续补齐启动器更新设置迁移：新增 `ShowUpdateNotification` 的 Avalonia 持久化字段、WPF 旧配置导入、设置页绑定和自动保存；启动时发现新版本时会按该开关决定是否显示通知，设置页手动检查仍可主动查看更新。
 
 本轮完成旧 WPF/Core 工程编译收口：`SVL.Core` 使用 nullable 注解上下文消除历史 `CS8632` 噪声，修复延迟清理任务的未等待告警，并补上 SVL 整合包任务在 Premium 回退前触发 `NexusPremiumRequired` 通知事件；`SVL.sln` 当前 Debug 构建为 0 警告、0 错误。
+
+本轮继续完成旧 WPF/Core 的 GitHub 更新链路：`ModManager` 会读取稳定 Release、过滤 draft/prerelease、选择非源码压缩包并记录版本与下载地址；`ModBatchUpdateTask` 已支持该直链的下载、安装和更新目标替换，旧入口不再把 GitHub UpdateKey 固定判定为“无更新”。
 
 另存为任务恢复时不再强制按 Mod manifest 校验最终文件；只要目标文件已完整落盘且不存在 `.part`/`.part.json`，即可跳过重复下载，仍在写入的半成品不会被误复用。
 
