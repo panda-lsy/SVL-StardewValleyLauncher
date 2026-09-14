@@ -44,12 +44,31 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- ZipArchive is used by the legacy Collection exporter and is not
+         pulled in automatically when building net48 with the reference
+         assemblies NuGet package. -->
+    <Reference Include="System.IO.Compression" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Keep the legacy net48 project buildable with the SDK alone.  The
+      Developer Pack is not installed on every CI/developer host, while this
+      package supplies the same reference assemblies without changing the
+      runtime target or the WPF application's deployment output.
+    -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+
     <!-- WPF Behaviors -->
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
 
     <!-- Language and System Features -->
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageReference Include="SharpCompress" Version="0.38.0" />
+    <!-- Pin vulnerable transitive net48 compatibility packages without
+         shipping duplicate BCL assemblies; net48 uses the framework copies. -->
+    <PackageReference Include="System.Net.Http" Version="4.3.4" ExcludeAssets="all" />
+    <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" ExcludeAssets="all" />
+    <PackageReference Include="SharpCompress" Version="0.48.0" />
 
     <!-- Archive Files -->
     <PackageReference Include="SharpZipLib" Version="1.4.2" />

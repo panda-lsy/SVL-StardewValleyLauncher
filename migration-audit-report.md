@@ -36,7 +36,7 @@
 | WPF Nexus OAuth 头像与 API 限额卡片 | WPF 会读取 OAuth `picture`、缓存头像并显示 API 每小时/每日用量；Token 失效时仍保留已缓存账号资料并提示重新登录 | 已迁移头像 claim/旧缓存兼容、后台缓存、小时/每日用量及限额快照；失效 Token 会保留资料卡但不作为可用凭据；Avalonia 的 Nexus 目录、NXM、登录验证请求统一记录 `X-RL-*` 响应头 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
 | 完整线上/可见 UI 验收 | 不是分支迁移代码缺口；当前主要剩真实 Nexus/CurseForge 网络和 Windows Avalonia 窗口冒烟 | 作为发布前验收项继续执行 |
-| 旧 WPF .NET Framework 4.8 编译 | 属于旧工程本身的 Developer Pack/环境债务，不影响 Avalonia 工程 | 单独准备 .NET Framework 4.8 构建环境，不回填 Avalonia |
+| 旧 WPF .NET Framework 4.8 编译 | 已通过 `Microsoft.NETFramework.ReferenceAssemblies 1.0.3` 补齐 SDK 构建所需引用程序集，并修复 `SharpCompress` 升级后的旧 API/`Math.Clamp` 兼容问题；整体解决方案现可在本机 0 错误构建，但仍有历史 nullable 警告 | 后续单独清理旧 WPF 的约 470 条历史警告；不再把 Developer Pack 缺失视为迁移阻塞 |
 
 ## 已完成并已验证
 
@@ -77,7 +77,7 @@
 | 夜间主题与窗口控制区 | 主要弹窗使用动态主题资源；右键菜单显式走 Popup 主题并在应用级覆盖 `ContextMenu/MenuFlyoutPresenter`，避免独立 Popup 回落到浅色；控制按钮使用固定等宽列、统一 40×48 单元格、24×24 内容画布和布局取整，三种图形共用第 24 像素中心线；版本删除会清理只读属性，遇到短暂文件锁时先移出 `versions` 再后台重试；“跟随系统”现在读取 Avalonia 系统主题并监听后续切换 | `Controls/*.axaml`、`InstancesPageView.axaml`、`MainWindow.axaml`、`Resources/Theme.axaml`、`Services/ThemeService.cs`、`FeaturePagesViewModels` |
 
 下面的 293/308 条统计是早期审计快照；当前验证结果以本段为准。
-当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **312 总计，其中 310 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告；旧 WPF 工程仍受本机缺少 .NET Framework 4.8 Developer Pack 影响，未纳入 Avalonia 验收。
+当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **312 总计，其中 310 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告。旧 WPF 工程也已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并完成整体 0 错误构建；旧 Core 的 ZIP/7z 解压同时拒绝越界路径，剩余约 470 条为历史 nullable/未使用事件等警告，五个项目当前均无 NuGet 漏洞项。
 上一轮测试统计（含 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim/旧缓存路径、API 限额快照、失效 Token 资料保留及限额事件订阅异常隔离回归）：迁移测试 **308 总计，其中 306 通过、2 跳过**。
 本轮界面回退：撤销此前生成式 PNG 图标替换，恢复 `Resources/Icons.axaml` 中的原有矢量资源及动态颜色绑定；标题栏仍保留统一 24×24 画布和等宽控制列，避免回退图标后重新引入三个窗口按钮的对齐问题，并新增回归断言禁止视图重新引用 `Assets/Icons/Generated`。
 本轮修复：Modpack/Collection 的游戏版本只接受 API 明确字段，不再从整合包名称、摘要或文件名推断版本；普通 Mod 仍保留文本兜底。
@@ -132,7 +132,7 @@ Unix 主机对应的 `scripts/package-avalonia.sh` 入口也已补齐，统一�
 1. 使用真实导出的 SVL/CurseForge/Nexus fixture 做一次端到端导入→安装→导出→再次导入，重点确认来源缺失、下载失败和旧包布局不会静默“安装完成”。当前已补本地直链端到端 fixture、导出包回导 fixture（覆盖自定义 Icon、配置覆盖、Nexus 缓存和 FileID）、真实 Nexus 文件页来源（`mods/29868?tab=files&nmm=1` + `File 7448774_...zip`）缓存命中、旧 WPF Nexus 缓存自动提升、直链来源保存/导出、来源缺失与缺失 `modpack.json` 的显式失败、设置目录按 manifest 映射、损坏/兼容 manifest、数字/字符串 FileID 兼容、无扩展名 7z、ZIP 越界防护、大小写不同的 manifest/Icon、Collection 镜像择一下载、Collection 外层目录下 `bundled` 解析、Collection 旧 source 字符串/URL 兼容，以及部分失败重试的更新模式回归；任务状态还会保存安装目录、速度、大小与子进度。近期又补充了生成式目录名（`cf-项目ID-文件ID`/`File 文件ID_...`）按 manifest 名整理、选中任务状态实时刷新、失败进度封顶 99%，CurseForge 页面/API 地址禁止直接下载、迁移标记允许新旧来源增量补迁移、迁移目标丢失后按旧来源恢复、CurseForge manifest 数字/字符串 ID、`files: null` 与 Collection 单字符串 `gameVersions` 的回归，以及“默认 SMAPI 图标可被包内 Icon 替换、用户自定义图标在重试时保留”的回归；`sources.json` 现兼容数组、常见对象包装、单来源对象、key→source 映射和 key→URL 简写，并可回退读取 `modpack.json.mods`，同时兼容 `site/provider/project/file` 等常见来源别名和真实 CurseForge CDN 路径回填 FileID；本地 SMAPI 复用会跳过损坏/无权限候选继续尝试可用实例；新增覆盖外层非目标 JSON 遮蔽内层有效 CurseForge/Collection 清单、未知 SMAPI 缓存拒绝复用、重复浏览器等待者和任务重试报告归属的回归。导出端还会从旧 Nexus 文件名/URL、CurseForge `cf-project-file` 目录名补回本地 FileID，减少不必要的线上查询；新增回归确认导入清单中的 NXM 一次性凭据会保留到解析请求；Mod 缓存复用现在必须通过有效 manifest 校验，延迟删除目录也会在启动/刷新时再次清理；SMAPI 默认图标写入会在资源流关闭后验证目标文件与实际解析路径，并兼容框架尚未初始化时的显式资源加载；SMAPI 官方回退兼容 `4.5.1.0` 到 `4.5.1` 这类 Release 标签差异；迁移还会在当前应用目录、工作目录与相邻 `SVL.Desktop`/WPF 目录内有限探测旧 `SVL/instances.json`，覆盖并排发布场景；Collection 稳定缓存命中现在覆盖直接安装入口，且 `.7z` 文件名不会再覆盖实际 ZIP 签名判断；本轮又补充了残留 source-only 目录过滤、Collection 顶层/嵌套来源字段归一化、bundled Mod 部分失败的逐项报告，以及管理页/导出页遇到单个无权限或重解析点目录时继续扫描其它 Mod 的安全遍历。
 2. 补齐线上搜索的详情和下载选项回归；整合包分页已接入 CurseForge 服务端 index/pageSize，并让 Nexus 按目标页偏移增加候选拉取量，同时修正末页 HasMore 判断；Nexus 页面仅有 Mod ID 时已接入 API/浏览器回退；兼容搜索入口已补齐筛选项与热门整合包首屏加载。下载页目录项和遗留搜索入口已保留结构化资源身份，详情展开/跳转优先使用结构化请求；详情下载 URL 会先剥离 `~~` 元数据，避免浏览器打开入口与安装入口行为不一致；CurseForge 解析层现在统一拒绝文件页/API URL，详情安装、批量更新、Modpack/Collection 安装共享同一安全边界；SMAPI 目录请求新增代理失败后的直连回退，并兼容 CurseForge 响应的大小写、`data/result/files/items` 多层包装及字符串 ID；SMAPI 目录给出网页地址时会回退到稳定 Forge CDN 路径；本轮补充搜索/详情请求代次保护，旧响应不会覆盖新结果，来源未知或没有可安装文件时会显示明确提示；旧 SMAPI 任务若只保存版本路径或使用“SMAPI 版本 - 实例名”任务名，现在会恢复实例名并把目标路径归一化到 Base，避免下载后再次弹窗或生成嵌套 versions。Nexus/CurseForge 的真实下载仍需要用户登录状态或可用网络，当前只能做协议和解析层验证。
 3. 在可见的 Windows Avalonia 窗口中完成 UI 冒烟，确认三个窗口按钮的视觉中心、右键菜单命中区域、深色弹窗和透明开关实际渲染；代码侧已改为显式右键打开并把菜单样式提升到应用级，Icon 选择项、本地 Mod 详情、详情页图标/分隔线/加载遮罩、SMAPI 预发布标签和托管弹窗背景已统一使用动态主题资源，自动化环境目前仍无法稳定枚举原生 Avalonia 窗口。
-4. 处理旧 WPF 项目自身的编译债务；该项不应阻塞 `SVL.Avalonia.csproj` 和迁移测试。
+4. 清理旧 WPF 工程已暴露的历史警告；该项不应阻塞 `SVL.Avalonia.csproj` 和迁移测试。
 
 ## 下一轮顺序
 

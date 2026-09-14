@@ -5,6 +5,7 @@ using System.Linq;
 using SVL.Core.Logging;
 using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
+using SharpCompress.Readers;
 
 namespace SVL.Core.IO;
 
@@ -211,7 +212,11 @@ public static class SevenZipService
             ICSharpCode.SharpZipLib.Zip.ZipEntry entry;
             while ((entry = zipStream.GetNextEntry()) != null)
             {
-                var entryPath = Path.Combine(extractDir, entry.Name);
+                if (!TryGetSafeExtractionPath(extractDir, entry.Name, out var entryPath))
+                {
+                    Log.Warn($"[SevenZip] ZIP 包含越界路径: {entry.Name}");
+                    return false;
+                }
 
                 if (entry.IsDirectory)
                 {
@@ -257,19 +262,24 @@ public static class SevenZipService
             // 确保目标目录存在
             Directory.CreateDirectory(extractDir);
 
-            // 使用 SharpCompress 0.38.0 API 打开并解压 7z 文件
-            using (var archive = SevenZipArchive.Open(archivePath))
+            // SharpCompress 0.48+ 将 Open 重命名为 OpenArchive，并要求显式
+            // 传入 ReaderOptions；保留这里的手动边界检查，避免归档路径越界。
+            using (var archive = SevenZipArchive.OpenArchive(archivePath, new ReaderOptions()))
             {
                 foreach (var entry in archive.Entries)
                 {
+                    if (!TryGetSafeExtractionPath(extractDir, entry.Key, out var entryPath))
+                    {
+                        Log.Warn($"[SevenZip] 7z 包含越界路径: {entry.Key}");
+                        return false;
+                    }
+
                     if (entry.IsDirectory)
                     {
-                        var dirPath = Path.Combine(extractDir, entry.Key);
-                        Directory.CreateDirectory(dirPath);
+                        Directory.CreateDirectory(entryPath);
                     }
                     else
                     {
-                        var entryPath = Path.Combine(extractDir, entry.Key);
                         var entryDir = Path.GetDirectoryName(entryPath);
                         if (!string.IsNullOrEmpty(entryDir) && !Directory.Exists(entryDir))
                         {
@@ -320,5 +330,45 @@ public static class SevenZipService
 
         Log.Error("[SevenZip] 所有解压方式都失败");
         return false;
+    }
+
+    /// <summary>
+    /// 将归档条目解析到目标目录内，拒绝绝对路径和 .. 越界路径。
+    /// 旧 WPF 解压链不能依赖 SharpCompress 的 WriteToDirectory 内部保护，
+    /// 因为这里使用的是逐条目写入。
+    /// </summary>
+    private static bool TryGetSafeExtractionPath(
+        string extractDir,
+        string? entryName,
+        out string entryPath)
+    {
+        entryPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(entryName))
+        {
+            return false;
+        }
+
+        try
+        {
+            var destinationRoot = Path.GetFullPath(extractDir)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            var normalizedEntryName = entryName
+                .Replace('/', Path.DirectorySeparatorChar)
+                .Replace('\\', Path.DirectorySeparatorChar);
+            var candidate = Path.GetFullPath(Path.Combine(destinationRoot, normalizedEntryName));
+            if (!candidate.StartsWith(destinationRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            entryPath = candidate;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[SevenZip] 无法解析归档路径 {entryName}: {ex.Message}");
+            return false;
+        }
     }
 }

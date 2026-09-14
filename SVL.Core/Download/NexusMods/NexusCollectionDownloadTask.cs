@@ -854,7 +854,8 @@ public class NexusCollectionDownloadTask : DownloadTask
                     await outputStream.WriteAsync(buffer, 0, read, _cts.Token);
                     bytesReceived += read;
                     Progress = totalBytes > 0
-                        ? 10 + Math.Clamp((int)Math.Floor(bytesReceived * 80.0 / totalBytes), 0, 80)
+                        ? 10 + Math.Min(80, Math.Max(0,
+                            (int)Math.Floor(bytesReceived * 80.0 / totalBytes)))
                         : 10;
                 }
 

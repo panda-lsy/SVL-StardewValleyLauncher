@@ -79,6 +79,9 @@
 
 
   <ItemGroup>
+    <!-- Allow the legacy WPF project to restore net48 reference assemblies
+         on hosts without the Windows Developer Pack installed. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="Costura.Fody" Version="5.7.0">
