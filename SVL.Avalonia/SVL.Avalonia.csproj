@@ -21,6 +21,9 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="SharpCompress" Version="0.49.1" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <!-- Avalonia 11.2.8 brings an older vulnerable D-Bus protocol transitively;
+         pin the compatible maintained version without upgrading Avalonia major versions. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.1" />
   </ItemGroup>
 
   <ItemGroup>
