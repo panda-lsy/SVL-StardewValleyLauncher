@@ -24,6 +24,7 @@ public sealed class NexusAuthService
         try
         {
             response = await httpClient.SendAsync(request, cancellationToken);
+            NexusApiRateLimitService.Record(response.Headers);
         }
         catch (Exception ex)
         {

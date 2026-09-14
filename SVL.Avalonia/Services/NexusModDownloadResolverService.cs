@@ -89,6 +89,7 @@ public sealed class NexusModDownloadResolverService
 
         using (response)
         {
+            NexusApiRateLimitService.Record(response.Headers);
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -155,6 +156,7 @@ public sealed class NexusModDownloadResolverService
         try
         {
             using var response = await Http.SendAsync(request, cancellationToken);
+            NexusApiRateLimitService.Record(response.Headers);
             if (!response.IsSuccessStatusCode)
             {
                 return NexusResolveResult.Failed($"Nexus 文件列表解析失败: HTTP {(int)response.StatusCode}");
@@ -344,6 +346,7 @@ public sealed class NexusModDownloadResolverService
 
         using (response)
         {
+            NexusApiRateLimitService.Record(response.Headers);
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);

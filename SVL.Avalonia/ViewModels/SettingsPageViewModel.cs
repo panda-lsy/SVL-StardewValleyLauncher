@@ -370,6 +370,15 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _nexusAvatarSource = string.Empty;
 
     [ObservableProperty]
+    private string _nexusHourlyRequests = "-";
+
+    [ObservableProperty]
+    private string _nexusDailyRequests = "-";
+
+    [ObservableProperty]
+    private string _nexusApiStatistics = "未获取";
+
+    [ObservableProperty]
     private string _nexusStatus = "未登录";
 
     [ObservableProperty]
@@ -440,6 +449,7 @@ public partial class SettingsPageViewModel : ObservableObject
         _imageResourceService = imageResourceService;
         _localizationService.LanguageChanged += ApplyLocalizedTexts;
         _imageResourceService.ResourcesChanged += ApplyImageResources;
+        NexusApiRateLimitService.SnapshotChanged += HandleNexusRateLimitChanged;
         ApplyLocalizedTexts();
         ApplyImageResources();
         SettingsPath = _settingsStore.GetSettingsPath();
@@ -563,6 +573,7 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusOAuthAvatarUrl = settings.NexusOAuthAvatarUrl;
         NexusOAuthAvatarLocalPath = settings.NexusOAuthAvatarLocalPath;
         NexusAvatarSource = ResolveNexusAvatarSource();
+        ApplyNexusRateLimitSnapshot();
         NexusStatus = IsNexusLoggedIn ? "已登录" : "未登录";
         EnableNexusAuthNotification = !settings.SuppressNexusAuthNotification;
 
@@ -1491,6 +1502,7 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusOAuthAvatarUrl = string.Empty;
         NexusOAuthAvatarLocalPath = string.Empty;
         NexusAvatarSource = string.Empty;
+        NexusApiRateLimitService.Clear();
         NexusStatus = "未登录";
         EnableNexusAuthNotification = true;
         _settingsStore.Save(BuildSettings());
@@ -1779,6 +1791,25 @@ public partial class SettingsPageViewModel : ObservableObject
         {
             // 网络或图像缓存失败不应影响 Nexus 登录和下载。
         }
+    }
+
+    private void HandleNexusRateLimitChanged()
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            ApplyNexusRateLimitSnapshot();
+            return;
+        }
+
+        Dispatcher.UIThread.Post(ApplyNexusRateLimitSnapshot);
+    }
+
+    private void ApplyNexusRateLimitSnapshot()
+    {
+        var snapshot = NexusApiRateLimitService.GetSnapshot();
+        NexusHourlyRequests = snapshot.HourlyUsageText;
+        NexusDailyRequests = snapshot.DailyUsageText;
+        NexusApiStatistics = snapshot.StatusText;
     }
 
     private static string ResolveThemeDisplayName(string styleName, string schemeName)

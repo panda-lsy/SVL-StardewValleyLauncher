@@ -2029,6 +2029,7 @@ public sealed class RemoteCatalogService
             ApplyNexusHeaders(request, settings);
 
             using var response = await GetHttpClient(settings).SendAsync(request);
+            NexusApiRateLimitService.Record(response.Headers);
             if (IsUnauthorizedStatusCode(response.StatusCode))
             {
                 var body = await SafeReadBodySnippetAsync(response, 260);
@@ -3115,6 +3116,7 @@ public sealed class RemoteCatalogService
             ApplyNexusHeaders(modRequest, settings);
 
             using var modResponse = await GetHttpClient(settings).SendAsync(modRequest);
+            NexusApiRateLimitService.Record(modResponse.Headers);
             if (IsUnauthorizedStatusCode(modResponse.StatusCode))
             {
                 var body = await SafeReadBodySnippetAsync(modResponse, 260);
@@ -3156,6 +3158,7 @@ public sealed class RemoteCatalogService
         ApplyNexusHeaders(request, settings);
 
         using var response = await GetHttpClient(settings).SendAsync(request);
+        NexusApiRateLimitService.Record(response.Headers);
         if (IsUnauthorizedStatusCode(response.StatusCode))
         {
             var body = await SafeReadBodySnippetAsync(response, 260);

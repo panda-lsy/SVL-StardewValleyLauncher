@@ -178,6 +178,14 @@
                   <TextBlock Text="{Binding NexusMembershipType}" Opacity="0.72" />
                 </StackPanel>
               </StackPanel>
+              <TextBlock Text="API 统计" Opacity="0.68" IsVisible="{Binding IsNexusLoggedIn}" />
+              <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsNexusLoggedIn}">
+                <TextBlock Text="每日请求:" Opacity="0.68" />
+                <TextBlock Text="{Binding NexusDailyRequests}" FontWeight="SemiBold" Margin="0,0,12,0" />
+                <TextBlock Text="每小时请求:" Opacity="0.68" />
+                <TextBlock Text="{Binding NexusHourlyRequests}" FontWeight="SemiBold" />
+              </StackPanel>
+              <TextBlock Text="{Binding NexusApiStatistics}" Opacity="0.68" IsVisible="{Binding IsNexusLoggedIn}" />
               <TextBlock Text="{Binding NexusStatus, StringFormat=状态: {0}}" />
               <TextBlock Text="{Binding NexusDisplayName, StringFormat=账号: {0}}" />
               <TextBlock Text="未登录时仅可使用非 Nexus 资源；登录后可直接导入 NXM 并执行受限下载。" Opacity="0.75" TextWrapping="Wrap" IsVisible="{Binding ShowNexusLoginGuide}" />

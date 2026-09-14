@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SVL.Avalonia.Services;
+using System.Net.Http;
 using System.Text;
 
 namespace SVL.Migration.Tests;
@@ -144,6 +145,37 @@ public class NexusOAuthServiceTests
         Assert.IsTrue(path.EndsWith("user_name.png", StringComparison.OrdinalIgnoreCase));
         var task = AvatarCacheService.DownloadAndCacheAvatarAsync("file:///avatar.png", "user/name");
         Assert.IsNull(task.GetAwaiter().GetResult());
+    }
+
+    [TestMethod]
+    public void NexusApiRateLimit_ShouldRecordHeadersAndFormatUsage()
+    {
+        NexusApiRateLimitService.Clear();
+        using var response = new HttpResponseMessage();
+        response.Headers.TryAddWithoutValidation("X-RL-Hourly-Limit", "100");
+        response.Headers.TryAddWithoutValidation("X-RL-Hourly-Remaining", "73");
+        response.Headers.TryAddWithoutValidation("X-RL-Daily-Limit", "1000");
+        response.Headers.TryAddWithoutValidation("X-RL-Daily-Remaining", "901");
+
+        NexusApiRateLimitService.Record(response.Headers);
+        var snapshot = NexusApiRateLimitService.GetSnapshot();
+
+        Assert.IsTrue(snapshot.IsInitialized);
+        Assert.AreEqual("27/100", snapshot.HourlyUsageText);
+        Assert.AreEqual("99/1000", snapshot.DailyUsageText);
+        StringAssert.Contains(snapshot.StatusText, "小时剩余 73/100");
+        StringAssert.Contains(snapshot.StatusText, "每日剩余 901/1000");
+    }
+
+    [TestMethod]
+    public void NexusApiRateLimit_ShouldIgnoreResponsesWithoutRateLimitHeaders()
+    {
+        NexusApiRateLimitService.Clear();
+        using var response = new HttpResponseMessage();
+
+        NexusApiRateLimitService.Record(response.Headers);
+
+        Assert.IsFalse(NexusApiRateLimitService.GetSnapshot().IsInitialized);
     }
 
     private static string Base64UrlEncode(string json)

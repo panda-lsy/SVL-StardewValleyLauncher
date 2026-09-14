@@ -227,6 +227,7 @@ public sealed class NexusOAuthService
         request.Headers.Add("application-name", "SVL.Avalonia");
 
         var response = await client.SendAsync(request);
+        NexusApiRateLimitService.Record(response.Headers);
         if (!response.IsSuccessStatusCode)
         {
             return NexusOAuthValidateResult.Failed($"验证失败: HTTP {(int)response.StatusCode}");
