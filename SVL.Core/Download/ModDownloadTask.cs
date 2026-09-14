@@ -1390,7 +1390,15 @@ public class ModDownloadTask : DownloadTask
 
                     WriteSourceCredentialFile(parentDir, parentPayload);
 
-                    foreach (var childDir in manifestDirs)
+                    // 当父目录本身也包含 manifest.json 时，manifestDirs 会同时
+                    // 包含父目录和真正的 ContentPack。父目录已经写入 parentPayload，
+                    // 不能再作为 childPayload 写回，否则会把父级来源覆盖成指向自身
+                    // 的 parentMod，导致后续更新/导出把整个父包识别成子 Mod。
+                    var childDirectories = GetCompositeChildDirectories(
+                        manifestDirs,
+                        rootHasManifest,
+                        parentDir);
+                    foreach (var childDir in childDirectories)
                     {
                         var childPayload = new SvlSourceMetadata
                         {
@@ -1430,6 +1438,17 @@ public class ModDownloadTask : DownloadTask
         }
 
         return;
+    }
+
+    private static List<string> GetCompositeChildDirectories(
+        IEnumerable<string> manifestDirectories,
+        bool rootHasManifest,
+        string parentDirectory)
+    {
+        return manifestDirectories
+            .Where(dir => !rootHasManifest || !PathsEqual(dir, parentDirectory))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static string NormalizeId(string? value)
