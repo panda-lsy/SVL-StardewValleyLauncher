@@ -61,7 +61,7 @@
 | 本地 Mod 冲突检测 | Mod 管理页可按需检测启用 Mod 的重复 UniqueID、缺失/禁用/版本不满足的必需前置，以及真实相对文件路径冲突；检测结果会在启用状态或列表刷新后失效，避免显示过期结论 | `Services/ModConflictAnalyzer`、`FeaturePagesViewModels`、`Views/VersionSettingsPageView.axaml` |
 | 旧版依赖/冲突解析 | 修复旧 WPF/Core 分支的最低版本判断反向、短版本比较越界、循环依赖未返回、重复 ID 误报及绝对路径文件冲突漏报；Avalonia 主流程不直接引用该项目，但兼容代码已同步收紧 | `SVL.Core/Stardew/Mod/Dependency/ModDependencyResolver.cs`、`ModConflictDetector.cs` |
 | 本地 Mod 安装 | 版本设置页本地安装同时支持 ZIP/CFModpack/7z，按文件签名选择解压器，并按实际 `manifest.json` 目录去除发行包外层目录 | `FeaturePagesViewModels.ImportModsFromLocalSource`、`ArchiveExtractor`、`ZipExtractor` |
-| 删除/覆盖安全性 | 用户主动卸载、Base SMAPI 卸载、版本删除、普通 Mod 覆盖以及 Collection 覆盖/回滚中的用户目录统一优先移入系统回收站；旧 WPF 实例删除也已改为先安全移除 junction，再将完整版本目录移入回收站；临时解压、缓存和事务暂存目录仍按生命周期物理清理 | `RecycleBinService`、`SettingsService`、`SmapApiService`、`FeaturePagesViewModels`、`InstancesPageViewModel`、`DownloadInstallService` |
+| 删除/覆盖安全性 | 用户主动卸载、Base SMAPI 卸载、版本删除、普通 Mod 覆盖以及 Collection 覆盖/回滚中的用户目录统一优先移入系统回收站；旧 WPF 实例删除也已改为先安全移除 junction，再将完整版本目录移入回收站；临时解压、缓存和事务暂存目录仍按生命周期物理清理 | `RecycleBinService`、`SettingsService`、`FeaturePagesViewModels`、`InstancesPageViewModel`、`DownloadInstallService` |
 | 导入/导出闭环 | 标准 `modpack.json`、`sources.json`、平台 ID/FileID、直链来源、配置、关系信息和动态 Icon；导出补全 FileID 时 Nexus 凭据与公开 CurseForge 查询分开处理；旧本地文件名/目录名及有效 Nexus 缓存中的 Nexus/CurseForge FileID 也会回填；CurseForge CDN 的 `/files/5312/529/` 路径会合并为完整 FileID `5312529`，不会截断为前段数字；来源清单还兼容常见 key→source 对象映射和 key→URL 简写；整合包独立 Mod 按条目写入 `sourceKind=modpack-entry`，嵌套子 Mod 强制写入 `parent-inherited`，旧目录名失效时按 manifest 的 UniqueID/Name 回退匹配 | `VersionSettingsPageViewModel`、`ModpackInstallService`、`DownloadInstallService` |
 | 子 Mod 分组 | 管理页选择联动、折叠显示，导出保留父子关系；真实父 Mod 已携带压缩包和 `childMods` 时，嵌套子 Mod 不再重复导出为独立来源，避免回导时覆盖父级凭证 | `FeaturePagesViewModels`、`ModpackInstallService` |
 | Mod 汉化管理 | 批量检测之外补齐选中 Mod 强制刷新汉化；列表保留 manifest 原文与汉化文本，可逐项切换中英文 | `FeaturePagesViewModels`、`VersionSettingsPageView.axaml` |
@@ -103,7 +103,6 @@ Collection 单 Mod 下载也复用同一失败重试策略：瞬时 CDN/网络/�
 
 本轮还收口旧 WPF 的实例删除语义：`SettingsService.DeleteInstance` 不再逐个物理删除版本文件，而是在移除 Content/game junction 后将整个版本目录发送到系统回收站；只有回收站操作成功才更新实例列表，失败会保留原记录并返回错误。
 
-本轮补齐旧 WPF 的 Base SMAPI 卸载语义：`SmapApiService.UninstallSmapiFromPath` 现在将 SMAPI 可执行文件、目录和 `smapi-internal` 逐项移入回收站；Base 更新复用同一逻辑，用户自有 Mods 不会被处理。
 
 另存为任务恢复时不再强制按 Mod manifest 校验最终文件；只要目标文件已完整落盘且不存在 `.part`/`.part.json`，即可跳过重复下载，仍在写入的半成品不会被误复用。
 
