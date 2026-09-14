@@ -36,7 +36,7 @@
 | WPF Nexus OAuth 头像与 API 限额卡片 | WPF 会读取 OAuth `picture`、缓存头像并显示 API 每小时/每日用量；Token 失效时仍保留已缓存账号资料并提示重新登录 | 已迁移头像 claim/旧缓存兼容、后台缓存、小时/每日用量及限额快照；失效 Token 会保留资料卡但不作为可用凭据；Avalonia 的 Nexus 目录、NXM、登录验证请求统一记录 `X-RL-*` 响应头 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
 | 完整线上/可见 UI 验收 | 不是分支迁移代码缺口；当前主要剩真实 Nexus/CurseForge 网络和 Windows Avalonia 窗口冒烟 | 作为发布前验收项继续执行 |
-| 旧 WPF .NET Framework 4.8 编译 | 已通过 `Microsoft.NETFramework.ReferenceAssemblies 1.0.3` 补齐 SDK 构建所需引用程序集，并修复 `SharpCompress` 升级后的旧 API/`Math.Clamp` 兼容问题；整体解决方案现可在本机 0 错误构建，但仍有历史 nullable 警告 | 后续单独清理旧 WPF 的约 470 条历史警告；不再把 Developer Pack 缺失视为迁移阻塞 |
+| 旧 WPF .NET Framework 4.8 编译 | 已通过 `Microsoft.NETFramework.ReferenceAssemblies 1.0.3` 补齐 SDK 构建所需引用程序集，并修复 `SharpCompress` 升级后的旧 API/`Math.Clamp` 兼容问题；但干净检出仍缺少被 `.gitignore` 排除的外部 `SVL.Core.Stardew.Mod.SMAPI` 适配源，本机工作树若存在该源才能完成旧 WPF 构建 | 不擅自把外部 SMAPI 源纳入 Avalonia 迁移；旧 WPF 继续作为独立历史工程处理，不阻塞 Avalonia |
 
 ## 已完成并已验证
 
@@ -77,7 +77,7 @@
 | 夜间主题与窗口控制区 | 主要弹窗使用动态主题资源；右键菜单显式走 Popup 主题并在应用级覆盖 `ContextMenu/MenuFlyoutPresenter`，避免独立 Popup 回落到浅色；控制按钮使用固定等宽列、统一 40×48 单元格、24×24 内容画布和布局取整，三种图形共用第 24 像素中心线；版本删除会清理只读属性，遇到短暂文件锁时先移出 `versions` 再后台重试；“跟随系统”现在读取 Avalonia 系统主题并监听后续切换 | `Controls/*.axaml`、`InstancesPageView.axaml`、`MainWindow.axaml`、`Resources/Theme.axaml`、`Services/ThemeService.cs`、`FeaturePagesViewModels` |
 
 下面的 293/308 条统计是早期审计快照；当前验证结果以本段为准。
-当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **312 总计，其中 310 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告。旧 WPF 工程也已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并完成整体 0 错误构建；旧 Core 的 ZIP/7z 解压同时拒绝越界路径，剩余约 470 条为历史 nullable/未使用事件等警告，五个项目当前均无 NuGet 漏洞项。
+当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **312 总计，其中 310 通过、2 跳过**。除上一轮覆盖的线上目录、来源链、缓存、任务恢复、整合包/Collection、图标和 UI 资源回归外，本轮又验证了父 Mod 与真实嵌套 ContentPack 的来源恢复，确保缺少子目录 `svl-source.json` 时仍能按 manifest 命名空间写入继承来源；同时将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，并新增 Avalonia Headless 主窗口布局冒烟测试，当前 Avalonia 构建与测试无 NuGet 安全警告。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。
 上一轮测试统计（含 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim/旧缓存路径、API 限额快照、失效 Token 资料保留及限额事件订阅异常隔离回归）：迁移测试 **308 总计，其中 306 通过、2 跳过**。
 本轮界面回退：撤销此前生成式 PNG 图标替换，恢复 `Resources/Icons.axaml` 中的原有矢量资源及动态颜色绑定；标题栏仍保留统一 24×24 画布和等宽控制列，避免回退图标后重新引入三个窗口按钮的对齐问题，并新增回归断言禁止视图重新引用 `Assets/Icons/Generated`。
 本轮修复：Modpack/Collection 的游戏版本只接受 API 明确字段，不再从整合包名称、摘要或文件名推断版本；普通 Mod 仍保留文本兜底。

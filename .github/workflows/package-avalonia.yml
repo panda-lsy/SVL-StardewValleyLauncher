@@ -32,27 +32,9 @@ jobs:
       - name: Run tests
         run: dotnet test SVL.Migration.Tests/SVL.Migration.Tests.csproj --configuration Debug --no-restore
 
-  legacy-build:
-    name: Build complete solution (WPF compatibility)
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up .NET 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Restore complete solution
-        run: dotnet restore SVL.sln
-
-      - name: Build complete solution
-        run: dotnet build SVL.sln --configuration Debug --no-restore --nologo
-
   package:
     name: Package ${{ matrix.rid }}
-    needs: [test, legacy-build]
+    needs: test
     strategy:
       fail-fast: false
       matrix:
