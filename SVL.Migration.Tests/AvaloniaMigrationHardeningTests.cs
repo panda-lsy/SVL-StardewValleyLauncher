@@ -2084,6 +2084,40 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void PersistedModUpdateState_ShouldNotRestoreAfterTargetFileWasInstalled()
+    {
+        var viewModelType = typeof(VersionSettingsPageViewModel);
+        var metadataType = viewModelType.GetNestedType(
+            "LocalSourceMetadata",
+            System.Reflection.BindingFlags.NonPublic);
+        var guard = viewModelType.GetMethod(
+            "ShouldRestorePersistedUpdateState",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.IsNotNull(metadataType);
+        Assert.IsNotNull(guard);
+
+        var metadata = Activator.CreateInstance(metadataType!, nonPublic: true);
+        Assert.IsNotNull(metadata);
+        SetProperty(metadata!, "HasUpdate", true);
+        SetProperty(metadata!, "FileId", "5312529");
+        SetProperty(metadata!, "UpdateFileId", "5312529");
+        SetProperty(metadata!, "LatestVersion", "6.7.1");
+
+        var restored = (bool)guard!.Invoke(null, [metadata, "5.0.0"])!;
+        Assert.IsFalse(restored, "当前来源 FileID 已经是目标文件时，不应重新显示可更新");
+
+        SetProperty(metadata!, "UpdateFileId", "5312530");
+        restored = (bool)guard.Invoke(null, [metadata, "5.0.0"])!;
+        Assert.IsTrue(restored, "目标 FileID 不同时仍应保留可更新状态");
+
+        SetProperty(metadata!, "UpdateFileId", "");
+        SetProperty(metadata!, "LatestVersion", "5.0.0");
+        restored = (bool)guard.Invoke(null, [metadata, "5.0.0"])!;
+        Assert.IsFalse(restored, "没有可靠 FileID 且已达到持久化远端版本时，不应重复提示更新");
+    }
+
+    [TestMethod]
     public void ExistingCompositeSources_ShouldRecoverChildWithoutSourceCredentialByManifestNamespace()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-composite-missing-child-source-test-" + Guid.NewGuid().ToString("N"));

@@ -7574,7 +7574,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 SourceDescription = sourceDescription,
                 LocalizedDescription = sourceCredential?.Localization?.DescriptionZhCn ?? string.Empty,
                 IsEnabled = isEnabled,
-                HasUpdate = !isCompositeParent && !isInheritedModpackSource && sourceCredential?.HasUpdate == true,
+                HasUpdate = !isCompositeParent &&
+                            !isInheritedModpackSource &&
+                            ShouldRestorePersistedUpdateState(sourceCredential, version),
                 LatestVersion = isCompositeParent || isInheritedModpackSource
                     ? string.Empty
                     : sourceCredential?.LatestVersion ?? string.Empty,
@@ -7588,7 +7590,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     sourceCredential,
                     isCompositeParent,
                     isInheritedModpackSource,
-                    parentReference),
+                    parentReference,
+                    version),
                 IsCompositeParent = isCompositeParent,
                 ParentModId = parentReference?.Id ?? string.Empty,
                 ParentModName = parentReference?.Name ?? string.Empty
@@ -8738,20 +8741,27 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return null;
         }
 
+        var currentFileId = TryParsePositiveLong(credential?.FileId, out var persistedFileId)
+            ? persistedFileId
+            : 0;
+
         if (string.Equals(normalizedPlatform, "NexusMods", StringComparison.OrdinalIgnoreCase))
         {
-            return await CheckNexusUpdateAsync(mod, normalizedProjectId);
+            return await CheckNexusUpdateAsync(mod, normalizedProjectId, currentFileId);
         }
 
         if (string.Equals(normalizedPlatform, "Curseforge", StringComparison.OrdinalIgnoreCase))
         {
-            return await CheckCurseforgeUpdateAsync(mod, normalizedProjectId);
+            return await CheckCurseforgeUpdateAsync(mod, normalizedProjectId, currentFileId);
         }
 
         return null;
     }
 
-    private async Task<LocalModUpdateCheckResult> CheckNexusUpdateAsync(ModManageItem mod, string projectId)
+    private async Task<LocalModUpdateCheckResult> CheckNexusUpdateAsync(
+        ModManageItem mod,
+        string projectId,
+        long currentFileId = 0)
     {
         var result = new LocalModUpdateCheckResult
         {
@@ -8815,7 +8825,13 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     GetJsonStringFlexibleByCandidates(latest.Value, "version"),
                     ExtractVersionFromText(GetJsonStringFlexibleByCandidates(latest.Value, "file_name", "fileName", "name")));
                 result.LatestVersion = remoteVersion;
-                result.HasUpdate = IsRemoteVersionNewer(mod.Version, remoteVersion);
+                // FileID 是发布文件的稳定身份。某些 Mod 发布者不会同步更新
+                // manifest.json 的 Version 字段；只比较版本号会导致用户已经
+                // 安装最新文件后仍反复看到“可更新”。当当前目录记录的 FileID
+                // 与远端最新文件一致时，以文件身份为准，不再重复提示。
+                result.HasUpdate = latestFileId > 0 &&
+                                   latestFileId != currentFileId &&
+                                   IsRemoteVersionNewer(mod.Version, remoteVersion);
                 result.IsChecked = true;
                 result.UpdateFileId = latestFileId;
                 // 构造 NXM 链接供批量更新入队（DownloadPage 会解析并下载）
@@ -8833,7 +8849,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
     }
 
-    private static async Task<LocalModUpdateCheckResult> CheckCurseforgeUpdateAsync(ModManageItem mod, string projectId)
+    private static async Task<LocalModUpdateCheckResult> CheckCurseforgeUpdateAsync(
+        ModManageItem mod,
+        string projectId,
+        long currentFileId = 0)
     {
         var result = new LocalModUpdateCheckResult
         {
@@ -8884,7 +8903,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                         ExtractVersionFromText(GetJsonStringFlexibleByCandidates(latest.Value, "displayName", "display_name")),
                         ExtractVersionFromText(GetJsonStringFlexibleByCandidates(latest.Value, "fileName", "file_name", "name")));
                     result.LatestVersion = remoteVersion;
-                    result.HasUpdate = IsRemoteVersionNewer(mod.Version, remoteVersion);
+                    // 与 Nexus 一样，CurseForge FileID 比 manifest 版本更能
+                    // 代表当前安装的发布文件；处理“文件已更新、manifest 仍旧”
+                    // 的 Mod，避免更新完成后再次提示同一文件可更新。
+                    result.HasUpdate = latestFileId > 0 &&
+                                       latestFileId != currentFileId &&
+                                       IsRemoteVersionNewer(mod.Version, remoteVersion);
                     result.IsChecked = true;
                     result.UpdateFileId = latestFileId;
                     // 提取 Curseforge 直链供批量更新入队
@@ -9189,7 +9213,8 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         LocalSourceMetadata? credential,
         bool isCompositeParent,
         bool isInheritedModpackSource,
-        LocalParentModReference? parentReference)
+        LocalParentModReference? parentReference,
+        string installedVersion)
     {
         if (isCompositeParent)
         {
@@ -9216,13 +9241,54 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             return "未检查";
         }
 
+        // 更新完成后，部分来源仍会把旧的 HasUpdate/UpdateStatus 写回磁盘，
+        // 尤其是“manifest 版本没有同步更新”的 Mod。用来源文件 ID 和远端
+        // 版本再次校验，避免重新打开管理页后重复显示同一个更新。
+        if (credential?.HasUpdate == true &&
+            !ShouldRestorePersistedUpdateState(credential, installedVersion) &&
+            persistedStatus.Contains("可更新", StringComparison.OrdinalIgnoreCase))
+        {
+            return "已是最新";
+        }
+
         return FirstNonEmpty(
             persistedStatus,
-            credential?.HasUpdate == true
-                ? (string.IsNullOrWhiteSpace(credential.LatestVersion)
+            ShouldRestorePersistedUpdateState(credential, installedVersion)
+                ? (string.IsNullOrWhiteSpace(credential?.LatestVersion)
                     ? "可更新"
-                    : $"可更新 -> {credential.LatestVersion}")
+                    : $"可更新 -> {credential!.LatestVersion}")
                 : "未检查");
+    }
+
+    private static bool ShouldRestorePersistedUpdateState(
+        LocalSourceMetadata? credential,
+        string installedVersion)
+    {
+        if (credential?.HasUpdate != true)
+        {
+            return false;
+        }
+
+        // FileID 是 Nexus/CurseForge 发布文件的稳定身份。更新完成后如果
+        // 当前文件 ID 已经等于待更新文件 ID，即使 manifest.json 仍是旧版本，
+        // 也不能再次恢复“可更新”。
+        if (TryParsePositiveLong(credential.FileId, out var currentFileId) &&
+            TryParsePositiveLong(credential.UpdateFileId, out var updateFileId) &&
+            currentFileId == updateFileId)
+        {
+            return false;
+        }
+
+        // 兼容没有可靠 FileID 的历史凭证：若安装目录中的版本已经不低于
+        // 持久化的远端版本，同样清除过期的更新状态。
+        if (!string.IsNullOrWhiteSpace(credential.LatestVersion) &&
+            !IsUnknownVersion(installedVersion) &&
+            !IsRemoteVersionNewer(installedVersion, credential.LatestVersion))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static bool IsBundledModpackSource(LocalSourceMetadata? credential)
