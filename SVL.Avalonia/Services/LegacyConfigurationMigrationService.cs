@@ -221,6 +221,18 @@ public sealed class LegacyConfigurationMigrationService
         changed |= ImportString(root, "LauncherAppName", settings.LauncherAppName, defaults.LauncherAppName,
             value => settings.LauncherAppName = value, result, ref hadCurrentSettings);
 
+        if (TryGetLegacyEnumToken(root, "LauncherVisibility", out var launcherVisibility) &&
+            (!hadCurrentSettings || settings.LauncherVisibility == defaults.LauncherVisibility))
+        {
+            var normalizedLauncherVisibility = NormalizeLauncherVisibility(launcherVisibility);
+            if (normalizedLauncherVisibility >= 0)
+            {
+                settings.LauncherVisibility = normalizedLauncherVisibility;
+                result.ImportedSettingsCount++;
+                changed = true;
+            }
+        }
+
         if (TryGetLegacyEnumToken(root, "WindowSizeMode", out var windowSizeMode) &&
             (!hadCurrentSettings || string.Equals(settings.WindowSizeMode, defaults.WindowSizeMode, StringComparison.Ordinal)))
         {
@@ -938,6 +950,24 @@ public sealed class LegacyConfigurationMigrationService
             "custom" or "自定义" => "自定义",
             "maximized" or "最大化" => "最大化",
             _ => string.Empty
+        };
+    }
+
+    private static int NormalizeLauncherVisibility(string value)
+    {
+        if (int.TryParse(value, out var numeric))
+        {
+            return numeric is >= 0 and <= 4 ? numeric : -1;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "closeimmediately" or "close" or "立即关闭" or "游戏启动后立即关闭" => 0,
+            "hideandcloseonexit" or "hideclose" or "隐藏并关闭" or "游戏启动后隐藏，游戏退出后自动关闭" => 1,
+            "hideandrestoreonexit" or "hiderestore" or "隐藏并恢复" or "游戏启动后隐藏，游戏退出后重新打开" => 2,
+            "minimize" or "minimized" or "最小化" or "游戏启动后最小化" => 3,
+            "keepunchanged" or "keep" or "保持不变" or "游戏启动后仍保持不变" => 4,
+            _ => -1
         };
     }
 

@@ -27,6 +27,7 @@
 | Nexus Collection 的 `manual` 来源 | WPF 安装器仍是 TODO；Avalonia 已覆盖 NXM、API、浏览器回调及 HTTP 直链，并将 `manual` 网页/无来源条目标记为需手动处理；只有明确归档直链才自动下载 | 任务页保留来源地址并提供“打开来源”，用户完成下载后可拖入当前实例 Mods 页面；不把网页地址当压缩包 |
 | Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 继续使用统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；可选 Mod 自动失败现在进入“待处理”，用户可明确选择“选择文件并安装”或“跳过可选 Mod”，选择会持久化并在重试时生效；任务详情现已补齐 Collection Mod 列表分页、上一页/下一页导航，不改变统一队列的实际安装顺序 | 保持统一队列作为默认路径；后续仅需进行真实 Collection 的可见 UI 验收，不恢复旧任务类型 |
 | 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，旧启动流程未消费；Avalonia 已迁移该设置并接入更新弹窗 | 发现新版本后可自动下载首个发布资产；下载完成仍需用户点击“安装并重启”，不会静默执行安装 |
+| 游戏启动后启动器可见性行为 | WPF 的 `LauncherVisibility` 五种行为此前只完成了配置对照，Avalonia 未接入实际启动生命周期 | 已迁移立即关闭、隐藏后随游戏退出关闭、隐藏后随游戏退出恢复、最小化、保持不变；旧枚举数值/字符串均可迁移，并由游戏进程退出事件驱动恢复 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
 | 完整线上/可见 UI 验收 | 不是分支迁移代码缺口；当前主要剩真实 Nexus/CurseForge 网络和 Windows Avalonia 窗口冒烟 | 作为发布前验收项继续执行 |
@@ -183,3 +184,8 @@ Skipped，而是持久化为 NeedsDecision；任务详情提供“选择文件�
 本轮继续收口 Collection 父子状态联动：任务会订阅逐 Mod 子项及集合本身的变化，
 即使补装、跳过或后续入口直接修改子项，也会同步刷新任务汇总进度、当前条目和
 任务详情绑定；清空/重建子项时会解除旧订阅，避免重复通知。
+
+本轮补齐旧 WPF 的 `LauncherVisibility` 行为：Avalonia 设置页可选择五种启动器
+可见性策略，旧 `app.json` 中的数值枚举和常见字符串枚举会迁移；实际启动时由主窗口
+响应游戏进程启动/退出事件，支持隐藏后恢复或关闭，且不把旧 net48 工程直接引用到
+Avalonia net10 工程。

@@ -112,6 +112,9 @@
               <TextBox Text="{Binding LauncherTitle}" />
               <TextBlock Text="启动器简称" />
               <TextBox Text="{Binding LauncherAppName}" />
+              <TextBlock Text="游戏启动后启动器行为" />
+              <ComboBox ItemsSource="{Binding LauncherVisibilityOptions}"
+                        SelectedIndex="{Binding SelectedLauncherVisibilityIndex}" />
               <CheckBox Content="{Binding InstanceAutoConnectLabelText}" IsChecked="{Binding InstanceAutoConnectServer}" Margin="0,6,0,0" />
               <TextBlock Text="{Binding InstanceServerAddressLabelText}" />
               <TextBox Text="{Binding InstanceServerAddress}" Watermark="例如: 127.0.0.1:24642" />

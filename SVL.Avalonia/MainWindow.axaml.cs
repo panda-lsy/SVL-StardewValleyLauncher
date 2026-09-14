@@ -3,7 +3,9 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using SVL.Avalonia.Models;
 using SVL.Avalonia.Services;
 using SVL.Avalonia.ViewModels;
 using SVL.Core.Platform.Modpack;
@@ -60,6 +62,57 @@ public partial class MainWindow : Window
         if (DataContext is ViewModels.MainWindowViewModel vm)
         {
             vm.BringToFrontRequested += OnBringToFrontRequested;
+            vm.LaunchPage.GameStartedRequested += OnGameStartedRequested;
+            vm.LaunchPage.GameExitedRequested += OnGameExitedRequested;
+        }
+    }
+
+    private void OnGameStartedRequested(LauncherVisibilityBehavior behavior)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnGameStartedRequested(behavior));
+            return;
+        }
+
+        switch (behavior)
+        {
+            case LauncherVisibilityBehavior.CloseImmediately:
+                Close();
+                break;
+            case LauncherVisibilityBehavior.HideAndCloseOnExit:
+            case LauncherVisibilityBehavior.HideAndRestoreOnExit:
+                if (IsVisible)
+                {
+                    Hide();
+                }
+                break;
+            case LauncherVisibilityBehavior.Minimize:
+                WindowState = WindowState.Minimized;
+                break;
+            case LauncherVisibilityBehavior.KeepUnchanged:
+            default:
+                break;
+        }
+    }
+
+    private void OnGameExitedRequested(LauncherVisibilityBehavior behavior)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => OnGameExitedRequested(behavior));
+            return;
+        }
+
+        switch (behavior)
+        {
+            case LauncherVisibilityBehavior.HideAndCloseOnExit:
+                Close();
+                break;
+            case LauncherVisibilityBehavior.HideAndRestoreOnExit:
+                Show();
+                Activate();
+                break;
         }
     }
 

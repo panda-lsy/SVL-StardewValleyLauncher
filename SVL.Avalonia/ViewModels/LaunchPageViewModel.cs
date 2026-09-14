@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SVL.Avalonia.Models;
 using SVL.Avalonia.Services;
 using SVL.Core.Platform.Abstractions;
 using SVL.Core.Platform.Services;
@@ -23,6 +24,12 @@ public partial class LaunchPageViewModel : ObservableObject
     public event Action? NavigateToInstancesRequested;
     public event Action? NavigateToVersionSettingsRequested;
     public event Action? NavigateToModManageRequested;
+
+    /// <summary>游戏进程已启动并完成窗口标题处理，主窗口据此执行可见性策略。</summary>
+    public event Action<LauncherVisibilityBehavior>? GameStartedRequested;
+
+    /// <summary>游戏进程退出，主窗口据此恢复或关闭自身。</summary>
+    public event Action<LauncherVisibilityBehavior>? GameExitedRequested;
 
     [ObservableProperty]
     private string _instanceName = string.Empty;
@@ -562,6 +569,7 @@ public partial class LaunchPageViewModel : ObservableObject
         var hasArguments = !string.IsNullOrWhiteSpace(launchArguments);
 
         Process? gameProcess = null;
+        var processLifecycleTransferred = false;
         try
         {
             var launched = false;
@@ -612,6 +620,27 @@ public partial class LaunchPageViewModel : ObservableObject
                         InstanceName,
                         _currentGamePath);
                 }
+                else
+                {
+                    // 与旧 WPF 启动流程一致：隐藏/最小化前先等待游戏窗口出现，
+                    // 避免游戏尚在启动时把启动器提前藏起来。
+                    await WindowTitleService.WaitForGameWindowAsync(gameProcess);
+                }
+            }
+
+            if (gameProcess != null)
+            {
+                var visibility = (LauncherVisibilityBehavior)Math.Clamp(settings.LauncherVisibility, 0, 4);
+                GameStartedRequested?.Invoke(visibility);
+
+                // 只有隐藏并等待游戏退出的两种策略需要把进程句柄交给生命周期监视器；
+                // 其余策略在启动动作完成后即可释放句柄，避免启动器长期持有游戏进程资源。
+                if (visibility is LauncherVisibilityBehavior.HideAndCloseOnExit or
+                    LauncherVisibilityBehavior.HideAndRestoreOnExit)
+                {
+                    BeginProcessLifecycleMonitor(gameProcess, visibility);
+                    processLifecycleTransferred = true;
+                }
             }
         }
         catch (Exception ex)
@@ -620,9 +649,41 @@ public partial class LaunchPageViewModel : ObservableObject
         }
         finally
         {
-            gameProcess?.Dispose();
+            if (!processLifecycleTransferred)
+            {
+                gameProcess?.Dispose();
+            }
             IsLaunching = false;
             LaunchButtonText = Text("Launch.Button.Launch");
+        }
+    }
+
+    private void BeginProcessLifecycleMonitor(Process process, LauncherVisibilityBehavior visibility)
+    {
+        try
+        {
+            process.Exited += (_, _) =>
+            {
+                try
+                {
+                    GameExitedRequested?.Invoke(visibility);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[Launch] 处理游戏退出后的窗口行为失败: {ex.Message}");
+                }
+                finally
+                {
+                    process.Dispose();
+                }
+            };
+            process.EnableRaisingEvents = true;
+        }
+        catch
+        {
+            // 若当前平台/进程不支持 Exited 事件，不能留下未释放的句柄。
+            process.Dispose();
+            throw;
         }
     }
 

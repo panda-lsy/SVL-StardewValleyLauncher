@@ -167,6 +167,9 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _launcherAppName = "SVL";
 
     [ObservableProperty]
+    private int _selectedLauncherVisibilityIndex = 3;
+
+    [ObservableProperty]
     private bool _instanceAutoConnectServer;
 
     [ObservableProperty]
@@ -357,6 +360,16 @@ public partial class SettingsPageViewModel : ObservableObject
 
     public ObservableCollection<string> CollectionConflictStrategies { get; } = ["覆盖", "跳过", "仅备份"];
 
+    /// <summary>游戏启动后启动器的可见性行为，顺序与旧 WPF LauncherVisibility 枚举一致。</summary>
+    public ObservableCollection<string> LauncherVisibilityOptions { get; } =
+    [
+        "游戏启动后立即关闭",
+        "游戏启动后隐藏，游戏退出后自动关闭",
+        "游戏启动后隐藏，游戏退出后重新打开",
+        "游戏启动后最小化",
+        "游戏启动后仍保持不变"
+    ];
+
     public ObservableCollection<string> UpdateChannels { get; } = ["稳定版", "预览版"];
 
     public ObservableCollection<string> UpdateSourceOptions { get; } = ["GitHub (推荐)", "Gitee (国内加速)"];
@@ -466,6 +479,7 @@ public partial class SettingsPageViewModel : ObservableObject
         GameWindowTitle = settings.GameWindowTitle;
         LauncherTitle = settings.LauncherTitle;
         LauncherAppName = settings.LauncherAppName;
+        SelectedLauncherVisibilityIndex = Math.Clamp(settings.LauncherVisibility, 0, LauncherVisibilityOptions.Count - 1);
         InstanceAutoConnectServer = settings.InstanceAutoConnectServer;
         InstanceServerAddress = settings.InstanceServerAddress;
         InstanceSteamInviteCode = settings.InstanceSteamInviteCode;
@@ -530,6 +544,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.GameWindowTitle = GameWindowTitle;
         settings.LauncherTitle = LauncherTitle;
         settings.LauncherAppName = LauncherAppName;
+        settings.LauncherVisibility = Math.Clamp(SelectedLauncherVisibilityIndex, 0, LauncherVisibilityOptions.Count - 1);
         settings.InstanceAutoConnectServer = InstanceAutoConnectServer;
         settings.InstanceServerAddress = InstanceServerAddress?.Trim() ?? string.Empty;
         settings.InstanceSteamInviteCode = InstanceSteamInviteCode?.Trim() ?? string.Empty;
@@ -786,6 +801,19 @@ public partial class SettingsPageViewModel : ObservableObject
     partial void OnEnableAutoUpdateCheckChanged(bool value)
     {
         StatusMessage = value ? "已启用自动检查更新（已自动保存）" : "已禁用自动检查更新（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnSelectedLauncherVisibilityIndexChanged(int value)
+    {
+        var normalized = Math.Clamp(value, 0, LauncherVisibilityOptions.Count - 1);
+        if (normalized != value)
+        {
+            SelectedLauncherVisibilityIndex = normalized;
+            return;
+        }
+
+        StatusMessage = $"游戏启动后行为切换为：{LauncherVisibilityOptions[normalized]}（已自动保存）";
         ScheduleAutoSave();
     }
 

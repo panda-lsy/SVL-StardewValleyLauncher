@@ -16,6 +16,13 @@ public sealed class AppUserSettings
 
     public string LauncherAppName { get; set; } = "SVL";
 
+    /// <summary>
+    /// 游戏启动后启动器的可见性行为：0=立即关闭，1=隐藏并在游戏退出后关闭，
+    /// 2=隐藏并在游戏退出后恢复，3=最小化，4=保持不变。
+    /// 使用整数保存以兼容旧 WPF 的 LauncherVisibility 枚举序列化格式。
+    /// </summary>
+    public int LauncherVisibility { get; set; } = 3;
+
     public bool EnableDownloadCache { get; set; } = true;
 
     public bool EnableDownloadProxy { get; set; }
@@ -144,4 +151,14 @@ public sealed class AppUserSettings
 
     /// <summary>社区汉化首选源（GitHub / Gitee），默认 Gitee（国内访问更稳定）。</summary>
     public string LocalizationPreferredSource { get; set; } = "Gitee";
+}
+
+/// <summary>游戏启动后启动器的可见性行为。数值顺序兼容旧 WPF 配置。</summary>
+public enum LauncherVisibilityBehavior
+{
+    CloseImmediately = 0,
+    HideAndCloseOnExit = 1,
+    HideAndRestoreOnExit = 2,
+    Minimize = 3,
+    KeepUnchanged = 4
 }

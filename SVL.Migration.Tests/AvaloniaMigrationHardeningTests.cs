@@ -471,6 +471,7 @@ public sealed class AvaloniaMigrationHardeningTests
                 """
                 {
                   "LauncherTitle": "旧 WPF 启动器",
+                  "LauncherVisibility": 2,
                   "ThemeMode": 1,
                   "Language": "en-US",
                   "MaxConcurrentModDownloads": 2,
@@ -531,6 +532,7 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.IsTrue(first.Completed);
             Assert.IsTrue(first.HasSources);
             Assert.AreEqual("旧 WPF 启动器", settings.LauncherTitle);
+            Assert.AreEqual(2, settings.LauncherVisibility);
             Assert.AreEqual("深色", settings.ThemeMode);
             Assert.AreEqual("en-US", settings.UiLanguage);
             Assert.AreEqual(2, settings.CollectionDownloadParallelism);
@@ -622,6 +624,7 @@ public sealed class AvaloniaMigrationHardeningTests
                 """
                 {
                   "GameWindowTitle": "自定义游戏标题",
+                  "LauncherVisibility": "HideAndCloseOnExit",
                   "WindowSizeMode": "Maximized",
                   "ThemeMode": "Dark",
                   "CheckPrereleaseUpdates": true,
@@ -647,6 +650,7 @@ public sealed class AvaloniaMigrationHardeningTests
 
             Assert.IsTrue(result.Completed);
             Assert.AreEqual("自定义游戏标题", settings.GameWindowTitle);
+            Assert.AreEqual(1, settings.LauncherVisibility);
             Assert.AreEqual("最大化", settings.WindowSizeMode);
             Assert.AreEqual("深色", settings.ThemeMode);
             Assert.AreEqual("预览版", settings.UpdateChannel);
