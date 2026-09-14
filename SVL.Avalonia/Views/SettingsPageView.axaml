@@ -309,6 +309,8 @@
               <ComboBox ItemsSource="{Binding ThemeModes}" SelectedItem="{Binding SelectedThemeMode}" />
               <TextBlock Text="配色方案" />
               <ComboBox ItemsSource="{Binding ThemeStyleOptions}" SelectedItem="{Binding SelectedThemeStyle}" />
+              <TextBlock Text="{Binding FontSizeLabelText}" />
+              <ComboBox ItemsSource="{Binding FontSizeOptions}" SelectedItem="{Binding FontSize}" />
               <TextBlock Text="{Binding UiLanguageLabelText}" />
               <ComboBox ItemsSource="{Binding UiLanguages}" SelectedItem="{Binding SelectedUiLanguage}" />
             </StackPanel>

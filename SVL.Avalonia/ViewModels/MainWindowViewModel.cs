@@ -98,6 +98,9 @@ public partial class MainWindowViewModel : ObservableObject
     private string _launcherAppNameText = "SVL";
 
     [ObservableProperty]
+    private double _globalFontSize = 14;
+
+    [ObservableProperty]
     private string _resourceDetailsHeaderTitle = "资源下载";
 
     [ObservableProperty]
@@ -157,6 +160,7 @@ public partial class MainWindowViewModel : ObservableObject
         _imageResourceService.ResourcesChanged += ApplyImageResources;
         var initialSettings = _settingsStore.Load();
         LauncherAppNameText = string.IsNullOrWhiteSpace(initialSettings.LauncherAppName) ? "SVL" : initialSettings.LauncherAppName;
+        GlobalFontSize = NormalizeFontSize(initialSettings.FontSize);
         ApplyLocalizedTexts();
         ApplyImageResources();
 
@@ -1202,10 +1206,21 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (string.Equals(e.PropertyName, nameof(SettingsPageViewModel.FontSize), StringComparison.Ordinal))
+        {
+            GlobalFontSize = NormalizeFontSize(SettingsPage.FontSize);
+            return;
+        }
+
         if (string.Equals(e.PropertyName, nameof(SettingsPageViewModel.EnableDownloadFloatingTaskButton), StringComparison.Ordinal))
         {
             RefreshFloatingTaskButtonState();
         }
+    }
+
+    private static double NormalizeFontSize(int value)
+    {
+        return value is 12 or 13 or 14 or 15 or 16 or 18 or 20 ? value : 14;
     }
 
     private void HandleSettingsNexusLoggedOut()

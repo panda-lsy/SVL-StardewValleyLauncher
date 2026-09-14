@@ -249,6 +249,9 @@ public sealed class LegacyConfigurationMigrationService
             value => settings.CustomWindowWidth = Math.Clamp(value, 600, 7680), result, ref hadCurrentSettings);
         changed |= ImportInt(root, "CustomWindowHeight", settings.CustomWindowHeight, defaults.CustomWindowHeight,
             value => settings.CustomWindowHeight = Math.Clamp(value, 400, 4320), result, ref hadCurrentSettings);
+        changed |= ImportInt(root, "FontSize", settings.FontSize, defaults.FontSize,
+            value => settings.FontSize = new[] { 12, 13, 14, 15, 16, 18, 20 }.Contains(value) ? value : defaults.FontSize,
+            result, ref hadCurrentSettings);
 
         if (TryGetLegacyEnumToken(root, "ThemeMode", out var themeMode) &&
             (!hadCurrentSettings || string.Equals(settings.ThemeMode, defaults.ThemeMode, StringComparison.Ordinal)))

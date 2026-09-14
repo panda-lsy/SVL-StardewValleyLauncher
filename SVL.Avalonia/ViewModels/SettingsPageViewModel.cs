@@ -74,6 +74,9 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _uiLanguageLabelText = "界面语言";
 
     [ObservableProperty]
+    private string _fontSizeLabelText = "界面字体大小";
+
+    [ObservableProperty]
     private string _saveButtonText = "保存设置";
 
     [ObservableProperty]
@@ -168,6 +171,9 @@ public partial class SettingsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private int _selectedLauncherVisibilityIndex = 3;
+
+    [ObservableProperty]
+    private int _fontSize = 14;
 
     [ObservableProperty]
     private bool _instanceAutoConnectServer;
@@ -360,6 +366,9 @@ public partial class SettingsPageViewModel : ObservableObject
 
     public ObservableCollection<string> CollectionConflictStrategies { get; } = ["覆盖", "跳过", "仅备份"];
 
+    /// <summary>与旧 WPF 设置一致的界面字体大小选项。</summary>
+    public ObservableCollection<int> FontSizeOptions { get; } = [12, 13, 14, 15, 16, 18, 20];
+
     /// <summary>游戏启动后启动器的可见性行为，顺序与旧 WPF LauncherVisibility 枚举一致。</summary>
     public ObservableCollection<string> LauncherVisibilityOptions { get; } =
     [
@@ -511,6 +520,7 @@ public partial class SettingsPageViewModel : ObservableObject
         SelectedModLocalizationConcurrency = Math.Clamp(settings.MaxConcurrentModLocalizationChecks, 1, 16);
         SelectedThemeMode = settings.ThemeMode;
         IsDarkMode = ThemeService.IsDarkMode;
+        FontSize = FontSizeOptions.Contains(settings.FontSize) ? settings.FontSize : 14;
 
         // 主题风格
         var styleName = settings.ThemeStyleName ?? "Stardew";
@@ -570,6 +580,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.MaxConcurrentModLocalizationChecks = Math.Clamp(SelectedModLocalizationConcurrency, 1, 16);
         settings.ThemeMode = SelectedThemeMode;
         settings.UiLanguage = SelectedUiLanguage;
+        settings.FontSize = FontSizeOptions.Contains(FontSize) ? FontSize : 14;
 
         // 保存主题
         ResolveThemeStyleAndScheme(SelectedThemeStyle, out var styleName, out var schemeName);
@@ -609,6 +620,7 @@ public partial class SettingsPageViewModel : ObservableObject
         MinimizeOnCloseLabelText = _localizationService.Get("Settings.Other.MinimizeOnClose");
         ThemeModeLabelText = _localizationService.Get("Settings.ThemeMode");
         UiLanguageLabelText = _localizationService.Get("Settings.UiLanguage");
+        FontSizeLabelText = _localizationService.Get("Settings.FontSize");
         SaveButtonText = _localizationService.Get("Settings.Save");
         InstanceAutoConnectLabelText = _localizationService.Get("Settings.Basic.AutoConnect");
         InstanceServerAddressLabelText = _localizationService.Get("Settings.Basic.ServerAddress");
@@ -814,6 +826,18 @@ public partial class SettingsPageViewModel : ObservableObject
         }
 
         StatusMessage = $"游戏启动后行为切换为：{LauncherVisibilityOptions[normalized]}（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnFontSizeChanged(int value)
+    {
+        if (!FontSizeOptions.Contains(value))
+        {
+            FontSize = 14;
+            return;
+        }
+
+        StatusMessage = $"{FontSizeLabelText}切换为：{value}（已自动保存）";
         ScheduleAutoSave();
     }
 
