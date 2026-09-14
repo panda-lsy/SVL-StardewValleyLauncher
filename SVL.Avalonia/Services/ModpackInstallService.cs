@@ -6435,7 +6435,8 @@ public sealed class ModpackInstallService
     ///
     /// 直接删除目标目录再复制会在文件复制失败、杀毒软件短暂锁定文件或磁盘空间
     /// 不足时留下半个 Mod，甚至丢失原来的可用版本。先把新内容复制到 Mods/_staging，
-    /// 再把旧目录移到同一暂存根，最后移动新目录；任一步失败都尽量恢复旧目录。
+    /// 再把旧目录移到同一暂存根，最后移动新目录；替换成功后旧目录必须进入系统
+    /// 回收站，不能随着暂存目录被物理删除；任一步失败都尽量恢复旧目录。
     /// </summary>
     private static void ReplaceDirectoryFromSource(
         string sourceDir,
@@ -6485,6 +6486,55 @@ public sealed class ModpackInstallService
                 }
 
                 throw;
+            }
+
+            if (targetExisted && Directory.Exists(backupDirectory))
+            {
+                if (RecycleBinService.TryMoveToRecycleBin(backupDirectory, out var recycleError))
+                {
+                    return;
+                }
+
+                // 回收站不可用时，不能让 finally 物理删除旧 Mod。先把新目录移回
+                // 暂存位置，再恢复旧目录；恢复成功后删除的只是不再使用的新内容。
+                var rollbackSucceeded = false;
+                try
+                {
+                    if (Directory.Exists(targetDir))
+                    {
+                        Directory.Move(targetDir, stagedDirectory);
+                    }
+
+                    if (Directory.Exists(backupDirectory))
+                    {
+                        Directory.Move(backupDirectory, targetDir);
+                    }
+
+                    rollbackSucceeded = Directory.Exists(targetDir);
+                }
+                catch
+                {
+                    preserveTransaction = true;
+                }
+
+                if (rollbackSucceeded)
+                {
+                    try
+                    {
+                        if (Directory.Exists(stagedDirectory))
+                        {
+                            Directory.Delete(stagedDirectory, true);
+                        }
+                    }
+                    catch
+                    {
+                        // 新内容属于本次事务产生的临时数据，清理失败不覆盖回滚结果。
+                    }
+
+                    throw new IOException($"无法将原有 Mod 移入回收站，已回滚本次整合包更新：{recycleError}");
+                }
+
+                throw new IOException($"无法将原有 Mod 移入回收站，且回滚失败；旧目录仍保留在：{backupDirectory}。原因：{recycleError}");
             }
         }
         finally
