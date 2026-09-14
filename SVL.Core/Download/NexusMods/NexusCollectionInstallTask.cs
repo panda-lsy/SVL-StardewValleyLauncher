@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.ResourceProject.NexusMods;
 using SVL.Core.Stardew.Mod.SMAPI;
 
@@ -514,14 +515,27 @@ public class NexusCollectionInstallTask : DownloadTask
         // 复制到 Mods 目录
         var destPath = Path.Combine(_targetModsPath, mod.Name ?? Path.GetFileName(matchingDir));
 
-        if (Directory.Exists(destPath))
-        {
-            Directory.Delete(destPath, true);
-        }
+        BackupAndRecycleExistingModPath(destPath);
 
         CopyDirectory(matchingDir, destPath);
 
         Log.Info($"[CollectionInstall] ✓ Bundled Mod 安装成功: {mod.Name}");
+    }
+
+    private void BackupAndRecycleExistingModPath(string path)
+    {
+        if (!Directory.Exists(path) && !File.Exists(path))
+            return;
+
+        if (Directory.Exists(path))
+        {
+            var backupPath = ModBackupService.BackupDirectory(_targetModsPath, path);
+            if (string.IsNullOrWhiteSpace(backupPath))
+                throw new IOException($"覆盖前备份失败，已停止安装: {path}");
+        }
+
+        if (!ModBackupService.MovePathToRecycleBin(path))
+            throw new IOException($"无法将原有 Mod 移入回收站，已停止覆盖: {path}");
     }
 
     /// <summary>

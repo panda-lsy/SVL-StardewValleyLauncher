@@ -240,3 +240,7 @@ Avalonia 迁移回归测试为 **313 总计，其中 311 通过、2 跳过**。
 
 本轮补齐设置迁移：旧 WPF 的 `EnableAnimations` 已接入 Avalonia 设置页与运行时，
 通过动态过渡资源即时关闭/恢复已有页面动画，并新增 Headless 回归断言。
+
+本轮继续审计旧 WPF Collection 安装器：内置 Bundled Mod、单根目录归档和 Bundled
+补丁覆盖现有 Mod 时，原目录现在会先创建 `ModsBackup` 备份，再移入系统回收站；
+缓存、临时解压目录和失败任务残留仍按生命周期清理，不纳入用户内容保护范围。

@@ -11,6 +11,7 @@ using SVL.Core.IO;
 using SVL.Core.Logging;
 using SVL.Core.Stardew.Instance;
 using SVL.Core.Stardew.Mod.SMAPI;
+using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.ResourceProject.NexusMods;
 
 namespace SVL.Core.Download.NexusMods;
@@ -1227,6 +1228,22 @@ public class NexusCollectionWizardTask : DownloadTask
         return true;
     }
 
+    private static void BackupAndRecycleExistingModPath(string modsPath, string path)
+    {
+        if (!Directory.Exists(path) && !File.Exists(path))
+            return;
+
+        if (Directory.Exists(path))
+        {
+            var backupPath = ModBackupService.BackupDirectory(modsPath, path);
+            if (string.IsNullOrWhiteSpace(backupPath))
+                throw new IOException($"覆盖前备份失败，已停止安装: {path}");
+        }
+
+        if (!ModBackupService.MovePathToRecycleBin(path))
+            throw new IOException($"无法将原有 Mod 移入回收站，已停止覆盖: {path}");
+    }
+
     /// <summary>
     /// 递归复制目录（用于跨卷移动）
     /// </summary>
@@ -1456,8 +1473,8 @@ public class NexusCollectionWizardTask : DownloadTask
                 var existingDir = Path.Combine(targetModsPath, rootDirName);
                 if (Directory.Exists(existingDir))
                 {
-                    Log.Info($"[CollectionWizard] 检测到已存在的根目录，将删除: {existingDir}");
-                    Directory.Delete(existingDir, recursive: true);
+                    Log.Info($"[CollectionWizard] 检测到已存在的根目录，先备份并移入回收站: {existingDir}");
+                    BackupAndRecycleExistingModPath(targetModsPath, existingDir);
                 }
 
                 Log.Info($"[CollectionWizard] 检测到单一根目录: {singleRootDir}，将解压到 Mods 文件夹");
@@ -1481,8 +1498,8 @@ public class NexusCollectionWizardTask : DownloadTask
                 // 如果目标文件夹已存在，先删除
                 if (Directory.Exists(extractPath))
                 {
-                    Log.Info($"[CollectionWizard] 检测到已存在的目录，将删除: {extractPath}");
-                    Directory.Delete(extractPath, recursive: true);
+                    Log.Info($"[CollectionWizard] 检测到已存在的目录，先备份并移入回收站: {extractPath}");
+                    BackupAndRecycleExistingModPath(targetModsPath, extractPath);
                 }
 
                 Directory.CreateDirectory(extractPath);
@@ -1773,8 +1790,8 @@ public class NexusCollectionWizardTask : DownloadTask
                 // 如果目标目录存在，先删除
                 if (Directory.Exists(destDir))
                 {
-                    Log.Debug($"[CollectionWizard] 删除现有目录: {destDir}");
-                    Directory.Delete(destDir, true);
+                    Log.Debug($"[CollectionWizard] 先备份并移入回收站: {destDir}");
+                    BackupAndRecycleExistingModPath(_targetModsPath, destDir);
                 }
 
                 // 复制目录
