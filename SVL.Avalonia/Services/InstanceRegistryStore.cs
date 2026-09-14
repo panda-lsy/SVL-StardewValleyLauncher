@@ -77,6 +77,87 @@ public sealed class InstanceRegistryStore
         }
     }
 
+    /// <summary>仅当路径尚未登记时新增实例，返回是否实际新增。</summary>
+    public bool TryAddManualInstance(string name, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        lock (RegistryLock)
+        {
+            var records = LoadManualInstancesUnsafe();
+            if (records.Any(record =>
+                    string.Equals(record.Path, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            records.Add(new ManualInstanceRecord
+            {
+                Name = name ?? string.Empty,
+                Path = path
+            });
+            SaveManualInstancesUnsafe(records);
+            return true;
+        }
+    }
+
+    /// <summary>原子重命名指定路径的所有记录，返回是否发生变化。</summary>
+    public bool RenameManualInstancesByPath(string path, string name)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        lock (RegistryLock)
+        {
+            var records = LoadManualInstancesUnsafe();
+            var changed = false;
+            foreach (var record in records)
+            {
+                if (!string.Equals(record.Path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                record.Name = name ?? string.Empty;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                SaveManualInstancesUnsafe(records);
+            }
+
+            return changed;
+        }
+    }
+
+    /// <summary>原子移除指定路径的记录，返回是否实际移除。</summary>
+    public bool RemoveManualInstancesByPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        lock (RegistryLock)
+        {
+            var records = LoadManualInstancesUnsafe();
+            var removed = records.RemoveAll(record =>
+                string.Equals(record.Path, path, StringComparison.OrdinalIgnoreCase)) > 0;
+            if (removed)
+            {
+                SaveManualInstancesUnsafe(records);
+            }
+
+            return removed;
+        }
+    }
+
     public void SaveManualInstances(IReadOnlyList<ManualInstanceRecord> records)
     {
         lock (RegistryLock)

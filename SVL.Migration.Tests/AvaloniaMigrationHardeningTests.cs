@@ -83,6 +83,32 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void InstanceRegistry_TransactionalPathOperations_ShouldAddRenameAndRemoveAtomically()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-registry-transaction-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new InstanceRegistryStore(root);
+            var path = Path.Combine(root, "versions", "Pack");
+
+            Assert.IsTrue(store.TryAddManualInstance("旧名称", path));
+            Assert.IsFalse(store.TryAddManualInstance("重复名称", path));
+            Assert.IsTrue(store.RenameManualInstancesByPath(path, "新名称"));
+            Assert.AreEqual("新名称", store.LoadManualInstances().Single().Name);
+            Assert.IsTrue(store.RemoveManualInstancesByPath(path));
+            Assert.IsFalse(store.RemoveManualInstancesByPath(path));
+            Assert.AreEqual(0, store.LoadManualInstances().Count);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void SearchPages_ShouldExposeWpfFiltersAndConfiguredDefaultSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-search-page-filter-test-" + Guid.NewGuid().ToString("N"));

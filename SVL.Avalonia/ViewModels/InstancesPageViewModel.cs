@@ -411,20 +411,11 @@ public partial class InstancesPageViewModel : ObservableObject
 
         var baseName = ResolveBaseInstanceName();
 
-        var records = _instanceRegistryStore.LoadManualInstances();
-        if (records.Any(record => string.Equals(NormalizePathKey(record.Path), NormalizePathKey(resolvedPath), StringComparison.Ordinal)))
+        if (!_instanceRegistryStore.TryAddManualInstance(baseName, resolvedPath))
         {
             Status = L("Instances.Status.ManualDuplicate", "该目录已存在于实例列表");
             return;
         }
-
-        records.Add(new ManualInstanceRecord
-        {
-            Name = baseName,
-            Path = resolvedPath
-        });
-
-        _instanceRegistryStore.SaveManualInstances(records);
         Reload();
 
         var targetPath = PathEntries.FirstOrDefault(path =>
@@ -473,21 +464,7 @@ public partial class InstancesPageViewModel : ObservableObject
 
         entry.DisplayName = normalized;
 
-        var records = _instanceRegistryStore.LoadManualInstances();
-        var changed = false;
-        foreach (var record in records)
-        {
-            if (string.Equals(NormalizePathKey(record.Path), NormalizePathKey(entry.GamePath), StringComparison.Ordinal))
-            {
-                record.Name = normalized;
-                changed = true;
-            }
-        }
-
-        if (changed)
-        {
-            _instanceRegistryStore.SaveManualInstances(records);
-        }
+        _instanceRegistryStore.RenameManualInstancesByPath(entry.GamePath, normalized);
 
         foreach (var instance in entry.Instances)
         {
@@ -556,10 +533,7 @@ public partial class InstancesPageViewModel : ObservableObject
             return;
         }
 
-        var records = _instanceRegistryStore.LoadManualInstances();
-        records.RemoveAll(record =>
-            string.Equals(NormalizePathKey(record.Path), NormalizePathKey(entry.GamePath), StringComparison.Ordinal));
-        _instanceRegistryStore.SaveManualInstances(records);
+        _instanceRegistryStore.RemoveManualInstancesByPath(entry.GamePath);
 
         var settings = _settingsStore.Load();
         if (string.Equals(NormalizePathKey(settings.PreferredInstancePath), NormalizePathKey(entry.GamePath), StringComparison.Ordinal))
