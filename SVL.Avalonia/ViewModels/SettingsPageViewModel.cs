@@ -56,6 +56,9 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _showNotificationsLabelText = "显示通知";
 
     [ObservableProperty]
+    private string _showModTypeFilterNoticeLabelText = "来源为全部时提示类型筛选不可用";
+
+    [ObservableProperty]
     private string _debugModeLabelText = "启用调试模式";
 
     [ObservableProperty]
@@ -310,6 +313,9 @@ public partial class SettingsPageViewModel : ObservableObject
     private bool _showNotifications = true;
 
     [ObservableProperty]
+    private bool _showModTypeFilterDisabledNotice = true;
+
+    [ObservableProperty]
     private bool _debugMode;
 
     [ObservableProperty]
@@ -502,6 +508,7 @@ public partial class SettingsPageViewModel : ObservableObject
 
         SelectedUiLanguage = string.IsNullOrWhiteSpace(settings.UiLanguage) ? "zh-CN" : settings.UiLanguage;
         ShowNotifications = settings.ShowNotifications;
+        ShowModTypeFilterDisabledNotice = settings.ShowModTypeFilterDisabledNotice;
         DebugMode = settings.DebugMode;
         MinimizeToTrayOnStartup = settings.MinimizeToTrayOnStartup;
         MinimizeToTrayOnClose = settings.MinimizeToTrayOnClose;
@@ -555,6 +562,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.ThemeColorScheme = schemeName;
         ThemeService.SaveToSettings(settings);
         settings.ShowNotifications = ShowNotifications;
+        settings.ShowModTypeFilterDisabledNotice = ShowModTypeFilterDisabledNotice;
         settings.DebugMode = DebugMode;
         settings.MinimizeToTrayOnStartup = MinimizeToTrayOnStartup;
         settings.MinimizeToTrayOnClose = MinimizeToTrayOnClose;
@@ -580,6 +588,7 @@ public partial class SettingsPageViewModel : ObservableObject
         TabAboutText = _localizationService.Get("Settings.Tab.About");
         OtherSectionSubtitleText = _localizationService.Get("Settings.Other.Subtitle");
         ShowNotificationsLabelText = _localizationService.Get("Settings.Other.ShowNotifications");
+        ShowModTypeFilterNoticeLabelText = _localizationService.Get("Settings.Other.TypeFilterNotice");
         DebugModeLabelText = _localizationService.Get("Settings.Other.DebugMode");
         MinimizeOnStartupLabelText = _localizationService.Get("Settings.Other.MinimizeOnStartup");
         MinimizeOnCloseLabelText = _localizationService.Get("Settings.Other.MinimizeOnClose");
@@ -777,6 +786,12 @@ public partial class SettingsPageViewModel : ObservableObject
     partial void OnEnableAutoUpdateCheckChanged(bool value)
     {
         StatusMessage = value ? "已启用自动检查更新（已自动保存）" : "已禁用自动检查更新（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnShowModTypeFilterDisabledNoticeChanged(bool value)
+    {
+        StatusMessage = value ? "已启用类型筛选不可用提示（已自动保存）" : "已禁用类型筛选不可用提示（已自动保存）";
         ScheduleAutoSave();
     }
 

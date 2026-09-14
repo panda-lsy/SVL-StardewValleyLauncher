@@ -868,6 +868,7 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
 public sealed partial class ModSearchPageViewModel : FeaturePageViewModelBase
 {
     private readonly Services.RemoteCatalogService _catalogService;
+    private readonly Services.AppUserSettingsStore? _settingsStore;
     private bool _isInitialized;
     private int _currentPage = 1;
     // 搜索请求可能在用户连续点击搜索/翻页时交错返回；只允许最后一次请求更新页面。
@@ -918,9 +919,12 @@ public sealed partial class ModSearchPageViewModel : FeaturePageViewModelBase
     [ObservableProperty]
     private string _pageInfoText = "第 1 页";
 
-    public ModSearchPageViewModel(Services.RemoteCatalogService catalogService)
+    public ModSearchPageViewModel(
+        Services.RemoteCatalogService catalogService,
+        Services.AppUserSettingsStore? settingsStore = null)
     {
         _catalogService = catalogService;
+        _settingsStore = settingsStore;
         try
         {
             var defaultSource = _catalogService.GetDefaultSource();
@@ -933,6 +937,56 @@ public sealed partial class ModSearchPageViewModel : FeaturePageViewModelBase
         catch
         {
             // 配置读取失败时保留“全部”来源，不阻断搜索页打开。
+        }
+    }
+
+    /// <summary>来源为“全部”时，类型筛选与旧 WPF 保持一致地禁用。</summary>
+    public bool IsModTypeFilterEnabled => !string.Equals(SelectedSource, "全部", StringComparison.OrdinalIgnoreCase);
+
+    public string ModTypeFilterHint => IsModTypeFilterEnabled
+        ? "按当前来源筛选 Mod 类型"
+        : "来源为“全部”时无法按类型筛选，请先选择 NexusMods 或 Curseforge";
+
+    partial void OnSelectedSourceChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsModTypeFilterEnabled));
+        OnPropertyChanged(nameof(ModTypeFilterHint));
+
+        if (!IsModTypeFilterEnabled)
+        {
+            if (!string.Equals(SelectedModType, "全部", StringComparison.Ordinal))
+            {
+                SelectedModType = "全部";
+            }
+
+            if (ShouldShowModTypeFilterNotice())
+            {
+                Services.NotificationService.Show(
+                    "类型筛选已关闭",
+                    "来源为“全部”时无法按类型筛选，请先切换到 NexusMods 或 Curseforge。",
+                    autoCloseDelay: 3500,
+                    notificationType: Services.NotificationType.Info);
+            }
+        }
+    }
+
+    partial void OnSelectedModTypeChanged(string value)
+    {
+        if (!IsModTypeFilterEnabled && !string.Equals(value, "全部", StringComparison.Ordinal))
+        {
+            SelectedModType = "全部";
+        }
+    }
+
+    private bool ShouldShowModTypeFilterNotice()
+    {
+        try
+        {
+            return _settingsStore?.Load().ShowModTypeFilterDisabledNotice ?? true;
+        }
+        catch
+        {
+            return true;
         }
     }
 

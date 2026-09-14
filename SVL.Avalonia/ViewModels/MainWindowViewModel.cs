@@ -211,7 +211,7 @@ public partial class MainWindowViewModel : ObservableObject
         SettingsPage = new SettingsPageViewModel(_settingsStore, dialogService, nexusAuthService, nexusOAuthService, launcherUpdateService, externalProcessService, nxmProtocolRegistrationService, _localizationService, _imageResourceService);
         InstancesPage = new InstancesPageViewModel(_gameInstallPathLocator, dialogService, instanceRegistryStore, _settingsStore, _imageResourceService, _localizationService);
         TaskStatusPage = new TaskStatusPageViewModel();
-        ModSearchPage = new ModSearchPageViewModel(remoteCatalogService);
+        ModSearchPage = new ModSearchPageViewModel(remoteCatalogService, _settingsStore);
         ModpackSearchPage = new ModpackSearchPageViewModel(remoteCatalogService);
         ModDetailsPage = new ModDetailsPageViewModel(remoteCatalogService, dialogService);
         ModDetailsPage.QueueDownloadRequested += HandleQueueDownload;

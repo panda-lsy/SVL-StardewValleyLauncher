@@ -319,6 +319,7 @@
               </StackPanel>
               <TextBlock Text="{Binding OtherSectionSubtitleText}" Opacity="0.72" TextWrapping="Wrap" />
               <CheckBox Content="{Binding ShowNotificationsLabelText}" IsChecked="{Binding ShowNotifications}" />
+              <CheckBox Content="{Binding ShowModTypeFilterNoticeLabelText}" IsChecked="{Binding ShowModTypeFilterDisabledNotice}" />
               <CheckBox Content="{Binding DebugModeLabelText}" IsChecked="{Binding DebugMode}" />
               <CheckBox Content="{Binding MinimizeOnStartupLabelText}" IsChecked="{Binding MinimizeToTrayOnStartup}" />
               <CheckBox Content="{Binding MinimizeOnCloseLabelText}" IsChecked="{Binding MinimizeToTrayOnClose}" />

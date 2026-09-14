@@ -269,6 +269,8 @@ public sealed class LegacyConfigurationMigrationService
             value => settings.MinimizeToTrayOnClose = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "ShowNotifications", settings.ShowNotifications, defaults.ShowNotifications,
             value => settings.ShowNotifications = value, result, ref hadCurrentSettings);
+        changed |= ImportBool(root, "ShowModTypeFilterDisabledNotice", settings.ShowModTypeFilterDisabledNotice, defaults.ShowModTypeFilterDisabledNotice,
+            value => settings.ShowModTypeFilterDisabledNotice = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "DebugMode", settings.DebugMode, defaults.DebugMode,
             value => settings.DebugMode = value, result, ref hadCurrentSettings);
 

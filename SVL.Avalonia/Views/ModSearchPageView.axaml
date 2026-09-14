@@ -32,6 +32,7 @@
         <ComboBox Grid.Row="1" Grid.Column="2"
                   ItemsSource="{Binding ModTypes}"
                   SelectedItem="{Binding SelectedModType}"
+                  IsEnabled="{Binding IsModTypeFilterEnabled}"
                   ToolTip.Tip="类型"
                   Margin="0,0,8,8" />
         <Button Grid.Row="1" Grid.Column="3"
@@ -41,7 +42,7 @@
                 Margin="0,0,0,8" />
 
         <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
-                   Text="版本与类型筛选会同时应用到 NexusMods 和 Curseforge 结果。"
+                   Text="{Binding ModTypeFilterHint}"
                    FontSize="12"
                    Opacity="0.65" />
       </Grid>

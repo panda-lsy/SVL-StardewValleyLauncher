@@ -55,6 +55,9 @@ public sealed class AppUserSettings
 
     public bool ShowNotifications { get; set; } = true;
 
+    /// <summary>来源为“全部”时是否提示类型筛选不可用。</summary>
+    public bool ShowModTypeFilterDisabledNotice { get; set; } = true;
+
     public bool DebugMode { get; set; }
 
     public string LogLevel { get; set; } = "Info";

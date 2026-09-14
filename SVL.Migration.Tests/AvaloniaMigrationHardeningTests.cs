@@ -67,6 +67,12 @@ public sealed class AvaloniaMigrationHardeningTests
             CollectionAssert.Contains(modPage.GameVersions.ToList(), "全部");
             CollectionAssert.Contains(modPage.ModTypes.ToList(), "游戏内容");
 
+            modPage.SelectedModType = "游戏内容";
+            modPage.SelectedSource = "全部";
+            Assert.IsFalse(modPage.IsModTypeFilterEnabled);
+            Assert.AreEqual("全部", modPage.SelectedModType);
+            StringAssert.Contains(modPage.ModTypeFilterHint, "无法按类型筛选");
+
             var modpackPage = new ModpackSearchPageViewModel(catalog);
             Assert.AreEqual("Curseforge", modpackPage.SelectedSource);
         }
@@ -621,7 +627,8 @@ public sealed class AvaloniaMigrationHardeningTests
                   "CheckPrereleaseUpdates": true,
                   "PreferredUpdateSource": "Gitee",
                   "AutoDownloadUpdate": true,
-                  "MaxConcurrentModLocalizationChecks": 12
+                  "MaxConcurrentModLocalizationChecks": 12,
+                  "ShowModTypeFilterDisabledNotice": false
                 }
                 """, System.Text.Encoding.Unicode);
             File.WriteAllText(
@@ -646,6 +653,7 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual("Gitee (国内加速)", settings.PreferredUpdateSource);
             Assert.IsTrue(settings.AutoDownloadUpdate);
             Assert.AreEqual(12, settings.MaxConcurrentModLocalizationChecks);
+            Assert.IsFalse(settings.ShowModTypeFilterDisabledNotice);
             Assert.AreEqual(gamePath, settings.PreferredInstancePath);
         }
         finally
