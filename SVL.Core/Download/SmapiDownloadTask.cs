@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SVL.Core.Config;
 using SVL.Core.Stardew.Instance;
+using SVL.Core.Stardew.Mod;
 using SVL.Core.Stardew.Mod.SMAPI;
 using SVL.Core.Logging;
 using SVL.Core.Download.NexusMods;
@@ -593,8 +594,14 @@ public class SmapiDownloadTask : DownloadTask
                     {
                         try
                         {
-                            Directory.Delete(modPath, recursive: true);
-                            Log.Info($"[DownloadManager] ✓ 已删除 SMAPI 附带模组: {bundledMod}");
+                            if (ModBackupService.MovePathToRecycleBin(modPath))
+                            {
+                                Log.Info($"[DownloadManager] ✓ 已将 SMAPI 附带模组移入回收站: {bundledMod}");
+                            }
+                            else
+                            {
+                                Log.Warn($"[DownloadManager] 移入回收站失败，保留 SMAPI 附带模组: {bundledMod}");
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -605,21 +612,25 @@ public class SmapiDownloadTask : DownloadTask
                 Log.Info($"[DownloadManager] ✓ Mods 目录已处理，用户模组已保留");
             }
 
-            // 删除目录中的所有文件（保留 Mods 目录）
+            // 将版本根目录中的生成文件移入回收站（保留 Mods 目录）。
+            // 这些文件属于本次 SMAPI 运行时，不应再用不可恢复的物理删除。
             var dirInfo = new DirectoryInfo(versionPath);
             foreach (var file in dirInfo.GetFiles())
             {
                 try
                 {
-                    file.Delete();
+                    if (!ModBackupService.MovePathToRecycleBin(file.FullName))
+                    {
+                        Log.Warn($"[DownloadManager] 移入回收站失败，保留文件: {file.FullName}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Log.Warn($"[DownloadManager] 删除文件失败: {file.FullName}", ex);
+                    Log.Warn($"[DownloadManager] 移入回收站失败: {file.FullName}", ex);
                 }
             }
 
-            // 删除目录中的所有子目录（保留 Mods 目录）
+            // 将其它生成目录整体移入回收站（保留 Mods 目录）。
             foreach (var dir in dirInfo.GetDirectories())
             {
                 // 跳过 Mods 目录（已处理）
@@ -628,15 +639,18 @@ public class SmapiDownloadTask : DownloadTask
 
                 try
                 {
-                    dir.Delete(recursive: true);
+                    if (!ModBackupService.MovePathToRecycleBin(dir.FullName))
+                    {
+                        Log.Warn($"[DownloadManager] 移入回收站失败，保留目录: {dir.FullName}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Log.Warn($"[DownloadManager] 删除目录失败: {dir.FullName}", ex);
+                    Log.Warn($"[DownloadManager] 移入回收站失败: {dir.FullName}", ex);
                 }
             }
 
-            Log.Info($"[DownloadManager] ✓ 版本目录内容已清理（Mods 目录已保留）: {versionPath}");
+            Log.Info($"[DownloadManager] ✓ 版本目录内容已移入回收站（Mods 目录已保留）: {versionPath}");
         }
         catch (Exception ex)
         {
@@ -687,9 +701,15 @@ public class SmapiDownloadTask : DownloadTask
                 // *** 新架构：不再需要删除硬链接文件 ***
                 // 游戏文件现在由 GameFilesListService.CopyGameFiles 复制，会在删除目录时自动清理
 
-                // 最后删除整个目录
-                Directory.Delete(versionPath, recursive: true);
-                Log.Info($"[DownloadManager] ✓ 已删除版本目录: {versionPath}");
+                // 最后将整个本次创建的版本目录移入回收站。
+                if (ModBackupService.MovePathToRecycleBin(versionPath))
+                {
+                    Log.Info($"[DownloadManager] ✓ 已将版本目录移入回收站: {versionPath}");
+                }
+                else
+                {
+                    Log.Warn($"[DownloadManager] 版本目录未能移入回收站，已保留: {versionPath}");
+                }
             }
         }
         catch (Exception ex)
