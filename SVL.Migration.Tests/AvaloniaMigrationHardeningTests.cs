@@ -1750,6 +1750,61 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void ModpackInstall_ShouldBuildParentTreeForBundledSiblingContentPacks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-bundled-composite-source-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentDirectory = Path.Combine(modsPath, "Parent Mod");
+        var childOneDirectory = Path.Combine(modsPath, "[CP] Child One");
+        var childTwoDirectory = Path.Combine(modsPath, "[FTM] Child Two");
+        try
+        {
+            Directory.CreateDirectory(parentDirectory);
+            Directory.CreateDirectory(childOneDirectory);
+            Directory.CreateDirectory(childTwoDirectory);
+            File.WriteAllText(
+                Path.Combine(parentDirectory, "manifest.json"),
+                "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\",\"EntryDll\":\"Parent.dll\"}");
+            File.WriteAllText(
+                Path.Combine(childOneDirectory, "manifest.json"),
+                "{\"Name\":\"Child One\",\"UniqueID\":\"Example.Parent.ChildOne\",\"ContentPackFor\":{\"UniqueID\":\"Example.Parent\"}}");
+            File.WriteAllText(
+                Path.Combine(childTwoDirectory, "manifest.json"),
+                "{\"Name\":\"Child Two\",\"UniqueID\":\"Example.Parent.ChildTwo\",\"ContentPackFor\":{\"UniqueID\":\"Example.Parent\"}}");
+
+            var writer = typeof(ModpackInstallService).GetMethod(
+                "WriteBundledModpackSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(writer);
+
+            writer!.Invoke(
+                null,
+                [new[] { parentDirectory, childOneDirectory, childTwoDirectory }, "Blissful Valley", "1.2.0"]);
+
+            using var parentDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(parentDirectory, "svl-source.json")));
+            var parent = parentDocument.RootElement;
+            Assert.AreEqual("modpack-bundled", parent.GetProperty("sourceKind").GetString());
+            Assert.IsTrue(parent.GetProperty("isParentMod").GetBoolean());
+            Assert.AreEqual(2, parent.GetProperty("childMods").GetArrayLength());
+            using var childDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(childOneDirectory, "svl-source.json")));
+            var child = childDocument.RootElement;
+            Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("Parent Mod", child.GetProperty("parentMod").GetProperty("name").GetString());
+            Assert.IsFalse(child.TryGetProperty("projectId", out _));
+            Assert.IsFalse(child.TryGetProperty("fileId", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void BackupComparison_ShouldIgnoreBackupAndUpdateChainMetadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-backup-comparison-test-" + Guid.NewGuid().ToString("N"));
