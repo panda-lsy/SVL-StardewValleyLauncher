@@ -190,7 +190,7 @@
               <TextBlock Text="{Binding NexusDisplayName, StringFormat=账号: {0}}" />
               <TextBlock Text="未登录时仅可使用非 Nexus 资源；登录后可直接导入 NXM 并执行受限下载。" Opacity="0.75" TextWrapping="Wrap" IsVisible="{Binding ShowNexusLoginGuide}" />
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="登录 Nexus" Command="{Binding OpenNexusLoginCommand}" />
+                <Button Content="{Binding NexusLoginActionText}" Command="{Binding OpenNexusLoginCommand}" />
                 <Button Content="验证状态" Command="{Binding ValidateNexusCommand}" />
                 <Button Content="刷新 Token" Command="{Binding RefreshOAuthTokenCommand}" />
                 <Button Content="退出登录" Command="{Binding LogoutNexusCommand}" />

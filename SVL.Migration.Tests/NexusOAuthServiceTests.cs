@@ -1,5 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SVL.Avalonia.Services;
+using SVL.Avalonia.ViewModels;
+using SVL.Core.Platform.Services;
 using System.Net.Http;
 using System.Text;
 
@@ -176,6 +178,58 @@ public class NexusOAuthServiceTests
         NexusApiRateLimitService.Record(response.Headers);
 
         Assert.IsFalse(NexusApiRateLimitService.GetSnapshot().IsInitialized);
+    }
+
+    [TestMethod]
+    public void Settings_ShouldKeepStoredNexusProfileVisibleWhenTokenExpired()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-expired-nexus-profile-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var avatarPath = Path.Combine(root, "avatar.png");
+        File.WriteAllBytes(avatarPath, [137, 80, 78, 71]);
+
+        try
+        {
+            var settingsStore = new AppUserSettingsStore(root);
+            settingsStore.Save(new SVL.Avalonia.Models.AppUserSettings
+            {
+                NexusUserName = "stored-user",
+                NexusMembershipType = "Premium",
+                NexusOAuthAvatarLocalPath = avatarPath
+            });
+
+            var localization = new LocalizationService(settingsStore);
+            var viewModel = new SettingsPageViewModel(
+                settingsStore,
+                new DialogService(),
+                new NexusAuthService(),
+                new NexusOAuthService(),
+                new LauncherUpdateService(),
+                new ExternalProcessService(),
+                new NxmProtocolRegistrationService(),
+                localization,
+                new ImageResourceService(localization));
+
+            Assert.IsTrue(viewModel.IsNexusLoginExpired);
+            Assert.IsTrue(viewModel.IsNexusLoggedIn, "旧资料仍应展示在账号卡片中，但不代表 Token 有效");
+            Assert.IsFalse(viewModel.ShowNexusLoginGuide);
+            Assert.AreEqual("stored-user", viewModel.NexusUserName);
+            Assert.AreEqual(avatarPath, viewModel.NexusAvatarSource);
+            Assert.AreEqual("重新登录 Nexus", viewModel.NexusLoginActionText);
+            StringAssert.Contains(viewModel.NexusStatus, "失效");
+            Assert.AreEqual("Access Token 已过期", viewModel.NexusApiStatistics);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch
+            {
+                // 测试结束时若系统仍短暂持有头像文件，忽略清理失败即可。
+            }
+        }
     }
 
     private static string Base64UrlEncode(string json)

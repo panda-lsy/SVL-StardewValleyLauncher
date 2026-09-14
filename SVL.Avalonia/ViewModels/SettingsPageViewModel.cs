@@ -378,6 +378,13 @@ public partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private string _nexusApiStatistics = "未获取";
 
+    /// <summary>
+    /// 旧 WPF 会在 OAuth Token 失效后保留已缓存的用户资料和头像，
+    /// 让用户可以看到当前账号并重新授权；此状态不代表仍可调用 Nexus API。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isNexusLoginExpired;
+
     [ObservableProperty]
     private string _nexusStatus = "未登录";
 
@@ -417,9 +424,13 @@ public partial class SettingsPageViewModel : ObservableObject
     /// <summary>Mod 更新/汉化检测的并发线程数选项。</summary>
     public ObservableCollection<int> ModCheckConcurrencyOptions { get; } = [1, 2, 3, 4, 6, 8, 12, 16];
 
-    public bool IsNexusLoggedIn => !string.IsNullOrWhiteSpace(NexusApiKey) || !string.IsNullOrWhiteSpace(NexusOAuthAccessToken);
+    public bool IsNexusLoggedIn => !string.IsNullOrWhiteSpace(NexusApiKey) ||
+                                   !string.IsNullOrWhiteSpace(NexusOAuthAccessToken) ||
+                                   IsNexusLoginExpired;
 
     public bool ShowNexusLoginGuide => !IsNexusLoggedIn;
+
+    public string NexusLoginActionText => IsNexusLoginExpired ? "重新登录 Nexus" : "登录 Nexus";
 
     public string NexusDisplayName => string.IsNullOrWhiteSpace(NexusUserName)
         ? "未识别用户"
@@ -573,8 +584,15 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusOAuthAvatarUrl = settings.NexusOAuthAvatarUrl;
         NexusOAuthAvatarLocalPath = settings.NexusOAuthAvatarLocalPath;
         NexusAvatarSource = ResolveNexusAvatarSource();
+        IsNexusLoginExpired = !HasNexusCredential() && HasStoredNexusProfile();
         ApplyNexusRateLimitSnapshot();
-        NexusStatus = IsNexusLoggedIn ? "已登录" : "未登录";
+        NexusStatus = IsNexusLoginExpired
+            ? "登录已失效（请重新登录 Nexus）"
+            : IsNexusLoggedIn ? "已登录" : "未登录";
+        if (IsNexusLoginExpired && !NexusApiRateLimitService.GetSnapshot().IsInitialized)
+        {
+            NexusApiStatistics = "Access Token 已过期";
+        }
         EnableNexusAuthNotification = !settings.SuppressNexusAuthNotification;
 
         if (!string.IsNullOrWhiteSpace(NexusOAuthAvatarUrl) &&
@@ -954,6 +972,13 @@ public partial class SettingsPageViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsNexusLoggedIn));
         OnPropertyChanged(nameof(ShowNexusLoginGuide));
+    }
+
+    partial void OnIsNexusLoginExpiredChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsNexusLoggedIn));
+        OnPropertyChanged(nameof(ShowNexusLoginGuide));
+        OnPropertyChanged(nameof(NexusLoginActionText));
     }
 
     partial void OnNexusUserNameChanged(string value)
@@ -1385,6 +1410,7 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusUserName = result.UserName;
         NexusMembershipType = result.MembershipType;
         NexusUserId = result.UserId;
+        IsNexusLoginExpired = false;
         if (!string.IsNullOrWhiteSpace(result.AvatarUrl))
         {
             NexusOAuthAvatarUrl = result.AvatarUrl;
@@ -1403,6 +1429,7 @@ public partial class SettingsPageViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(NexusApiKey) && string.IsNullOrWhiteSpace(NexusOAuthAccessToken))
         {
+            IsNexusLoginExpired = HasStoredNexusProfile();
             NexusStatus = "未登录";
             StatusMessage = "请先登录 Nexus";
             return;
@@ -1414,6 +1441,7 @@ public partial class SettingsPageViewModel : ObservableObject
             var apiKeyResult = await _nexusAuthService.ValidateApiKeyAsync(NexusApiKey);
             if (!apiKeyResult.IsSuccess)
             {
+                IsNexusLoginExpired = HasStoredNexusProfile();
                 NexusStatus = apiKeyResult.Message;
                 StatusMessage = "Nexus 验证失败";
                 return;
@@ -1422,6 +1450,7 @@ public partial class SettingsPageViewModel : ObservableObject
             NexusUserName = apiKeyResult.UserName;
             NexusMembershipType = apiKeyResult.MembershipType;
             NexusUserId = apiKeyResult.UserId;
+            IsNexusLoginExpired = false;
             NexusStatus = "已登录（API Key 验证通过）";
             _settingsStore.Save(BuildSettings());
             StatusMessage = "Nexus 状态验证成功";
@@ -1437,6 +1466,7 @@ public partial class SettingsPageViewModel : ObservableObject
                 var refreshed = await RefreshOAuthTokenInternalAsync();
                 if (!refreshed)
                 {
+                    IsNexusLoginExpired = HasStoredNexusProfile();
                     NexusStatus = oauthResult.Message;
                     StatusMessage = "Nexus OAuth 验证失败";
                     return;
@@ -1445,6 +1475,7 @@ public partial class SettingsPageViewModel : ObservableObject
                 oauthResult = await _nexusOAuthService.ValidateAccessTokenAsync(NexusOAuthAccessToken);
                 if (!oauthResult.IsSuccess)
                 {
+                    IsNexusLoginExpired = HasStoredNexusProfile();
                     NexusStatus = oauthResult.Message;
                     StatusMessage = "Nexus OAuth 验证失败";
                     return;
@@ -1452,6 +1483,7 @@ public partial class SettingsPageViewModel : ObservableObject
             }
             else
             {
+                IsNexusLoginExpired = HasStoredNexusProfile();
                 NexusStatus = oauthResult.Message;
                 StatusMessage = "Nexus OAuth 验证失败";
                 return;
@@ -1461,6 +1493,7 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusUserName = oauthResult.UserName;
         NexusMembershipType = oauthResult.MembershipType;
         NexusUserId = oauthResult.UserId;
+        IsNexusLoginExpired = false;
         NexusAvatarSource = ResolveNexusAvatarSource();
         NexusStatus = "已登录（OAuth 验证通过）";
         _settingsStore.Save(BuildSettings());
@@ -1480,6 +1513,7 @@ public partial class SettingsPageViewModel : ObservableObject
         var ok = await RefreshOAuthTokenInternalAsync();
         if (ok)
         {
+            IsNexusLoginExpired = false;
             NexusStatus = "已登录（OAuth Token 已刷新）";
             StatusMessage = "OAuth Token 刷新成功";
             return;
@@ -1502,6 +1536,7 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusOAuthAvatarUrl = string.Empty;
         NexusOAuthAvatarLocalPath = string.Empty;
         NexusAvatarSource = string.Empty;
+        IsNexusLoginExpired = false;
         NexusApiRateLimitService.Clear();
         NexusStatus = "未登录";
         EnableNexusAuthNotification = true;
@@ -1726,6 +1761,7 @@ public partial class SettingsPageViewModel : ObservableObject
         }
 
         NexusOAuthAccessToken = refreshResult.Token.AccessToken;
+        IsNexusLoginExpired = false;
         if (!string.IsNullOrWhiteSpace(refreshResult.Token.RefreshToken))
         {
             NexusOAuthRefreshToken = refreshResult.Token.RefreshToken;
@@ -1767,6 +1803,20 @@ public partial class SettingsPageViewModel : ObservableObject
         return !string.IsNullOrWhiteSpace(cached)
             ? cached
             : NexusOAuthAvatarUrl;
+    }
+
+    private bool HasNexusCredential()
+    {
+        return !string.IsNullOrWhiteSpace(NexusApiKey) ||
+               !string.IsNullOrWhiteSpace(NexusOAuthAccessToken);
+    }
+
+    private bool HasStoredNexusProfile()
+    {
+        return !string.IsNullOrWhiteSpace(NexusUserName) ||
+               !string.IsNullOrWhiteSpace(NexusMembershipType) ||
+               !string.IsNullOrWhiteSpace(NexusOAuthAvatarUrl) ||
+               !string.IsNullOrWhiteSpace(NexusOAuthAvatarLocalPath);
     }
 
     private async Task CacheNexusAvatarAsync(string avatarUrl, string userName)
