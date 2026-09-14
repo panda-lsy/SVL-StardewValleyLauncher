@@ -279,8 +279,8 @@ public class ModDownloadTask : DownloadTask
                 // 如果目标 ZIP 文件路径已存在为目录（异常情况），先删除
                 if (Directory.Exists(targetPath))
                 {
-                    Log.Info($"[ModDownloadTask] 检测到目标路径是目录，将删除: {targetPath}");
-                    Directory.Delete(targetPath, recursive: true);
+                    Log.Info($"[ModDownloadTask] 检测到目标路径是目录，将移入回收站: {targetPath}");
+                    MoveExistingPathToRecycleBinOrThrow(targetPath);
                 }
 
                 // 保存 ZIP 文件到用户选择的位置
@@ -319,8 +319,8 @@ public class ModDownloadTask : DownloadTask
                     // 如果目标 ZIP 文件路径已存在为目录（异常情况），先删除
                     if (Directory.Exists(targetPath))
                     {
-                        Log.Info($"[ModDownloadTask] 检测到目标路径是目录，将删除: {targetPath}");
-                        Directory.Delete(targetPath, recursive: true);
+                        Log.Info($"[ModDownloadTask] 检测到目标路径是目录，将移入回收站: {targetPath}");
+                        MoveExistingPathToRecycleBinOrThrow(targetPath);
                     }
 
                     // 先保存 ZIP 文件到用户选择的位置
@@ -912,9 +912,8 @@ public class ModDownloadTask : DownloadTask
                     // 如果根目录已存在，先删除（用于覆盖更新）
                     if (Directory.Exists(trackedRootDir))
                     {
-                        Log.Info($"[ModDownloadTask] 检测到已存在的根目录，将删除: {trackedRootDir}");
-                        ModBackupService.BackupDirectory(targetModsPath, trackedRootDir);
-                        Directory.Delete(trackedRootDir, recursive: true);
+                        Log.Info($"[ModDownloadTask] 检测到已存在的根目录，将备份并移入回收站: {trackedRootDir}");
+                        BackupAndRecycleExistingModDirectory(targetModsPath, trackedRootDir);
                     }
 
                     // 记录将要创建的根目录
@@ -931,9 +930,8 @@ public class ModDownloadTask : DownloadTask
                     // 如果目标文件夹已存在，先删除（用于覆盖更新）
                     if (Directory.Exists(extractPath))
                     {
-                        Log.Info($"[ModDownloadTask] 检测到已存在的目录，将删除: {extractPath}");
-                        ModBackupService.BackupDirectory(targetModsPath, extractPath);
-                        Directory.Delete(extractPath, recursive: true);
+                        Log.Info($"[ModDownloadTask] 检测到已存在的目录，将备份并移入回收站: {extractPath}");
+                        BackupAndRecycleExistingModDirectory(targetModsPath, extractPath);
                     }
 
                     Directory.CreateDirectory(extractPath);
@@ -980,8 +978,8 @@ public class ModDownloadTask : DownloadTask
                     // 解压文件（如果文件已存在则覆盖）
                     if (File.Exists(destinationPath))
                     {
-                        Log.Debug($"[ModDownloadTask] 文件已存在，将覆盖: {destinationPath}");
-                        File.Delete(destinationPath);
+                        Log.Debug($"[ModDownloadTask] 文件已存在，将移入回收站后覆盖: {destinationPath}");
+                        MoveExistingPathToRecycleBinOrThrow(destinationPath);
                     }
 
                     // 使用 using 确保流被正确释放
@@ -1063,10 +1061,16 @@ public class ModDownloadTask : DownloadTask
 
             if (Directory.Exists(normalizedTargetModPath))
             {
-                ModBackupService.BackupDirectory(normalizedModsPath, normalizedTargetModPath);
+                Log.Info($"[ModDownloadTask] 将备份并移入回收站: {normalizedTargetModPath}");
+                var backupPath = ModBackupService.BackupDirectory(normalizedModsPath, normalizedTargetModPath);
+                if (string.IsNullOrWhiteSpace(backupPath))
+                {
+                    throw new IOException($"更新前备份失败，已停止覆盖: {normalizedTargetModPath}");
+                }
+
                 preservedConfigTempPath = BackupConfigEntriesToTemp(normalizedTargetModPath);
-                Directory.Delete(normalizedTargetModPath, recursive: true);
-                Log.Info($"[ModDownloadTask] 已清理旧 MOD 目录: {normalizedTargetModPath}");
+                MoveExistingPathToRecycleBinOrThrow(normalizedTargetModPath);
+                Log.Info($"[ModDownloadTask] 已将旧 MOD 目录移入回收站: {normalizedTargetModPath}");
             }
 
             Directory.CreateDirectory(normalizedTargetModPath);
@@ -1116,7 +1120,7 @@ public class ModDownloadTask : DownloadTask
 
                     if (File.Exists(destinationPath))
                     {
-                        File.Delete(destinationPath);
+                        MoveExistingPathToRecycleBinOrThrow(destinationPath);
                     }
 
                     using (var stream = zipFile.GetInputStream(entry))
@@ -1273,6 +1277,30 @@ public class ModDownloadTask : DownloadTask
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         return normalizedPath.StartsWith(normalizedDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void BackupAndRecycleExistingModDirectory(string modsPath, string modPath)
+    {
+        var backupPath = ModBackupService.BackupDirectory(modsPath, modPath);
+        if (string.IsNullOrWhiteSpace(backupPath))
+        {
+            throw new IOException($"覆盖前备份失败，已停止安装: {modPath}");
+        }
+
+        MoveExistingPathToRecycleBinOrThrow(modPath);
+    }
+
+    private static void MoveExistingPathToRecycleBinOrThrow(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return;
+        }
+
+        if (!ModBackupService.MovePathToRecycleBin(path))
+        {
+            throw new IOException($"无法将原有路径移入回收站，已停止覆盖: {path}");
+        }
     }
 
     private static string GetRelativeEntryPathForUpdate(string entryName, string? singleRootDir)
