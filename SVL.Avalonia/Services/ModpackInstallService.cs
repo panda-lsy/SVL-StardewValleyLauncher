@@ -5522,9 +5522,22 @@ public sealed class ModpackInstallService
 
         try
         {
-            var installedDirectories = EnumerateTopLevelDirectoriesSafe(modsPath)
+            var topLevelDirectories = EnumerateTopLevelDirectoriesSafe(modsPath)
+                .ToList();
+            var installedDirectories = topLevelDirectories
                 .Where(IsInstalledModDirectory)
                 .ToList();
+            foreach (var topLevelDirectory in topLevelDirectories)
+            {
+                foreach (var nestedDirectory in FindNestedInstalledModDirectories(topLevelDirectory))
+                {
+                    if (!installedDirectories.Contains(nestedDirectory, StringComparer.OrdinalIgnoreCase))
+                    {
+                        installedDirectories.Add(nestedDirectory);
+                    }
+                }
+            }
+
             var candidates = installedDirectories
                 .Select(directory => new
                 {

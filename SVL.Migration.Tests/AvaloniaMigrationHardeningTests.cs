@@ -1890,7 +1890,7 @@ public sealed class AvaloniaMigrationHardeningTests
         var root = Path.Combine(Path.GetTempPath(), "svl-composite-missing-child-source-test-" + Guid.NewGuid().ToString("N"));
         var modsPath = Path.Combine(root, "Mods");
         var parentPath = Path.Combine(modsPath, "Parent Mod");
-        var childPath = Path.Combine(modsPath, "Child Pack");
+        var childPath = Path.Combine(parentPath, "Child Pack");
         var unrelatedPath = Path.Combine(modsPath, "Unrelated Pack");
         try
         {
