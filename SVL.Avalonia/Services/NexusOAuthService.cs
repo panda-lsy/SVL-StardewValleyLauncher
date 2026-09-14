@@ -325,17 +325,31 @@ public sealed class NexusOAuthService
                 ? "Premium"
                 : "Free";
 
+            var avatarUrl = TryGetString(root, "picture") ??
+                            TryGetString(root, "avatar_url") ??
+                            TryGetString(root, "avatar") ??
+                            string.Empty;
+
             return new NexusOAuthProfile
             {
                 UserName = userName,
                 MembershipType = membership,
-                UserId = userId
+                UserId = userId,
+                AvatarUrl = avatarUrl
             };
         }
         catch
         {
             return new NexusOAuthProfile();
         }
+    }
+
+    private static string? TryGetString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) &&
+               property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
     }
 
     private static Dictionary<string, string> ParseQuery(string query)
@@ -511,6 +525,7 @@ public sealed class NexusOAuthProfile
     public string UserName { get; init; } = string.Empty;
     public string MembershipType { get; init; } = "Free";
     public int UserId { get; init; }
+    public string AvatarUrl { get; init; } = string.Empty;
 }
 
 public sealed class NexusOAuthTokenResponse

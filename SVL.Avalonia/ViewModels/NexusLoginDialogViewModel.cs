@@ -135,7 +135,8 @@ public partial class NexusLoginDialogViewModel : ObservableObject
                         OAuthIdToken = refresh.Token.IdToken,
                         UserName = UserName,
                         MembershipType = MembershipType,
-                        UserId = profile.UserId > 0 ? profile.UserId : _existingUserId
+                        UserId = profile.UserId > 0 ? profile.UserId : _existingUserId,
+                        AvatarUrl = profile.AvatarUrl
                     });
                     return;
                 }
@@ -305,7 +306,8 @@ public partial class NexusLoginDialogViewModel : ObservableObject
             OAuthIdToken = tokenResult.Token.IdToken,
             UserName = profile.UserName,
             MembershipType = profile.MembershipType,
-            UserId = profile.UserId
+            UserId = profile.UserId,
+            AvatarUrl = profile.AvatarUrl
         });
     }
 
@@ -409,7 +411,8 @@ public partial class NexusLoginDialogViewModel : ObservableObject
             OAuthIdToken = tokenResult.Token.IdToken,
             UserName = profile.UserName,
             MembershipType = profile.MembershipType,
-            UserId = profile.UserId
+            UserId = profile.UserId,
+            AvatarUrl = profile.AvatarUrl
         });
     }
 

@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`64c666d`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`b6ca42e`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -33,6 +33,7 @@
 | WPF `EnableTransparency` | 原先仅 Splash 使用透明窗口，主窗口没有动态透明开关 | 已补齐旧配置迁移、设置页开关、主题背景透明度和主窗口透明级别；不支持透明的窗口后端按资源层回退为不透明 |
 | WPF `ShowUpdateNotification` | WPF 设置页保存了该字段，但旧启动检查流程也没有读取它；Avalonia 已迁移自动检查/自动下载/更新通道，不再保留这个未生效开关 | 不把它当作 `main` 的有效业务功能；如要恢复语义，应先明确“自动下载但不弹窗”时的交互，再统一实现 |
 | WPF Nexus 邮箱/密码字段 | 旧配置保留邮箱和密码字段，Avalonia 采用 API Key/OAuth 登录；直接迁移旧密码会扩大敏感信息暴露面 | 不迁移邮箱/密码；保留 OAuth/API Key 兼容，真实登录验收列入线上测试 |
+| WPF Nexus OAuth 头像与 API 限额卡片 | WPF 会读取 OAuth `picture`、缓存头像并显示 API 每小时/每日用量；Avalonia 原先缺少头像字段与展示 | 头像已迁移并兼容旧 WPF 缓存目录；API 限额统计仍待统一接入 Avalonia 的 Nexus 请求跟踪器，避免只显示登录验证请求 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
 | 完整线上/可见 UI 验收 | 不是分支迁移代码缺口；当前主要剩真实 Nexus/CurseForge 网络和 Windows Avalonia 窗口冒烟 | 作为发布前验收项继续执行 |
 | 旧 WPF .NET Framework 4.8 编译 | 属于旧工程本身的 Developer Pack/环境债务，不影响 Avalonia 工程 | 单独准备 .NET Framework 4.8 构建环境，不回填 Avalonia |
@@ -77,7 +78,7 @@
 
 下面的 293 条统计是早期审计快照；本轮最新总数见紧接着的更新统计。
 当前回归结果：`SVL.Avalonia` 随测试重新构建通过；迁移测试 **293 总计，其中 291 通过、2 跳过**。冲突检测还覆盖了同一循环依赖只生成一条链路结果；线上目录新增了可替换 HTTP fixture，已验证 CurseForge 搜索、详情文件列表、无文件提示和 FileID/直链保留，以及 Nexus GraphQL 搜索/详情和凭据传递；GitHub Mod 更新现在覆盖仓库规范化、稳定 Release 选择、预发布过滤、版本比较、任务状态持久化和压缩包来源写回；SMAPI GitHub 发布目录还覆盖了标准 releases 为空时回退 `releases/latest`、大小写不敏感字段和安装包地址选择；多线程最终快照和分片进度生命周期、窗口控件等宽布局及 Popup 菜单主题也有回归覆盖；窗口控制区已改为共享 24×24 矢量画布，最小化/最大化/关闭图形不再受不同 PNG 透明边界影响；CurseForge manifest 指定的 SMAPI FileID 现在会在版本目录不可用时优先从稳定缓存/直链安装，在线 CurseForge SMAPI 版本列表也会把 FileID 传递到稳定缓存；详情下载项统一兼容 Nexus `File <FileID>_...`、URL 编码文件名、`file-id` 查询参数和 `cf-<ProjectID>-<FileID>` 标识；WPF/Core 旧 `svl-source.json` 的 `modId/project_id/file_id/download_url` 别名也会被迁移读取；另存为任务也会清理生成式 FileID 前缀，只有直链时会从 URL 提取可读文件名，保证实际建议文件名可直接使用；Nexus 页面解析还兼容连字符和 URL 编码的查询键；CurseForge 整合包本体命中稳定缓存时会跳过 CDN 解析并入队，缓存被清理后任务会按 ProjectID/FileID 刷新地址；稳定缓存来源也有任务执行分支回归覆盖；SVL 来源下载现在对被包装成失败结果的瞬时 CDN/网络/归档错误进行有限重试，同时明确跳过来源缺失、登录、取消和浏览器回调失败；SVL/Collection 的旧来源现在还会从 `logicalFilename` 恢复 Nexus FileID，旧 Collection 多文件入口会将 `cf-项目ID-文件ID` 临时目录名还原为 manifest 名称，安装预览与实际落盘名称保持一致；Collection 完整导入链路也已覆盖“页面 URL + logicalFilename + Nexus 缓存”场景，验证安装过程不会错误打开浏览器；Collection 旧缓存解析也覆盖 `mod_<ModID>_<FileID>.zip` 命名；Collection 7z 导入还新增了真实解压、嵌套清单定位和 bundled Mod 去外层目录回归；本轮新增压缩包父 Mod + 兄弟目录 ContentPack 的来源树回归，并覆盖普通 Mod 在线安装路径，确认父级保留整合包/归档来源、子级写入 `parent-inherited`、旧更新状态清理且导出不会重复列出子级；新增加载期旧来源修复回归，确认同一项目混用旧/新 FileID 时会自动重建父子来源树；旧 Core 分支的改动仍受本机缺少 .NET Framework 4.8 Developer Pack 影响，无法进行完整项目编译。
-最新测试统计（含本轮 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归）：迁移测试 **302 总计，其中 300 通过、2 跳过**。
+最新测试统计（含本轮 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim 与旧缓存路径回归）：迁移测试 **304 总计，其中 302 通过、2 跳过**。
 本轮界面回退：撤销此前生成式 PNG 图标替换，恢复 `Resources/Icons.axaml` 中的原有矢量资源及动态颜色绑定；标题栏仍保留统一 24×24 画布和等宽控制列，避免回退图标后重新引入三个窗口按钮的对齐问题，并新增回归断言禁止视图重新引用 `Assets/Icons/Generated`。
 本轮修复：Modpack/Collection 的游戏版本只接受 API 明确字段，不再从整合包名称、摘要或文件名推断版本；普通 Mod 仍保留文本兜底。
 本轮下载链路修复：HTTP 层对响应提前结束、连接重置和瞬时 408/429/5xx 做最多 3 次有限重试；403/404/416 等确定性错误仍交由来源刷新或上层处理，并新增半包恢复回归。
@@ -205,3 +206,8 @@ Avalonia net10 工程。
 本轮对齐旧 WPF 的整合包并发下载语义：`MaxConcurrentModDownloads` 迁移到
 `CollectionDownloadParallelism` 后保留默认值 3 和 1–10 的有效范围，设置页、任务队列
 及整合包安装器使用同一上限，并新增 10 线程配置的迁移回归。
+
+本轮迁移 WPF Nexus OAuth 头像：读取 ID Token 的 `picture`/兼容字段，保留旧头像缓存
+目录与命名规则，设置页优先使用配置中的本地缓存并在后台补充下载；头像缓存纳入图片/图标
+缓存的统计、过期清理和全量清理。API 限额统计仍列为下一项，待 Avalonia 的所有 Nexus
+请求统一记录响应头后再接入，避免产生误导性的局部统计。

@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SVL.Avalonia.Services;
+using System.Text;
 
 namespace SVL.Migration.Tests;
 
@@ -113,5 +114,43 @@ public class NexusOAuthServiceTests
 
         Assert.IsFalse(result.IsSuccess);
         Assert.AreEqual(NexusOAuthFailureReason.Unknown, result.FailureReason);
+    }
+
+    [TestMethod]
+    public void ParseUserFromIdToken_ShouldReadAvatarClaim()
+    {
+        var header = Base64UrlEncode("{}");
+        var payload = Base64UrlEncode(
+            "{\"name\":\"test-user\",\"sub\":\"123\",\"membership_role\":\"premium\",\"picture\":\"https://example.com/avatar.png\"}");
+        var token = $"{header}.{payload}.signature";
+        var method = typeof(NexusOAuthService).GetMethod(
+            "ParseUserFromIdToken",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.IsNotNull(method);
+        var profile = (NexusOAuthProfile)method!.Invoke(null, [token])!;
+
+        Assert.AreEqual("test-user", profile.UserName);
+        Assert.AreEqual("Premium", profile.MembershipType);
+        Assert.AreEqual(123, profile.UserId);
+        Assert.AreEqual("https://example.com/avatar.png", profile.AvatarUrl);
+    }
+
+    [TestMethod]
+    public void AvatarCache_ShouldKeepLegacyWpfFileNameAndRejectNonHttpUrls()
+    {
+        var path = AvatarCacheService.GetCachePath("user/name");
+
+        Assert.IsTrue(path.EndsWith("user_name.png", StringComparison.OrdinalIgnoreCase));
+        var task = AvatarCacheService.DownloadAndCacheAvatarAsync("file:///avatar.png", "user/name");
+        Assert.IsNull(task.GetAwaiter().GetResult());
+    }
+
+    private static string Base64UrlEncode(string json)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
     }
 }

@@ -108,6 +108,12 @@ public sealed class AppUserSettings
 
     public int NexusUserId { get; set; }
 
+    /// <summary>旧 WPF Nexus OAuth 头像地址。</summary>
+    public string NexusOAuthAvatarUrl { get; set; } = string.Empty;
+
+    /// <summary>旧 WPF Nexus OAuth 头像本地缓存路径。</summary>
+    public string NexusOAuthAvatarLocalPath { get; set; } = string.Empty;
+
     /// <summary>是否永久屏蔽 NexusMods 登录失效提醒（可在设置页重新开启）。</summary>
     public bool SuppressNexusAuthNotification { get; set; }
 

@@ -361,6 +361,15 @@ public partial class SettingsPageViewModel : ObservableObject
     private int _nexusUserId;
 
     [ObservableProperty]
+    private string _nexusOAuthAvatarUrl = string.Empty;
+
+    [ObservableProperty]
+    private string _nexusOAuthAvatarLocalPath = string.Empty;
+
+    [ObservableProperty]
+    private string _nexusAvatarSource = string.Empty;
+
+    [ObservableProperty]
     private string _nexusStatus = "未登录";
 
     [ObservableProperty]
@@ -551,8 +560,17 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusUserName = settings.NexusUserName;
         NexusMembershipType = settings.NexusMembershipType;
         NexusUserId = settings.NexusUserId;
+        NexusOAuthAvatarUrl = settings.NexusOAuthAvatarUrl;
+        NexusOAuthAvatarLocalPath = settings.NexusOAuthAvatarLocalPath;
+        NexusAvatarSource = ResolveNexusAvatarSource();
         NexusStatus = IsNexusLoggedIn ? "已登录" : "未登录";
         EnableNexusAuthNotification = !settings.SuppressNexusAuthNotification;
+
+        if (!string.IsNullOrWhiteSpace(NexusOAuthAvatarUrl) &&
+            !string.IsNullOrWhiteSpace(NexusUserName))
+        {
+            _ = CacheNexusAvatarAsync(NexusOAuthAvatarUrl, NexusUserName);
+        }
     }
 
     private AppUserSettings BuildSettings()
@@ -608,6 +626,8 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.NexusUserName = NexusUserName;
         settings.NexusMembershipType = NexusMembershipType;
         settings.NexusUserId = NexusUserId;
+        settings.NexusOAuthAvatarUrl = NexusOAuthAvatarUrl;
+        settings.NexusOAuthAvatarLocalPath = NexusOAuthAvatarLocalPath;
         settings.SuppressNexusAuthNotification = !EnableNexusAuthNotification;
         return settings;
     }
@@ -1354,6 +1374,13 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusUserName = result.UserName;
         NexusMembershipType = result.MembershipType;
         NexusUserId = result.UserId;
+        if (!string.IsNullOrWhiteSpace(result.AvatarUrl))
+        {
+            NexusOAuthAvatarUrl = result.AvatarUrl;
+            NexusOAuthAvatarLocalPath = string.Empty;
+            NexusAvatarSource = NexusOAuthAvatarUrl;
+            _ = CacheNexusAvatarAsync(NexusOAuthAvatarUrl, NexusUserName);
+        }
         NexusStatus = result.IsOAuthLogin ? "已登录（OAuth）" : "已登录（API Key 已验证）";
 
         _settingsStore.Save(BuildSettings());
@@ -1423,6 +1450,7 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusUserName = oauthResult.UserName;
         NexusMembershipType = oauthResult.MembershipType;
         NexusUserId = oauthResult.UserId;
+        NexusAvatarSource = ResolveNexusAvatarSource();
         NexusStatus = "已登录（OAuth 验证通过）";
         _settingsStore.Save(BuildSettings());
         StatusMessage = "Nexus 状态验证成功";
@@ -1460,6 +1488,9 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusUserName = string.Empty;
         NexusMembershipType = string.Empty;
         NexusUserId = 0;
+        NexusOAuthAvatarUrl = string.Empty;
+        NexusOAuthAvatarLocalPath = string.Empty;
+        NexusAvatarSource = string.Empty;
         NexusStatus = "未登录";
         EnableNexusAuthNotification = true;
         _settingsStore.Save(BuildSettings());
@@ -1698,10 +1729,56 @@ public partial class SettingsPageViewModel : ObservableObject
             NexusUserName = refreshResult.Profile.UserName;
             NexusMembershipType = refreshResult.Profile.MembershipType;
             NexusUserId = refreshResult.Profile.UserId;
+
+            if (!string.IsNullOrWhiteSpace(refreshResult.Profile.AvatarUrl))
+            {
+                NexusOAuthAvatarUrl = refreshResult.Profile.AvatarUrl;
+                NexusOAuthAvatarLocalPath = string.Empty;
+                NexusAvatarSource = NexusOAuthAvatarUrl;
+                _ = CacheNexusAvatarAsync(NexusOAuthAvatarUrl, NexusUserName);
+            }
         }
 
         _settingsStore.Save(BuildSettings());
         return true;
+    }
+
+    private string ResolveNexusAvatarSource()
+    {
+        if (!string.IsNullOrWhiteSpace(NexusOAuthAvatarLocalPath) &&
+            File.Exists(NexusOAuthAvatarLocalPath))
+        {
+            return NexusOAuthAvatarLocalPath;
+        }
+
+        var cached = AvatarCacheService.GetCachedAvatar(NexusUserName);
+        return !string.IsNullOrWhiteSpace(cached)
+            ? cached
+            : NexusOAuthAvatarUrl;
+    }
+
+    private async Task CacheNexusAvatarAsync(string avatarUrl, string userName)
+    {
+        try
+        {
+            var cachedPath = await AvatarCacheService.DownloadAndCacheAvatarAsync(avatarUrl, userName);
+            if (string.IsNullOrWhiteSpace(cachedPath))
+            {
+                return;
+            }
+
+            NexusOAuthAvatarLocalPath = cachedPath;
+            NexusAvatarSource = cachedPath;
+            _settingsStore.Save(BuildSettings());
+        }
+        catch (OperationCanceledException)
+        {
+            // 头像缓存是可选增强能力，取消时不影响登录结果。
+        }
+        catch
+        {
+            // 网络或图像缓存失败不应影响 Nexus 登录和下载。
+        }
     }
 
     private static string ResolveThemeDisplayName(string styleName, string schemeName)

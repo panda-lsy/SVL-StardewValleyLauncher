@@ -477,7 +477,9 @@ public sealed class AvaloniaMigrationHardeningTests
                   "ThemeMode": 1,
                   "Language": "en-US",
                   "MaxConcurrentModDownloads": 10,
-                  "DownloadSegmentThreads": 8
+                  "DownloadSegmentThreads": 8,
+                  "NexusModsOAuthAvatarUrl": "https://example.com/avatar.png",
+                  "NexusModsOAuthAvatarLocalPath": "C:\\Users\\test\\avatar.png"
                 }
                 """);
             File.WriteAllText(
@@ -541,6 +543,8 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual("en-US", settings.UiLanguage);
             Assert.AreEqual(10, settings.CollectionDownloadParallelism);
             Assert.AreEqual(8, settings.DownloadSegmentThreads);
+            Assert.AreEqual("https://example.com/avatar.png", settings.NexusOAuthAvatarUrl);
+            Assert.AreEqual(@"C:\Users\test\avatar.png", settings.NexusOAuthAvatarLocalPath);
             Assert.AreEqual("legacy-nexus-api-key", settings.NexusApiKey);
             Assert.AreEqual(gamePath, settings.PreferredInstancePath);
             Assert.AreEqual("旧实例", settings.InstanceName);

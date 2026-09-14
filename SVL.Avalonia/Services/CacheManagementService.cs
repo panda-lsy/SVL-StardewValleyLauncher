@@ -65,7 +65,8 @@ public static class CacheManagementService
         {
             return Add(
                 CalculateDirectoryStats(GetCachePath(category)),
-                CalculateDirectoryStats(AssetImageConverter.LegacyIconCacheDirectory));
+                CalculateDirectoryStats(AssetImageConverter.LegacyIconCacheDirectory),
+                CalculateDirectoryStats(AvatarCacheService.Root));
         }
 
         var path = GetCachePath(category);
@@ -108,6 +109,7 @@ public static class CacheManagementService
         {
             DeleteDirectory(GetCachePath(category));
             DeleteDirectory(AssetImageConverter.LegacyIconCacheDirectory);
+            DeleteDirectory(AvatarCacheService.Root);
             return;
         }
 
@@ -253,12 +255,20 @@ public static class CacheManagementService
         return stats;
     }
 
-    private static CacheStatistics Add(CacheStatistics first, CacheStatistics second)
+    private static CacheStatistics Add(params CacheStatistics[] statistics)
     {
+        var sizeBytes = 0L;
+        var fileCount = 0;
+        foreach (var item in statistics)
+        {
+            sizeBytes += item.SizeBytes;
+            fileCount += item.FileCount;
+        }
+
         return new CacheStatistics
         {
-            SizeBytes = first.SizeBytes + second.SizeBytes,
-            FileCount = first.FileCount + second.FileCount
+            SizeBytes = sizeBytes,
+            FileCount = fileCount
         };
     }
 
@@ -280,6 +290,7 @@ public static class CacheManagementService
             {
                 yield return GetCachePath(category);
                 yield return AssetImageConverter.LegacyIconCacheDirectory;
+                yield return AvatarCacheService.Root;
             }
             else
             {

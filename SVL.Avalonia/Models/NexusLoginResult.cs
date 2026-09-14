@@ -17,4 +17,6 @@ public sealed class NexusLoginResult
     public string MembershipType { get; init; } = "Free";
 
     public int UserId { get; init; }
+
+    public string AvatarUrl { get; init; } = string.Empty;
 }

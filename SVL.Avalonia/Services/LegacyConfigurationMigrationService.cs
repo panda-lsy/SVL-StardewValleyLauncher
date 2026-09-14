@@ -364,6 +364,10 @@ public sealed class LegacyConfigurationMigrationService
             value => settings.NexusUserName = value, result, ref hadCurrentSettings);
         changed |= ImportString(root, "NexusModsOAuthMembershipType", settings.NexusMembershipType, defaults.NexusMembershipType,
             value => settings.NexusMembershipType = value, result, ref hadCurrentSettings);
+        changed |= ImportString(root, "NexusModsOAuthAvatarUrl", settings.NexusOAuthAvatarUrl, defaults.NexusOAuthAvatarUrl,
+            value => settings.NexusOAuthAvatarUrl = value, result, ref hadCurrentSettings);
+        changed |= ImportString(root, "NexusModsOAuthAvatarLocalPath", settings.NexusOAuthAvatarLocalPath, defaults.NexusOAuthAvatarLocalPath,
+            value => settings.NexusOAuthAvatarLocalPath = value, result, ref hadCurrentSettings);
 
         if (TryGetInt(root, "NexusUserId", out var userId) &&
             (!hadCurrentSettings || settings.NexusUserId == defaults.NexusUserId))

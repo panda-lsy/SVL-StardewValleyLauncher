@@ -169,6 +169,15 @@
                 <TextBlock Text="NexusMods 账户" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="登录后可直接处理 NXM 链接与受限资源" Opacity="0.72" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding IsNexusLoggedIn}">
+                <Border Width="48" Height="48" CornerRadius="24" Background="{DynamicResource ColorBrushGray6}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" ClipToBounds="True">
+                  <Image Source="{Binding NexusAvatarSource, Converter={StaticResource AssetImageConverter}}" Stretch="UniformToFill" />
+                </Border>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                  <TextBlock Text="{Binding NexusUserName}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding NexusMembershipType}" Opacity="0.72" />
+                </StackPanel>
+              </StackPanel>
               <TextBlock Text="{Binding NexusStatus, StringFormat=状态: {0}}" />
               <TextBlock Text="{Binding NexusDisplayName, StringFormat=账号: {0}}" />
               <TextBlock Text="未登录时仅可使用非 Nexus 资源；登录后可直接导入 NXM 并执行受限下载。" Opacity="0.75" TextWrapping="Wrap" IsVisible="{Binding ShowNexusLoginGuide}" />
