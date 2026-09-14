@@ -476,7 +476,7 @@ public sealed class AvaloniaMigrationHardeningTests
                   "EnableTransparency": false,
                   "ThemeMode": 1,
                   "Language": "en-US",
-                  "MaxConcurrentModDownloads": 2,
+                  "MaxConcurrentModDownloads": 10,
                   "DownloadSegmentThreads": 8
                 }
                 """);
@@ -539,7 +539,7 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.IsFalse(settings.EnableTransparency);
             Assert.AreEqual("深色", settings.ThemeMode);
             Assert.AreEqual("en-US", settings.UiLanguage);
-            Assert.AreEqual(2, settings.CollectionDownloadParallelism);
+            Assert.AreEqual(10, settings.CollectionDownloadParallelism);
             Assert.AreEqual(8, settings.DownloadSegmentThreads);
             Assert.AreEqual("legacy-nexus-api-key", settings.NexusApiKey);
             Assert.AreEqual(gamePath, settings.PreferredInstancePath);

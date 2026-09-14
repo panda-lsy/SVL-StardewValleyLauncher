@@ -245,7 +245,7 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _selectedCollectionConflictStrategy = "覆盖";
 
     [ObservableProperty]
-    private int _selectedCollectionDownloadParallelism = 4;
+    private int _selectedCollectionDownloadParallelism = 3;
 
     [ObservableProperty]
     private int _selectedDownloadThreads = 4;
@@ -391,7 +391,7 @@ public partial class SettingsPageViewModel : ObservableObject
 
     public ObservableCollection<string> LocalizationSourceOptions { get; } = ["Gitee", "GitHub"];
 
-    public ObservableCollection<int> CollectionDownloadParallelismOptions { get; } = [1, 2, 3, 4, 5, 6, 7, 8];
+    public ObservableCollection<int> CollectionDownloadParallelismOptions { get; } = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     /// <summary>下载线程数可选项（多线程分片下载）。</summary>
     public ObservableCollection<int> DownloadThreadOptions { get; } = [1, 2, 3, 4, 6, 8, 12, 16];
@@ -520,7 +520,7 @@ public partial class SettingsPageViewModel : ObservableObject
         SelectedCollectionConflictStrategy = string.IsNullOrWhiteSpace(settings.CollectionInstallConflictStrategy)
             ? "覆盖"
             : settings.CollectionInstallConflictStrategy;
-        SelectedCollectionDownloadParallelism = Math.Clamp(settings.CollectionDownloadParallelism, 1, 8);
+        SelectedCollectionDownloadParallelism = Math.Clamp(settings.CollectionDownloadParallelism, 1, 10);
         SelectedDownloadThreads = SnapToDownloadThreadOption(settings.DownloadSegmentThreads);
         SelectedModUpdateConcurrency = Math.Clamp(settings.MaxConcurrentModUpdateChecks, 1, 16);
         SelectedModLocalizationConcurrency = Math.Clamp(settings.MaxConcurrentModLocalizationChecks, 1, 16);
@@ -581,7 +581,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.SkippedLauncherVersion = SkippedUpdateVersion;
         settings.RegisterNxmProtocolOnStartup = RegisterNxmProtocolOnStartup;
         settings.CollectionInstallConflictStrategy = SelectedCollectionConflictStrategy;
-        settings.CollectionDownloadParallelism = Math.Clamp(SelectedCollectionDownloadParallelism, 1, 8);
+        settings.CollectionDownloadParallelism = Math.Clamp(SelectedCollectionDownloadParallelism, 1, 10);
         settings.DownloadSegmentThreads = Math.Clamp(SelectedDownloadThreads, 1, 16);
         settings.MaxConcurrentModUpdateChecks = Math.Clamp(SelectedModUpdateConcurrency, 1, 16);
         settings.MaxConcurrentModLocalizationChecks = Math.Clamp(SelectedModLocalizationConcurrency, 1, 16);
@@ -801,7 +801,7 @@ public partial class SettingsPageViewModel : ObservableObject
 
     partial void OnSelectedCollectionDownloadParallelismChanged(int value)
     {
-        StatusMessage = $"Collection 下载并发切换为：{Math.Clamp(value, 1, 8)}（已自动保存）";
+        StatusMessage = $"Collection 下载并发切换为：{Math.Clamp(value, 1, 10)}（已自动保存）";
         ScheduleAutoSave();
     }
 

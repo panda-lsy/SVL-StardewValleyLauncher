@@ -201,3 +201,7 @@ Avalonia net10 工程。
 本轮补齐旧 WPF 的 `EnableTransparency` 设置：旧配置会迁移到 Avalonia，设置页修改会
 自动保存并即时应用；主题资源使用半透明窗口背景，主窗口请求 Acrylic/Transparent
 级别，不支持透明的平台仍保持不透明回退。
+
+本轮对齐旧 WPF 的整合包并发下载语义：`MaxConcurrentModDownloads` 迁移到
+`CollectionDownloadParallelism` 后保留默认值 3 和 1–10 的有效范围，设置页、任务队列
+及整合包安装器使用同一上限，并新增 10 线程配置的迁移回归。

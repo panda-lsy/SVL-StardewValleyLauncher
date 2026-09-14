@@ -5633,7 +5633,7 @@ public partial class DownloadPageViewModel : ObservableObject
     {
         try
         {
-            return Math.Clamp(_settingsStore.Load().CollectionDownloadParallelism, 1, 8);
+            return Math.Clamp(_settingsStore.Load().CollectionDownloadParallelism, 1, 10);
         }
         catch
         {

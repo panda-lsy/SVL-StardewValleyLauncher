@@ -298,7 +298,7 @@ public sealed class LegacyConfigurationMigrationService
         changed |= ImportString(root, "LocalizationPreferredSource", settings.LocalizationPreferredSource, defaults.LocalizationPreferredSource,
             value => settings.LocalizationPreferredSource = value, result, ref hadCurrentSettings);
         changed |= ImportInt(root, "MaxConcurrentModDownloads", settings.CollectionDownloadParallelism, defaults.CollectionDownloadParallelism,
-            value => settings.CollectionDownloadParallelism = Math.Clamp(value, 1, 8), result, ref hadCurrentSettings);
+            value => settings.CollectionDownloadParallelism = Math.Clamp(value, 1, 10), result, ref hadCurrentSettings);
         changed |= ImportInt(root, "DownloadSegmentThreads", settings.DownloadSegmentThreads, defaults.DownloadSegmentThreads,
             value => settings.DownloadSegmentThreads = Math.Clamp(value, 1, 16), result, ref hadCurrentSettings);
         changed |= ImportInt(root, "MaxConcurrentModUpdateChecks", settings.MaxConcurrentModUpdateChecks, defaults.MaxConcurrentModUpdateChecks,

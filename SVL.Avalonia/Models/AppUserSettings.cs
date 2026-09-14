@@ -50,7 +50,8 @@ public sealed class AppUserSettings
 
     public string CollectionInstallConflictStrategy { get; set; } = "覆盖";
 
-    public int CollectionDownloadParallelism { get; set; } = 4;
+    /// <summary>整合包安装时的最大并发下载数（1-10），兼容旧 WPF 的 MaxConcurrentModDownloads。</summary>
+    public int CollectionDownloadParallelism { get; set; } = 3;
 
     public string ThemeMode { get; set; } = "跟随系统";
 

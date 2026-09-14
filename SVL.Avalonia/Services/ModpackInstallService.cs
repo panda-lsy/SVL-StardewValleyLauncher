@@ -814,7 +814,7 @@ public sealed class ModpackInstallService
                     ? $"0/{totalMods} 已完成，剩余 {totalMods} 个 Mod（跳过 {skippedManifestFiles} 个）"
                     : $"0/{totalMods} 已完成，剩余 {totalMods} 个 Mod"
             });
-            var parallelism = Math.Clamp(_settingsStore.Load().CollectionDownloadParallelism, 1, 8);
+            var parallelism = Math.Clamp(_settingsStore.Load().CollectionDownloadParallelism, 1, 10);
             using var semaphore = new SemaphoreSlim(parallelism, parallelism);
 
             var tasks = installableFiles.Select(async file =>
