@@ -30,7 +30,7 @@
 | 游戏启动后启动器可见性行为 | WPF 的 `LauncherVisibility` 五种行为此前只完成了配置对照，Avalonia 未接入实际启动生命周期 | 已迁移立即关闭、隐藏后随游戏退出关闭、隐藏后随游戏退出恢复、最小化、保持不变；旧枚举数值/字符串均可迁移，并由游戏进程退出事件驱动恢复 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
 | WPF 个性化字段 `PrimaryColor` | 旧配置和设置 ViewModel 有该字段，但旧 `ThemeService` 没有实际应用它；它不是 `main` 中可工作的独立功能 | 暂不按死字段迁移；若要支持自定义主色，需要先定义与 Stardew/Material 配色方案的覆盖规则，再补 UI、运行时资源和回归测试 |
-| WPF `EnableTransparency` | WPF 通过透明背景资源参与窗口效果；Avalonia 目前仅 Splash 使用透明窗口，主窗口没有动态透明开关 | 作为后续跨平台视觉功能处理；需要按平台能力设置透明级别，并提供不支持透明时的纯色回退 |
+| WPF `EnableTransparency` | 原先仅 Splash 使用透明窗口，主窗口没有动态透明开关 | 已补齐旧配置迁移、设置页开关、主题背景透明度和主窗口透明级别；不支持透明的窗口后端按资源层回退为不透明 |
 | WPF `ShowUpdateNotification` | WPF 设置页保存了该字段，但旧启动检查流程也没有读取它；Avalonia 已迁移自动检查/自动下载/更新通道，不再保留这个未生效开关 | 不把它当作 `main` 的有效业务功能；如要恢复语义，应先明确“自动下载但不弹窗”时的交互，再统一实现 |
 | WPF Nexus 邮箱/密码字段 | 旧配置保留邮箱和密码字段，Avalonia 采用 API Key/OAuth 登录；直接迁移旧密码会扩大敏感信息暴露面 | 不迁移邮箱/密码；保留 OAuth/API Key 兼容，真实登录验收列入线上测试 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
@@ -130,7 +130,7 @@ Unix 主机对应的 `scripts/package-avalonia.sh` 入口也已补齐，统一�
 
 1. 使用真实导出的 SVL/CurseForge/Nexus fixture 做一次端到端导入→安装→导出→再次导入，重点确认来源缺失、下载失败和旧包布局不会静默“安装完成”。当前已补本地直链端到端 fixture、导出包回导 fixture（覆盖自定义 Icon、配置覆盖、Nexus 缓存和 FileID）、真实 Nexus 文件页来源（`mods/29868?tab=files&nmm=1` + `File 7448774_...zip`）缓存命中、旧 WPF Nexus 缓存自动提升、直链来源保存/导出、来源缺失与缺失 `modpack.json` 的显式失败、设置目录按 manifest 映射、损坏/兼容 manifest、数字/字符串 FileID 兼容、无扩展名 7z、ZIP 越界防护、大小写不同的 manifest/Icon、Collection 镜像择一下载、Collection 外层目录下 `bundled` 解析、Collection 旧 source 字符串/URL 兼容，以及部分失败重试的更新模式回归；任务状态还会保存安装目录、速度、大小与子进度。近期又补充了生成式目录名（`cf-项目ID-文件ID`/`File 文件ID_...`）按 manifest 名整理、选中任务状态实时刷新、失败进度封顶 99%，CurseForge 页面/API 地址禁止直接下载、迁移标记允许新旧来源增量补迁移、迁移目标丢失后按旧来源恢复、CurseForge manifest 数字/字符串 ID、`files: null` 与 Collection 单字符串 `gameVersions` 的回归，以及“默认 SMAPI 图标可被包内 Icon 替换、用户自定义图标在重试时保留”的回归；`sources.json` 现兼容数组、常见对象包装、单来源对象、key→source 映射和 key→URL 简写，并可回退读取 `modpack.json.mods`，同时兼容 `site/provider/project/file` 等常见来源别名和真实 CurseForge CDN 路径回填 FileID；本地 SMAPI 复用会跳过损坏/无权限候选继续尝试可用实例；新增覆盖外层非目标 JSON 遮蔽内层有效 CurseForge/Collection 清单、未知 SMAPI 缓存拒绝复用、重复浏览器等待者和任务重试报告归属的回归。导出端还会从旧 Nexus 文件名/URL、CurseForge `cf-project-file` 目录名补回本地 FileID，减少不必要的线上查询；新增回归确认导入清单中的 NXM 一次性凭据会保留到解析请求；Mod 缓存复用现在必须通过有效 manifest 校验，延迟删除目录也会在启动/刷新时再次清理；SMAPI 默认图标写入会在资源流关闭后验证目标文件与实际解析路径，并兼容框架尚未初始化时的显式资源加载；SMAPI 官方回退兼容 `4.5.1.0` 到 `4.5.1` 这类 Release 标签差异；迁移还会在当前应用目录、工作目录与相邻 `SVL.Desktop`/WPF 目录内有限探测旧 `SVL/instances.json`，覆盖并排发布场景；Collection 稳定缓存命中现在覆盖直接安装入口，且 `.7z` 文件名不会再覆盖实际 ZIP 签名判断；本轮又补充了残留 source-only 目录过滤、Collection 顶层/嵌套来源字段归一化、bundled Mod 部分失败的逐项报告，以及管理页/导出页遇到单个无权限或重解析点目录时继续扫描其它 Mod 的安全遍历。
 2. 补齐线上搜索的详情和下载选项回归；整合包分页已接入 CurseForge 服务端 index/pageSize，并让 Nexus 按目标页偏移增加候选拉取量，同时修正末页 HasMore 判断；Nexus 页面仅有 Mod ID 时已接入 API/浏览器回退；兼容搜索入口已补齐筛选项与热门整合包首屏加载。下载页目录项和遗留搜索入口已保留结构化资源身份，详情展开/跳转优先使用结构化请求；详情下载 URL 会先剥离 `~~` 元数据，避免浏览器打开入口与安装入口行为不一致；CurseForge 解析层现在统一拒绝文件页/API URL，详情安装、批量更新、Modpack/Collection 安装共享同一安全边界；SMAPI 目录请求新增代理失败后的直连回退，并兼容 CurseForge 响应的大小写、`data/result/files/items` 多层包装及字符串 ID；SMAPI 目录给出网页地址时会回退到稳定 Forge CDN 路径；本轮补充搜索/详情请求代次保护，旧响应不会覆盖新结果，来源未知或没有可安装文件时会显示明确提示；旧 SMAPI 任务若只保存版本路径或使用“SMAPI 版本 - 实例名”任务名，现在会恢复实例名并把目标路径归一化到 Base，避免下载后再次弹窗或生成嵌套 versions。Nexus/CurseForge 的真实下载仍需要用户登录状态或可用网络，当前只能做协议和解析层验证。
-3. 在可见的 Windows Avalonia 窗口中完成 UI 冒烟，确认三个窗口按钮的视觉中心、右键菜单命中区域和深色弹窗实际渲染；代码侧已改为显式右键打开并把菜单样式提升到应用级，Icon 选择项、本地 Mod 详情、详情页图标/分隔线/加载遮罩、SMAPI 预发布标签和托管弹窗背景已统一使用动态主题资源，自动化环境目前仍无法稳定枚举原生 Avalonia 窗口。
+3. 在可见的 Windows Avalonia 窗口中完成 UI 冒烟，确认三个窗口按钮的视觉中心、右键菜单命中区域、深色弹窗和透明开关实际渲染；代码侧已改为显式右键打开并把菜单样式提升到应用级，Icon 选择项、本地 Mod 详情、详情页图标/分隔线/加载遮罩、SMAPI 预发布标签和托管弹窗背景已统一使用动态主题资源，自动化环境目前仍无法稳定枚举原生 Avalonia 窗口。
 4. 处理旧 WPF 项目自身的编译债务；该项不应阻塞 `SVL.Avalonia.csproj` 和迁移测试。
 
 ## 下一轮顺序
@@ -197,3 +197,7 @@ Avalonia net10 工程。
 本轮补齐旧 WPF 的 `FontSize` 设置：保留 12/13/14/15/16/18/20 选项，旧配置迁移
 后绑定到 Avalonia 主窗口的字体继承链，设置页修改会自动保存并即时更新；无效值回退
 到 14，避免配置损坏导致界面失去字体大小选择。
+
+本轮补齐旧 WPF 的 `EnableTransparency` 设置：旧配置会迁移到 Avalonia，设置页修改会
+自动保存并即时应用；主题资源使用半透明窗口背景，主窗口请求 Acrylic/Transparent
+级别，不支持透明的平台仍保持不透明回退。
