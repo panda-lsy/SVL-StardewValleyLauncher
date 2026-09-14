@@ -392,6 +392,11 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
+            if (!settings.ShowUpdateNotification)
+            {
+                return;
+            }
+
             // 复用 SettingsPage 的弹窗逻辑：通过事件请求 SettingsPage 弹出更新对话框
             await SettingsPage.ShowUpdateDialogFromAutoCheckAsync(result);
         }

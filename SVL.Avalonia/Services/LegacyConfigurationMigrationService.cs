@@ -280,6 +280,8 @@ public sealed class LegacyConfigurationMigrationService
             value => settings.EnableAutoUpdateCheck = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "AutoDownloadUpdate", settings.AutoDownloadUpdate, defaults.AutoDownloadUpdate,
             value => settings.AutoDownloadUpdate = value, result, ref hadCurrentSettings);
+        changed |= ImportBool(root, "ShowUpdateNotification", settings.ShowUpdateNotification, defaults.ShowUpdateNotification,
+            value => settings.ShowUpdateNotification = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "MinimizeToTrayOnStartup", settings.MinimizeToTrayOnStartup, defaults.MinimizeToTrayOnStartup,
             value => settings.MinimizeToTrayOnStartup = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "MinimizeToTrayOnClose", settings.MinimizeToTrayOnClose, defaults.MinimizeToTrayOnClose,

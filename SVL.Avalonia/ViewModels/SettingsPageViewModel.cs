@@ -110,6 +110,9 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _autoDownloadUpdateLabelText = "发现新版本时自动下载";
 
     [ObservableProperty]
+    private string _showUpdateNotificationLabelText = "发现新版本时显示提示";
+
+    [ObservableProperty]
     private string _updateChannelLabelText = "更新通道";
 
     [ObservableProperty]
@@ -219,6 +222,9 @@ public partial class SettingsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _autoDownloadUpdate;
+
+    [ObservableProperty]
+    private bool _showUpdateNotification = true;
 
     [ObservableProperty]
     private string _selectedUpdateChannel = "稳定版";
@@ -548,6 +554,7 @@ public partial class SettingsPageViewModel : ObservableObject
         EnableDownloadFloatingTaskButton = settings.EnableDownloadFloatingTaskButton;
         EnableAutoUpdateCheck = settings.EnableAutoUpdateCheck;
         AutoDownloadUpdate = settings.AutoDownloadUpdate;
+        ShowUpdateNotification = settings.ShowUpdateNotification;
         SelectedUpdateChannel = string.IsNullOrWhiteSpace(settings.UpdateChannel) ? "稳定版" : settings.UpdateChannel;
         SelectedUpdateSource = string.IsNullOrWhiteSpace(settings.PreferredUpdateSource) ? "GitHub (推荐)" : settings.PreferredUpdateSource;
         SkippedUpdateVersion = settings.SkippedLauncherVersion;
@@ -631,6 +638,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.EnableDownloadFloatingTaskButton = EnableDownloadFloatingTaskButton;
         settings.EnableAutoUpdateCheck = EnableAutoUpdateCheck;
         settings.AutoDownloadUpdate = AutoDownloadUpdate;
+        settings.ShowUpdateNotification = ShowUpdateNotification;
         settings.UpdateChannel = SelectedUpdateChannel;
         settings.PreferredUpdateSource = SelectedUpdateSource;
         settings.SkippedLauncherVersion = SkippedUpdateVersion;
@@ -697,6 +705,7 @@ public partial class SettingsPageViewModel : ObservableObject
         UpdateCardTitleText = _localizationService.Get("Settings.Card.Update");
         AutoUpdateCheckLabelText = _localizationService.Get("Settings.Update.AutoCheck");
         AutoDownloadUpdateLabelText = _localizationService.Get("Settings.Update.AutoDownload");
+        ShowUpdateNotificationLabelText = _localizationService.Get("Settings.Update.ShowNotification");
         UpdateChannelLabelText = _localizationService.Get("Settings.Update.Channel");
         UpdateSourcePreferenceLabelText = _localizationService.Get("Settings.Update.SourcePreference");
         CheckUpdateButtonText = _localizationService.Get("Settings.Update.CheckNow");
@@ -944,6 +953,12 @@ public partial class SettingsPageViewModel : ObservableObject
     partial void OnAutoDownloadUpdateChanged(bool value)
     {
         StatusMessage = value ? "已启用自动下载更新（已自动保存）" : "已禁用自动下载更新（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnShowUpdateNotificationChanged(bool value)
+    {
+        StatusMessage = value ? "已启用更新通知（已自动保存）" : "已禁用更新通知（已自动保存）";
         ScheduleAutoSave();
     }
 

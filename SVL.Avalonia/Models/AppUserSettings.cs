@@ -40,6 +40,9 @@ public sealed class AppUserSettings
     /// <summary>发现启动器新版本后自动下载，但不会自动安装或重启。</summary>
     public bool AutoDownloadUpdate { get; set; }
 
+    /// <summary>启动时发现新版本后是否显示更新通知；不影响设置页中的手动检查。</summary>
+    public bool ShowUpdateNotification { get; set; } = true;
+
     public string UpdateChannel { get; set; } = "稳定版";
 
     public string PreferredUpdateSource { get; set; } = "GitHub (推荐)";

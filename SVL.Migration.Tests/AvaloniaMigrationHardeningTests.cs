@@ -694,6 +694,7 @@ public sealed class AvaloniaMigrationHardeningTests
                   "CheckPrereleaseUpdates": true,
                   "PreferredUpdateSource": "Gitee",
                   "AutoDownloadUpdate": true,
+                  "ShowUpdateNotification": false,
                   "MaxConcurrentModLocalizationChecks": 12,
                   "ShowModTypeFilterDisabledNotice": false
                 }
@@ -720,6 +721,7 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual("预览版", settings.UpdateChannel);
             Assert.AreEqual("Gitee (国内加速)", settings.PreferredUpdateSource);
             Assert.IsTrue(settings.AutoDownloadUpdate);
+            Assert.IsFalse(settings.ShowUpdateNotification);
             Assert.AreEqual(12, settings.MaxConcurrentModLocalizationChecks);
             Assert.IsFalse(settings.ShowModTypeFilterDisabledNotice);
             Assert.AreEqual(gamePath, settings.PreferredInstancePath);

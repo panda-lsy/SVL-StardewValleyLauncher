@@ -32,7 +32,7 @@
 | WPF 个性化字段 `PrimaryColor` | 旧配置和设置 ViewModel 有该字段，但旧 `ThemeService` 没有实际应用它；它不是 `main` 中可工作的独立功能 | 暂不按死字段迁移；若要支持自定义主色，需要先定义与 Stardew/Material 配色方案的覆盖规则，再补 UI、运行时资源和回归测试 |
 | WPF `EnableTransparency` | 原先仅 Splash 使用透明窗口，主窗口没有动态透明开关 | 已补齐旧配置迁移、设置页开关、主题背景透明度和主窗口透明级别；不支持透明的窗口后端按资源层回退为不透明 |
 | WPF `EnableAnimations` | 旧 WPF 用它控制主题切换动画；Avalonia 配置模型曾保留字段，但设置页和运行时过渡没有接入 | 已补齐设置页开关、自动保存/旧配置读取，并通过动态 `Transitions` 资源即时控制导航、窗口控制、任务、Mod 行和通知动画；Headless 回归覆盖关闭与恢复 |
-| WPF `ShowUpdateNotification` | WPF 设置页保存了该字段，但旧启动检查流程也没有读取它；Avalonia 已迁移自动检查/自动下载/更新通道，不再保留这个未生效开关 | 不把它当作 `main` 的有效业务功能；如要恢复语义，应先明确“自动下载但不弹窗”时的交互，再统一实现 |
+| WPF `ShowUpdateNotification` | WPF 设置页保存了该字段；Avalonia 已迁移字段、旧配置导入、设置页自动保存，并在启动检查发现更新时尊重该开关；设置页手动检查不受影响 | 已完成；关闭后仅抑制启动更新通知，保留手动检查入口 |
 | WPF Nexus 邮箱/密码字段 | 旧配置保留邮箱和密码字段，Avalonia 采用 API Key/OAuth 登录；直接迁移旧密码会扩大敏感信息暴露面 | 不迁移邮箱/密码；保留 OAuth/API Key 兼容，真实登录验收列入线上测试 |
 | WPF Nexus OAuth 头像与 API 限额卡片 | WPF 会读取 OAuth `picture`、缓存头像并显示 API 每小时/每日用量；Token 失效时仍保留已缓存账号资料并提示重新登录 | 已迁移头像 claim/旧缓存兼容、后台缓存、小时/每日用量及限额快照；失效 Token 会保留资料卡但不作为可用凭据；Avalonia 的 Nexus 目录、NXM、登录验证请求统一记录 `X-RL-*` 响应头 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
@@ -94,6 +94,8 @@ Collection 单 Mod 下载也复用同一失败重试策略：瞬时 CDN/网络/�
 断点续传的 `.part.json` 及迁移完成标记也采用相同的原子写入，进程中断时不会以半截 JSON 覆盖可恢复状态。
 
 本轮补齐启动器更新设置迁移：新增 `AutoDownloadUpdate` 的 Avalonia 持久化字段、WPF 旧配置导入和设置页开关；启动检查或手动检查发现更新时，可让更新弹窗自动下载发布资产，下载完成后仍由用户确认安装并重启。
+
+本轮继续补齐启动器更新设置迁移：新增 `ShowUpdateNotification` 的 Avalonia 持久化字段、WPF 旧配置导入、设置页绑定和自动保存；启动时发现新版本时会按该开关决定是否显示通知，设置页手动检查仍可主动查看更新。
 
 另存为任务恢复时不再强制按 Mod manifest 校验最终文件；只要目标文件已完整落盘且不存在 `.part`/`.part.json`，即可跳过重复下载，仍在写入的半成品不会被误复用。
 

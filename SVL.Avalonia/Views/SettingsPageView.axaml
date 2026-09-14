@@ -400,6 +400,7 @@
               <TextBlock Text="自动检查和版本通道策略" Opacity="0.72" TextWrapping="Wrap" />
               <CheckBox Content="{Binding AutoUpdateCheckLabelText}" IsChecked="{Binding EnableAutoUpdateCheck}" />
               <CheckBox Content="{Binding AutoDownloadUpdateLabelText}" IsChecked="{Binding AutoDownloadUpdate}" IsEnabled="{Binding EnableAutoUpdateCheck}" />
+              <CheckBox Content="{Binding ShowUpdateNotificationLabelText}" IsChecked="{Binding ShowUpdateNotification}" IsEnabled="{Binding EnableAutoUpdateCheck}" />
               <TextBlock Text="{Binding UpdateSourcePreferenceLabelText}" />
               <ComboBox ItemsSource="{Binding UpdateSourceOptions}" SelectedItem="{Binding SelectedUpdateSource}" />
               <TextBlock Text="{Binding UpdateChannelLabelText}" />
