@@ -29,6 +29,10 @@
 | 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，旧启动流程未消费；Avalonia 已迁移该设置并接入更新弹窗 | 发现新版本后可自动下载首个发布资产；下载完成仍需用户点击“安装并重启”，不会静默执行安装 |
 | 游戏启动后启动器可见性行为 | WPF 的 `LauncherVisibility` 五种行为此前只完成了配置对照，Avalonia 未接入实际启动生命周期 | 已迁移立即关闭、隐藏后随游戏退出关闭、隐藏后随游戏退出恢复、最小化、保持不变；旧枚举数值/字符串均可迁移，并由游戏进程退出事件驱动恢复 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
+| WPF 个性化字段 `PrimaryColor` | 旧配置和设置 ViewModel 有该字段，但旧 `ThemeService` 没有实际应用它；它不是 `main` 中可工作的独立功能 | 暂不按死字段迁移；若要支持自定义主色，需要先定义与 Stardew/Material 配色方案的覆盖规则，再补 UI、运行时资源和回归测试 |
+| WPF `EnableTransparency` | WPF 通过透明背景资源参与窗口效果；Avalonia 目前仅 Splash 使用透明窗口，主窗口没有动态透明开关 | 作为后续跨平台视觉功能处理；需要按平台能力设置透明级别，并提供不支持透明时的纯色回退 |
+| WPF `ShowUpdateNotification` | WPF 设置页保存了该字段，但旧启动检查流程也没有读取它；Avalonia 已迁移自动检查/自动下载/更新通道，不再保留这个未生效开关 | 不把它当作 `main` 的有效业务功能；如要恢复语义，应先明确“自动下载但不弹窗”时的交互，再统一实现 |
+| WPF Nexus 邮箱/密码字段 | 旧配置保留邮箱和密码字段，Avalonia 采用 API Key/OAuth 登录；直接迁移旧密码会扩大敏感信息暴露面 | 不迁移邮箱/密码；保留 OAuth/API Key 兼容，真实登录验收列入线上测试 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
 | 完整线上/可见 UI 验收 | 不是分支迁移代码缺口；当前主要剩真实 Nexus/CurseForge 网络和 Windows Avalonia 窗口冒烟 | 作为发布前验收项继续执行 |
 | 旧 WPF .NET Framework 4.8 编译 | 属于旧工程本身的 Developer Pack/环境债务，不影响 Avalonia 工程 | 单独准备 .NET Framework 4.8 构建环境，不回填 Avalonia |
