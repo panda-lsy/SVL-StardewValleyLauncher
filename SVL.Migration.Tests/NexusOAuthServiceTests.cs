@@ -181,6 +181,35 @@ public class NexusOAuthServiceTests
     }
 
     [TestMethod]
+    public void NexusApiRateLimit_ShouldIsolateSubscriberExceptions()
+    {
+        NexusApiRateLimitService.Clear();
+        var subscriberCalled = false;
+        Action throwingSubscriber = () => throw new InvalidOperationException("simulated UI failure");
+        Action healthySubscriber = () => subscriberCalled = true;
+        NexusApiRateLimitService.SnapshotChanged += throwingSubscriber;
+        NexusApiRateLimitService.SnapshotChanged += healthySubscriber;
+
+        try
+        {
+            using var response = new HttpResponseMessage();
+            response.Headers.TryAddWithoutValidation("X-RL-Hourly-Limit", "20");
+            response.Headers.TryAddWithoutValidation("X-RL-Hourly-Remaining", "19");
+
+            NexusApiRateLimitService.Record(response.Headers);
+
+            Assert.IsTrue(subscriberCalled);
+            Assert.IsTrue(NexusApiRateLimitService.GetSnapshot().IsInitialized);
+        }
+        finally
+        {
+            NexusApiRateLimitService.SnapshotChanged -= throwingSubscriber;
+            NexusApiRateLimitService.SnapshotChanged -= healthySubscriber;
+            NexusApiRateLimitService.Clear();
+        }
+    }
+
+    [TestMethod]
     public void Settings_ShouldKeepStoredNexusProfileVisibleWhenTokenExpired()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-expired-nexus-profile-test-" + Guid.NewGuid().ToString("N"));

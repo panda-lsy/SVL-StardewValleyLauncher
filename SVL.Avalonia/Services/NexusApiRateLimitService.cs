@@ -62,7 +62,7 @@ public static class NexusApiRateLimitService
             _snapshot = snapshot with { LastUpdated = DateTimeOffset.UtcNow };
         }
 
-        SnapshotChanged?.Invoke();
+        NotifySnapshotChanged();
     }
 
     public static void Clear()
@@ -72,7 +72,32 @@ public static class NexusApiRateLimitService
             _snapshot = new NexusApiRateLimitSnapshot();
         }
 
-        SnapshotChanged?.Invoke();
+        NotifySnapshotChanged();
+    }
+
+    /// <summary>
+    /// 限额记录通常发生在后台网络线程；订阅者主要用于刷新 UI。
+    /// 订阅者异常不能回传到 HTTP 请求，否则会把成功响应误报成下载/登录失败。
+    /// </summary>
+    private static void NotifySnapshotChanged()
+    {
+        var handlers = SnapshotChanged?.GetInvocationList();
+        if (handlers == null)
+        {
+            return;
+        }
+
+        foreach (var handler in handlers.OfType<Action>())
+        {
+            try
+            {
+                handler();
+            }
+            catch
+            {
+                // UI 订阅者生命周期可能与后台请求交错，单个订阅者失败不应影响请求结果。
+            }
+        }
     }
 
     private static bool TryRead(HttpResponseHeaders headers, string name, out int value)
