@@ -473,6 +473,7 @@ public sealed class AvaloniaMigrationHardeningTests
                   "LauncherTitle": "旧 WPF 启动器",
                   "LauncherVisibility": 2,
                   "FontSize": 18,
+                  "EnableTransparency": false,
                   "ThemeMode": 1,
                   "Language": "en-US",
                   "MaxConcurrentModDownloads": 2,
@@ -535,6 +536,7 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual("旧 WPF 启动器", settings.LauncherTitle);
             Assert.AreEqual(2, settings.LauncherVisibility);
             Assert.AreEqual(18, settings.FontSize);
+            Assert.IsFalse(settings.EnableTransparency);
             Assert.AreEqual("深色", settings.ThemeMode);
             Assert.AreEqual("en-US", settings.UiLanguage);
             Assert.AreEqual(2, settings.CollectionDownloadParallelism);

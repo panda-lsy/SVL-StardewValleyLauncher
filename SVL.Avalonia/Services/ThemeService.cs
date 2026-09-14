@@ -41,12 +41,16 @@ public static class ThemeService
     private static MaterialScheme _currentScheme = MaterialScheme.Blue;
     private static bool _isDarkMode;
     private static bool _followSystemTheme;
+    private static bool _transparencyEnabled = true;
     private static IPlatformSettings? _platformSettings;
 
     public static ThemeStyleType CurrentStyle => _currentStyle;
     public static MaterialScheme CurrentScheme => _currentScheme;
     public static bool IsDarkMode => _isDarkMode;
     public static bool FollowSystemTheme => _followSystemTheme;
+
+    /// <summary>当前是否启用主窗口透明/半透明背景。</summary>
+    public static bool TransparencyEnabled => _transparencyEnabled;
 
     /// <summary>
     /// 主题或暗色模式变更时触发。独立窗口（如 DebugConsoleWindow）可订阅此事件
@@ -91,6 +95,8 @@ public static class ThemeService
             // 暗色覆盖后重新应用主题强调色，避免所有主题在暗色模式下都变成固定紫色
             ReapplyThemeAccent(theme);
         }
+
+        ApplyWindowBackgroundTransparency();
 
         ThemeChanged?.Invoke();
     }
@@ -139,6 +145,8 @@ public static class ThemeService
             }
         }
 
+        ApplyWindowBackgroundTransparency();
+
         System.Diagnostics.Debug.WriteLine($"[ThemeService] Dark mode: {dark}");
 
         ThemeChanged?.Invoke();
@@ -153,6 +161,16 @@ public static class ThemeService
         _followSystemTheme = followSystem;
         ConfigurePlatformThemeMonitoring();
         SetDarkMode(followSystem ? ReadSystemDarkMode() : dark);
+    }
+
+    /// <summary>
+    /// 设置主窗口透明效果。资源层始终保留不透明回退，避免不支持透明的窗口后端出现异常背景。
+    /// </summary>
+    public static void SetTransparencyEnabled(bool enabled)
+    {
+        _transparencyEnabled = enabled;
+        ApplyWindowBackgroundTransparency();
+        ThemeChanged?.Invoke();
     }
 
     private static void ConfigurePlatformThemeMonitoring()
@@ -221,6 +239,25 @@ public static class ThemeService
         {
             resources[key] = new SolidColorBrush(color);
         }
+    }
+
+    private static void ApplyWindowBackgroundTransparency()
+    {
+        var resources = Application.Current?.Resources;
+        if (resources == null || resources["WindowBackgroundBrush"] is not SolidColorBrush brush)
+        {
+            return;
+        }
+
+        var color = brush.Color;
+        var alpha = _transparencyEnabled ? (byte)0xE8 : (byte)0xFF;
+        if (color.A == alpha)
+        {
+            return;
+        }
+
+        resources["WindowBackgroundBrush"] = new SolidColorBrush(
+            Color.FromArgb(alpha, color.R, color.G, color.B));
     }
 
     /// <summary>
@@ -556,6 +593,7 @@ public static class ThemeService
 
     public static void RestoreFromSettings(AppUserSettings settings)
     {
+        _transparencyEnabled = settings.EnableTransparency;
         _followSystemTheme = IsSystemThemeMode(settings.ThemeMode);
         ConfigurePlatformThemeMonitoring();
         _isDarkMode = _followSystemTheme

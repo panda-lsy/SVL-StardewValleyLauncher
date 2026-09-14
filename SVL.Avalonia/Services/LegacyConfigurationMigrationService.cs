@@ -274,6 +274,8 @@ public sealed class LegacyConfigurationMigrationService
 
         changed |= ImportBool(root, "EnableAnimations", settings.EnableAnimations, defaults.EnableAnimations,
             value => settings.EnableAnimations = value, result, ref hadCurrentSettings);
+        changed |= ImportBool(root, "EnableTransparency", settings.EnableTransparency, defaults.EnableTransparency,
+            value => settings.EnableTransparency = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "AutoCheckUpdates", settings.EnableAutoUpdateCheck, defaults.EnableAutoUpdateCheck,
             value => settings.EnableAutoUpdateCheck = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "AutoDownloadUpdate", settings.AutoDownloadUpdate, defaults.AutoDownloadUpdate,

@@ -77,6 +77,9 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _fontSizeLabelText = "界面字体大小";
 
     [ObservableProperty]
+    private string _transparencyLabelText = "启用透明效果";
+
+    [ObservableProperty]
     private string _saveButtonText = "保存设置";
 
     [ObservableProperty]
@@ -174,6 +177,9 @@ public partial class SettingsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private int _fontSize = 14;
+
+    [ObservableProperty]
+    private bool _enableTransparency = true;
 
     [ObservableProperty]
     private bool _instanceAutoConnectServer;
@@ -520,6 +526,7 @@ public partial class SettingsPageViewModel : ObservableObject
         SelectedModLocalizationConcurrency = Math.Clamp(settings.MaxConcurrentModLocalizationChecks, 1, 16);
         SelectedThemeMode = settings.ThemeMode;
         IsDarkMode = ThemeService.IsDarkMode;
+        EnableTransparency = settings.EnableTransparency;
         FontSize = FontSizeOptions.Contains(settings.FontSize) ? settings.FontSize : 14;
 
         // 主题风格
@@ -581,6 +588,7 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.ThemeMode = SelectedThemeMode;
         settings.UiLanguage = SelectedUiLanguage;
         settings.FontSize = FontSizeOptions.Contains(FontSize) ? FontSize : 14;
+        settings.EnableTransparency = EnableTransparency;
 
         // 保存主题
         ResolveThemeStyleAndScheme(SelectedThemeStyle, out var styleName, out var schemeName);
@@ -621,6 +629,7 @@ public partial class SettingsPageViewModel : ObservableObject
         ThemeModeLabelText = _localizationService.Get("Settings.ThemeMode");
         UiLanguageLabelText = _localizationService.Get("Settings.UiLanguage");
         FontSizeLabelText = _localizationService.Get("Settings.FontSize");
+        TransparencyLabelText = _localizationService.Get("Settings.Transparency");
         SaveButtonText = _localizationService.Get("Settings.Save");
         InstanceAutoConnectLabelText = _localizationService.Get("Settings.Basic.AutoConnect");
         InstanceServerAddressLabelText = _localizationService.Get("Settings.Basic.ServerAddress");
@@ -838,6 +847,13 @@ public partial class SettingsPageViewModel : ObservableObject
         }
 
         StatusMessage = $"{FontSizeLabelText}切换为：{value}（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnEnableTransparencyChanged(bool value)
+    {
+        ThemeService.SetTransparencyEnabled(value);
+        StatusMessage = value ? "已启用透明效果（已自动保存）" : "已禁用透明效果（已自动保存）";
         ScheduleAutoSave();
     }
 

@@ -64,7 +64,25 @@ public partial class MainWindow : Window
             vm.BringToFrontRequested += OnBringToFrontRequested;
             vm.LaunchPage.GameStartedRequested += OnGameStartedRequested;
             vm.LaunchPage.GameExitedRequested += OnGameExitedRequested;
+            vm.SettingsPage.PropertyChanged += OnSettingsPropertyChanged;
+            ApplyWindowTransparency(vm.SettingsPage.EnableTransparency);
         }
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(SettingsPageViewModel.EnableTransparency), StringComparison.Ordinal) &&
+            sender is SettingsPageViewModel settings)
+        {
+            ApplyWindowTransparency(settings.EnableTransparency);
+        }
+    }
+
+    private void ApplyWindowTransparency(bool enabled)
+    {
+        TransparencyLevelHint = enabled
+            ? new[] { WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent }
+            : new[] { WindowTransparencyLevel.None };
     }
 
     private void OnGameStartedRequested(LauncherVisibilityBehavior behavior)

@@ -122,6 +122,9 @@ public sealed class AppUserSettings
     /// <summary>是否启用动画效果。</summary>
     public bool EnableAnimations { get; set; } = true;
 
+    /// <summary>是否启用主窗口透明/半透明效果；不支持的平台回退为不透明窗口。</summary>
+    public bool EnableTransparency { get; set; } = true;
+
     /// <summary>界面字体大小（pt）。</summary>
     public int FontSize { get; set; } = 14;
 
