@@ -53,6 +53,36 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public async Task InstanceRegistry_ConcurrentUpsert_ShouldPreserveAllInstances()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-registry-concurrency-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new InstanceRegistryStore(root);
+            var tasks = Enumerable.Range(0, 32)
+                .Select(index => Task.Run(() => store.UpsertManualInstance(
+                    $"Pack {index}",
+                    Path.Combine(root, "versions", $"Pack {index}"))))
+                .ToArray();
+
+            await Task.WhenAll(tasks);
+
+            var records = store.LoadManualInstances();
+            Assert.AreEqual(32, records.Count);
+            CollectionAssert.AreEquivalent(
+                Enumerable.Range(0, 32).Select(index => $"Pack {index}").ToList(),
+                records.Select(record => record.Name).ToList());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void SearchPages_ShouldExposeWpfFiltersAndConfiguredDefaultSource()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-search-page-filter-test-" + Guid.NewGuid().ToString("N"));

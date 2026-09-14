@@ -6252,21 +6252,9 @@ public sealed class ModpackInstallService
         try
         {
             var store = new InstanceRegistryStore();
-            var records = store.LoadManualInstances();
             // 实例名只在同一个路径下唯一；不同 Base 允许拥有同名整合包。
-            // 旧实现按名称全局删除，会让后导入的路径覆盖先导入的路径记录。
-            var existingIndex = records.FindIndex(r =>
-                string.Equals(r.Path, runtimePath, StringComparison.OrdinalIgnoreCase));
-            var record = new ManualInstanceRecord { Name = instanceName, Path = runtimePath };
-            if (existingIndex >= 0)
-            {
-                records[existingIndex] = record;
-            }
-            else
-            {
-                records.Add(record);
-            }
-            store.SaveManualInstances(records);
+            // 必须在注册表内部原子 Upsert，避免并行安装的读-改-写互相覆盖。
+            store.UpsertManualInstance(instanceName, runtimePath);
         }
         catch { }
     }
