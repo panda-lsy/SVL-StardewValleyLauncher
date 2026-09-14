@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using SVL.Core.Stardew.Instance;
 using SVL.Core.Logging;
@@ -265,55 +266,15 @@ public static class SettingsService
                 }
             }
 
-            // 删除普通文件（游戏核心文件）
-            var gameFiles = new[]
+            // 不再逐个物理删除版本文件。用户删除实例时应能从系统回收站恢复，
+            // 因此在 junction 已被移除后，将完整版本目录一次性发送到回收站。
+            if (!MovePathToRecycleBin(versionsPath))
             {
-                "Stardew Valley.exe",
-                "Stardew Valley.dll",
-                "Stardew Valley.deps.json",
-                "StardewModdingAPI.exe",
-                "StardewModdingAPI.dll"
-            };
-
-            foreach (var file in gameFiles)
-            {
-                var filePath = Path.Combine(versionsPath, file);
-                if (File.Exists(filePath))
-                {
-                    try
-                    {
-                        File.Delete(filePath);
-                        Log.Info($"[SettingsService] 已删除文件: {file}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warn($"[SettingsService] 删除文件失败: {file}", ex);
-                    }
-                }
+                Log.Warn($"[SettingsService] 无法将版本目录移入回收站: {versionsPath}");
+                return false;
             }
 
-            // 删除 mods 和 logs 目录（如果存在）
-            var subDirs = new[] { "mods", "logs" };
-            foreach (var dir in subDirs)
-            {
-                var dirPath = Path.Combine(versionsPath, dir);
-                if (Directory.Exists(dirPath))
-                {
-                    try
-                    {
-                        Directory.Delete(dirPath, recursive: true);
-                        Log.Info($"[SettingsService] 已删除目录: {dir}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warn($"[SettingsService] 删除目录失败: {dir}", ex);
-                    }
-                }
-            }
-
-            // 最后删除整个目录（使用递归删除）
-            Directory.Delete(versionsPath, recursive: true);
-            Log.Info($"[SettingsService] ✓ 已删除版本目录: {versionsPath}");
+            Log.Info($"[SettingsService] ✓ 已将版本目录移入回收站: {versionsPath}");
             return true;
         }
         catch (Exception ex)
@@ -322,6 +283,59 @@ public static class SettingsService
             return false;
         }
     }
+
+    /// <summary>
+    /// 将文件或目录交给 Explorer 回收站，保留用户恢复能力。
+    /// </summary>
+    private static bool MovePathToRecycleBin(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var operation = new ShellFileOperation
+        {
+            Function = FileOperationDelete,
+            From = path + "\0\0",
+            To = string.Empty,
+            Flags = (ushort)(AllowUndo | NoConfirmation | Silent | NoErrorUi),
+            ProgressTitle = string.Empty
+        };
+
+        try
+        {
+            var result = SHFileOperation(ref operation);
+            return result == 0 && !operation.AnyOperationAborted &&
+                   !File.Exists(path) && !Directory.Exists(path);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[SettingsService] 回收站操作失败: {path}", ex);
+            return false;
+        }
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHFileOperation(ref ShellFileOperation operation);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ShellFileOperation
+    {
+        public IntPtr WindowHandle;
+        public uint Function;
+        public string From;
+        public string To;
+        public ushort Flags;
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool AnyOperationAborted;
+        public IntPtr NameMappings;
+        public string ProgressTitle;
+    }
+
+    private const uint FileOperationDelete = 0x0003;
+    private const ushort NoConfirmation = 0x0010;
+    private const ushort Silent = 0x0004;
+    private const ushort AllowUndo = 0x0040;
+    private const ushort NoErrorUi = 0x0400;
 
     /// <summary>
     /// 移动实例到回收站（将实例标记为已删除）
@@ -342,9 +356,7 @@ public static class SettingsService
                 return (false, $"找不到实例: {instanceId}");
             }
 
-            // 将实例标记为已删除（软删除）
-            // 注意：这里简化处理，直接调用 DeleteInstance
-            // 实际的回收站功能可以后续扩展
+            // DeleteInstance 会先将版本目录移入系统回收站，再更新实例列表。
             return DeleteInstance(instanceId);
         }
         catch (Exception ex)
