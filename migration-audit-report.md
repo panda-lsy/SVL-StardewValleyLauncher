@@ -7,7 +7,7 @@
 
 ## `upstream/main` 分支对照结论
 
-对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`d4060ff`）、远程
+对照基准为当前 `Avalonia-Dev` 的 `HEAD`（`0d8bd7e`）、远程
 `upstream/main`（`19ef4ef`）以及两者共同祖先（`7e92bdc`）。共同祖先之后，
 `upstream/main` 只有一个 README 说明性提交，没有新增 WPF/Core 业务代码；
 `main` 仍是 .NET Framework 4.8 + WPF 旧架构，且不包含 `SVL.Avalonia`。
@@ -91,6 +91,8 @@ Collection 单 Mod 下载也复用同一失败重试策略：瞬时 CDN/网络/�
 另存为任务恢复时不再强制按 Mod manifest 校验最终文件；只要目标文件已完整落盘且不存在 `.part`/`.part.json`，即可跳过重复下载，仍在写入的半成品不会被误复用。
 
 本轮继续补齐旧 WPF 设置迁移：`MaxConcurrentModLocalizationChecks` 已加入 Avalonia 配置、旧配置导入和设置页，并与 Mod 更新检测并发数分开使用；两项均限制在 1-16 个线程并有回归覆盖。
+
+本轮继续补齐旧 WPF 搜索行为：`ShowModTypeFilterDisabledNotice` 已加入 Avalonia 配置、旧配置导入和设置页；Mod 搜索在来源为“全部”时会禁用类型筛选、清空已选类型，并按设置显示提示。
 Nexus/CurseForge 下载解析、HTTP Range 探测及缓存命中复制会保留取消异常，取消不会被误判为普通解析失败或继续触发回退下载；Mod 来源凭证也使用原子写入，避免进程中断留下半截 JSON。
 导出选择项与导出审计项现在共用 Nexus/CurseForge 网页地址过滤规则，文件页不会被误报为可直接下载的压缩包；来源文件名会随 `sources.json` 保留并在回导时写回 `svl-source.json`。
 在线搜索的客户端筛选已调整为按来源分批拉取、先过滤再分页；`HasMore` 根据实际返回批次和匹配结果计算，并受本地候选上限保护，避免末页误显示或无限请求。真实线上接口的稀疏筛选和深页仍待账号网络环境验收。
