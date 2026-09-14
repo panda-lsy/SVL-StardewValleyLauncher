@@ -9,18 +9,13 @@
           Padding="20,16"
           Margin="20,20,20,0"
           HorizontalAlignment="Center"
-          BoxShadow="0 8 16 0 #40000000">
+          BoxShadow="0 8 16 0 #40000000"
+          Transitions="{DynamicResource NotificationTransitions}">
     <Border.RenderTransform>
       <TranslateTransform Y="-150" />
     </Border.RenderTransform>
     <!-- Avalonia Transitions 仅支持控件自身的 StyledProperty，无法作用于 RenderTransform.Y，
          故 Y 轴位移在 code-behind 瞬间设置，仅 Opacity 做过渡。退场时只淡出不位移，避免突兀。 -->
-    <Border.Transitions>
-      <Transitions>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="QuadraticEaseIn" />
-      </Transitions>
-    </Border.Transitions>
-
     <Grid ColumnDefinitions="Auto,*,Auto">
       <!-- 图标背景 -->
       <Border x:Name="IconBackground"

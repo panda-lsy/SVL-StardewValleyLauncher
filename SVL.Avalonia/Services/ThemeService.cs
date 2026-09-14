@@ -1,4 +1,6 @@
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Platform;
@@ -42,7 +44,19 @@ public static class ThemeService
     private static bool _isDarkMode;
     private static bool _followSystemTheme;
     private static bool _transparencyEnabled = true;
+    private static bool _animationsEnabled = true;
     private static IPlatformSettings? _platformSettings;
+    private static readonly Dictionary<string, Transitions> s_animationTransitions = new(StringComparer.Ordinal);
+    private static readonly string[] s_animationResourceKeys =
+    [
+        "NavButtonTransitions",
+        "WinCtrlTransitions",
+        "FlatTaskTransitions",
+        "ModRowTransitions",
+        "RowMetaTransitions",
+        "RowHoverTransitions",
+        "NotificationTransitions"
+    ];
 
     public static ThemeStyleType CurrentStyle => _currentStyle;
     public static MaterialScheme CurrentScheme => _currentScheme;
@@ -51,6 +65,9 @@ public static class ThemeService
 
     /// <summary>当前是否启用主窗口透明/半透明背景。</summary>
     public static bool TransparencyEnabled => _transparencyEnabled;
+
+    /// <summary>当前是否启用界面过渡动画。</summary>
+    public static bool AnimationsEnabled => _animationsEnabled;
 
     /// <summary>
     /// 主题或暗色模式变更时触发。独立窗口（如 DebugConsoleWindow）可订阅此事件
@@ -171,6 +188,84 @@ public static class ThemeService
         _transparencyEnabled = enabled;
         ApplyWindowBackgroundTransparency();
         ThemeChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// 设置界面过渡动画开关。活动动画以应用资源形式提供，使用 DynamicResource 的
+    /// 已打开页面会立即切换；保存的动画对象会保留，重新开启时不会丢失各自时长和类型。
+    /// </summary>
+    public static void SetAnimationsEnabled(bool enabled)
+    {
+        _animationsEnabled = enabled;
+        var resources = Application.Current?.Resources;
+        if (resources == null)
+        {
+            return;
+        }
+
+        var emptyTransitions = resources["NoTransitions"] as Transitions ?? new Transitions();
+        foreach (var key in s_animationResourceKeys)
+        {
+            if (!s_animationTransitions.TryGetValue(key, out var animated))
+            {
+                animated = resources[key] as Transitions ?? CreateDefaultTransitions(key);
+                s_animationTransitions[key] = animated;
+            }
+
+            resources[key] = enabled && animated != null
+                ? animated
+                : emptyTransitions;
+        }
+
+        ThemeChanged?.Invoke();
+    }
+
+    private static Transitions CreateDefaultTransitions(string key)
+    {
+        return key switch
+        {
+            "NavButtonTransitions" => CreateOpacityTransitions(140),
+            "WinCtrlTransitions" => CreateOpacityTransitions(120),
+            "FlatTaskTransitions" => CreateOpacityTransitions(160),
+            "ModRowTransitions" => new Transitions
+            {
+                new BrushTransition
+                {
+                    Property = Border.BackgroundProperty,
+                    Duration = TimeSpan.FromMilliseconds(160)
+                },
+                new BrushTransition
+                {
+                    Property = Border.BorderBrushProperty,
+                    Duration = TimeSpan.FromMilliseconds(160)
+                }
+            },
+            "RowMetaTransitions" => CreateOpacityTransitions(160, 50),
+            "RowHoverTransitions" => CreateOpacityTransitions(160, 50),
+            "NotificationTransitions" => new Transitions
+            {
+                new DoubleTransition
+                {
+                    Property = Visual.OpacityProperty,
+                    Duration = TimeSpan.FromMilliseconds(300),
+                    Easing = new QuadraticEaseIn()
+                }
+            },
+            _ => new Transitions()
+        };
+    }
+
+    private static Transitions CreateOpacityTransitions(int durationMilliseconds, int delayMilliseconds = 0)
+    {
+        return new Transitions
+        {
+            new DoubleTransition
+            {
+                Property = Visual.OpacityProperty,
+                Duration = TimeSpan.FromMilliseconds(durationMilliseconds),
+                Delay = TimeSpan.FromMilliseconds(delayMilliseconds)
+            }
+        };
     }
 
     private static void ConfigurePlatformThemeMonitoring()

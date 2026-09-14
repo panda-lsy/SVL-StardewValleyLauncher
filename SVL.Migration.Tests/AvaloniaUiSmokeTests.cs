@@ -1,8 +1,11 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Animation;
 using Avalonia.VisualTree;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SVL.Avalonia;
+using SVL.Avalonia.Services;
 
 [assembly: AvaloniaTestApplication(typeof(App))]
 
@@ -50,6 +53,38 @@ public sealed class AvaloniaUiSmokeTests
                                    Math.Abs(grid.Bounds.Height - 24) < 0.01)
                     .ToList();
                 Assert.AreEqual(3, iconCanvases.Count, "三个按钮必须各自使用统一的 24×24 图标画布");
+
+                var resources = Application.Current!.Resources;
+                var previousAnimations = ThemeService.AnimationsEnabled;
+                try
+                {
+                    ThemeService.SetAnimationsEnabled(false);
+
+                    Assert.IsFalse(ThemeService.AnimationsEnabled);
+                    Assert.AreEqual(
+                        0,
+                        ((Transitions)resources["NavButtonTransitions"]!).Count,
+                        "关闭动画后导航按钮不应继续保留过渡动画");
+                    Assert.AreEqual(
+                        0,
+                        ((Transitions)resources["ModRowTransitions"]!).Count,
+                        "关闭动画后 Mod 行不应继续保留过渡动画");
+
+                    ThemeService.SetAnimationsEnabled(true);
+
+                    Assert.IsTrue(ThemeService.AnimationsEnabled);
+                    Assert.IsTrue(
+                        ((Transitions)resources["NavButtonTransitions"]!).Count > 0,
+                        "重新开启动画后应恢复导航按钮过渡动画");
+                    Assert.AreEqual(
+                        2,
+                        ((Transitions)resources["ModRowTransitions"]!).Count,
+                        "重新开启动画后应恢复 Mod 行的背景和边框过渡");
+                }
+                finally
+                {
+                    ThemeService.SetAnimationsEnabled(previousAnimations);
+                }
             }
             finally
             {

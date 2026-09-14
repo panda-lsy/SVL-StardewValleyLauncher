@@ -83,12 +83,7 @@
     </Style>
 
     <Style Selector="Border.modRow">
-      <Setter Property="Transitions">
-        <Transitions>
-          <BrushTransition Property="Background" Duration="0:0:0.16" />
-          <BrushTransition Property="BorderBrush" Duration="0:0:0.16" />
-        </Transitions>
-      </Setter>
+      <Setter Property="Transitions" Value="{DynamicResource ModRowTransitions}" />
     </Style>
 
     <Style Selector="Border.modRow:pointerover">
@@ -99,11 +94,7 @@
     <Style Selector="StackPanel.rowMeta">
       <Setter Property="Opacity" Value="1" />
       <Setter Property="IsHitTestVisible" Value="True" />
-      <Setter Property="Transitions">
-        <Transitions>
-          <DoubleTransition Property="Opacity" Delay="0:0:0.05" Duration="0:0:0.16" />
-        </Transitions>
-      </Setter>
+      <Setter Property="Transitions" Value="{DynamicResource RowMetaTransitions}" />
     </Style>
 
     <Style Selector="Border.modRow:pointerover StackPanel.rowMeta">
@@ -114,11 +105,7 @@
     <Style Selector="StackPanel.rowHoverActions">
       <Setter Property="Opacity" Value="0" />
       <Setter Property="IsHitTestVisible" Value="False" />
-      <Setter Property="Transitions">
-        <Transitions>
-          <DoubleTransition Property="Opacity" Delay="0:0:0.05" Duration="0:0:0.16" />
-        </Transitions>
-      </Setter>
+      <Setter Property="Transitions" Value="{DynamicResource RowHoverTransitions}" />
     </Style>
 
     <Style Selector="Border.modRow:pointerover StackPanel.rowHoverActions">

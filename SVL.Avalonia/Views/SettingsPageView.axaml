@@ -326,6 +326,7 @@
               <ComboBox ItemsSource="{Binding ThemeModes}" SelectedItem="{Binding SelectedThemeMode}" />
               <TextBlock Text="配色方案" />
               <ComboBox ItemsSource="{Binding ThemeStyleOptions}" SelectedItem="{Binding SelectedThemeStyle}" />
+              <CheckBox Content="{Binding AnimationLabelText}" IsChecked="{Binding EnableAnimations}" />
               <CheckBox Content="{Binding TransparencyLabelText}" IsChecked="{Binding EnableTransparency}" />
               <TextBlock Text="{Binding FontSizeLabelText}" />
               <ComboBox ItemsSource="{Binding FontSizeOptions}" SelectedItem="{Binding FontSize}" />

@@ -10,6 +10,9 @@
       </ResourceDictionary.MergedDictionaries>
       <converters:AssetImageConverter x:Key="AssetImageConverter" />
 
+      <!-- 关闭动画时由 ThemeService 使用空 Transitions 替换活动资源。 -->
+      <Transitions x:Key="NoTransitions" />
+
       <!-- PCL 星露谷风格配色系统（ThemeService 运行时更新这些资源） -->
       <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F5EDE0" />
       <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#D47748" />

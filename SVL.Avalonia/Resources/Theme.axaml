@@ -149,11 +149,7 @@
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="12,8" />
     <Setter Property="CornerRadius" Value="4" />
-    <Setter Property="Transitions">
-      <Transitions>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.14" />
-      </Transitions>
-    </Setter>
+    <Setter Property="Transitions" Value="{DynamicResource NavButtonTransitions}" />
   </Style>
 
   <Style Selector="Button.nav:pointerover">
@@ -264,11 +260,7 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Foreground" Value="White" />
-    <Setter Property="Transitions">
-      <Transitions>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
-      </Transitions>
-    </Setter>
+    <Setter Property="Transitions" Value="{DynamicResource WinCtrlTransitions}" />
   </Style>
 
   <Style Selector="Button.winCtrl:pointerover">
@@ -365,11 +357,7 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
     <Setter Property="HorizontalContentAlignment" Value="Left" />
-    <Setter Property="Transitions">
-      <Transitions>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.16" />
-      </Transitions>
-    </Setter>
+    <Setter Property="Transitions" Value="{DynamicResource FlatTaskTransitions}" />
   </Style>
 
   <Style Selector="Button.flatTask:pointerover">
