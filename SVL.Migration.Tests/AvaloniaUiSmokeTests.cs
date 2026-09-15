@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Animation;
 using Avalonia.Media;
@@ -55,6 +56,18 @@ public sealed class AvaloniaUiSmokeTests
                                    Math.Abs(grid.Bounds.Height - 24) < 0.01)
                     .ToList();
                 Assert.AreEqual(3, iconCanvases.Count, "三个按钮必须各自使用统一的 24×24 图标画布");
+
+                var minimizeButton = buttons.Single(button => button.Classes.Contains("min"));
+                var minimizeGlyph = minimizeButton.GetVisualDescendants().OfType<Rectangle>().Single();
+                var minimizeCanvas = minimizeGlyph.GetVisualAncestors().OfType<Grid>()
+                    .Single(grid => Math.Abs(grid.Bounds.Width - 24) < 0.01 &&
+                                    Math.Abs(grid.Bounds.Height - 24) < 0.01);
+                var minimizeGlyphCenter = minimizeGlyph.TranslatePoint(
+                    new Point(minimizeGlyph.Bounds.Width / 2, minimizeGlyph.Bounds.Height / 2),
+                    minimizeCanvas);
+                Assert.IsNotNull(minimizeGlyphCenter);
+                Assert.AreEqual(12d, minimizeGlyphCenter!.Value.Y, 0.01,
+                    "最小化横线的图形中心必须与 24×24 图标画布中心重合");
 
                 var resources = Application.Current!.Resources;
                 var previousAnimations = ThemeService.AnimationsEnabled;

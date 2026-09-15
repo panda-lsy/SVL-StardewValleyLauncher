@@ -4486,11 +4486,12 @@ public sealed class AvaloniaMigrationHardeningTests
         StringAssert.Contains(mainWindowText, "UseLayoutRounding=\"True\"");
         StringAssert.Contains(mainWindowText, "Width=\"120\" Height=\"48\" RowDefinitions=\"48\" ColumnDefinitions=\"40,40,40\"");
         Assert.AreEqual(3, CountOccurrences(mainWindowText, "Classes=\"winCtrl"));
-         // 窗口控制区仍使用统一尺寸的矢量画布；具体图形恢复为原有
-         // Icons.axaml 资源，避免生成式 PNG 透明边界再次影响视觉中心。
+         // 窗口控制区使用统一尺寸画布；最小化符号必须用居中矩形，避免
+         // 细长 StreamGeometry 经 Uniform 拉伸后贴到画布上沿。
          Assert.AreEqual(3, CountOccurrences(mainWindowText, "Width=\"24\" Height=\"24\""));
          Assert.AreEqual(3, CountOccurrences(mainWindowText, "Grid.Row=\"0\" Grid.Column="));
-         StringAssert.Contains(mainWindowText, "Data=\"{StaticResource Icon.Minus}\"");
+         StringAssert.Contains(mainWindowText, "<Rectangle Width=\"12\" Height=\"2\" Fill=\"White\"");
+         Assert.IsFalse(mainWindowText.Contains("Data=\"{StaticResource Icon.Minus}\"", StringComparison.Ordinal));
          StringAssert.Contains(mainWindowText, "Data=\"{StaticResource Icon.Maximize}\"");
          StringAssert.Contains(mainWindowText, "Data=\"{StaticResource Icon.X}\"");
          var generatedIconReferences = Directory

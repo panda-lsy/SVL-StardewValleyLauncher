@@ -116,9 +116,9 @@
                   Width="40" Height="48" Padding="0" HorizontalAlignment="Center" VerticalAlignment="Center"
                   HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
             <Grid Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
-              <!-- 三个图形都以 24×24 的同一坐标系绘制，避免资源图片透明边界造成视觉偏移。 -->
-              <Path Data="{StaticResource Icon.Minus}" Stretch="Uniform" Fill="White"
-                    StrokeLineCap="Round" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+              <!-- 细长几何的 Uniform 拉伸会按自身边界贴到画布上沿；用明确居中的矩形避免最小化图标上偏。 -->
+              <Rectangle Width="12" Height="2" Fill="White"
+                         HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Grid>
           </Button>
           <Button Grid.Row="0" Grid.Column="1" Classes="winCtrl max" Click="MaximizeButton_Click" ToolTip.Tip="最大化/还原"
