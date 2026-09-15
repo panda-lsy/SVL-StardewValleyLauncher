@@ -57,11 +57,13 @@ public sealed class DownloadInstallService
             return false;
         }
 
+        var source = string.Empty;
+        var originalMovedToBackup = false;
         try
         {
             var modsRoot = Path.GetFullPath(targetModsPath)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            var source = Path.GetFullPath(existingModPath)
+            source = Path.GetFullPath(existingModPath)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var sourceParent = Path.GetDirectoryName(source);
             if (!string.Equals(sourceParent, modsRoot, StringComparison.OrdinalIgnoreCase))
@@ -102,6 +104,7 @@ public sealed class DownloadInstallService
                 try
                 {
                     Directory.Move(source, backupPath);
+                    originalMovedToBackup = true;
                 }
                 catch (IOException)
                 {
@@ -133,6 +136,33 @@ public sealed class DownloadInstallService
         }
         catch
         {
+            // Directory.Move 已成功但后续元数据落盘失败时，调用方会中止安装。
+            // 此时必须把原目录还原到 Mods，否则一次“备份失败”会让用户的
+            // 当前实例暂时缺少原有 Mod。还原失败则保留带更新链的备份，
+            // 让用户仍可从备份页恢复，而不是删除最后一份可用数据。
+            if (originalMovedToBackup &&
+                !string.IsNullOrWhiteSpace(source) &&
+                !string.IsNullOrWhiteSpace(backupPath) &&
+                Directory.Exists(backupPath) &&
+                !Directory.Exists(source))
+            {
+                try
+                {
+                    Directory.Move(backupPath, source);
+                    var restoredChainPath = Path.Combine(source, ".svl-update-chain.json");
+                    if (File.Exists(restoredChainPath))
+                    {
+                        File.Delete(restoredChainPath);
+                    }
+
+                    backupPath = string.Empty;
+                }
+                catch
+                {
+                    // 保留备份路径，交由下面的保护逻辑和备份页处理。
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(backupPath) && Directory.Exists(backupPath))
             {
                 try

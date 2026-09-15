@@ -4452,6 +4452,47 @@ public sealed class DownloadProgressAndNexusCacheTests
     }
 
     [TestMethod]
+    public void DownloadInstall_UpdateBackupFailureShouldRestoreMovedOriginalDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-mod-update-chain-rollback-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var existingModPath = Path.Combine(modsPath, "Old Mod Folder");
+        try
+        {
+            Directory.CreateDirectory(existingModPath);
+            File.WriteAllText(
+                Path.Combine(existingModPath, "manifest.json"),
+                "{\"Name\":\"New Mod Name\",\"UniqueID\":\"test.new-mod\",\"Version\":\"1.0.0\"}");
+
+            // 强制备份元数据写入失败：移动旧目录成功后，目标路径已经是目录，
+            // File.WriteAllText 无法创建同名文件，从而覆盖“移动后失败”的事务分支。
+            Directory.CreateDirectory(Path.Combine(existingModPath, ".svl-backup.json"));
+
+            var service = new DownloadInstallService(new TestGameInstallPathLocator());
+            var success = service.TryBackupExistingModDirectory(
+                modsPath,
+                existingModPath,
+                ["New Mod Folder"],
+                "New Mod Folder.zip",
+                out var backupPath);
+
+            Assert.IsFalse(success, "备份元数据无法写入时不应继续更新");
+            Assert.IsTrue(Directory.Exists(existingModPath), "移动后失败必须自动还原原 Mod 目录");
+            Assert.IsTrue(Directory.Exists(Path.Combine(existingModPath, ".svl-backup.json")));
+            Assert.IsFalse(File.Exists(Path.Combine(existingModPath, ".svl-update-chain.json")),
+                "回滚成功后不能把未生效的更新链留在原 Mod 中");
+            Assert.AreEqual(string.Empty, backupPath);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public async Task LegacyCollectionInstall_ShouldSkipOuterNameOnlyManifest()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-collection-legacy-shape-test-" + Guid.NewGuid().ToString("N"));
