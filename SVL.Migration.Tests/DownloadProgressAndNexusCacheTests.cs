@@ -1019,6 +1019,46 @@ public sealed class DownloadProgressAndNexusCacheTests
     }
 
     [TestMethod]
+    public void TaskStatus_ShouldGiveSourceSpecificAdviceForUnresolvableDownloadAddress()
+    {
+        var task = new DownloadTaskItem
+        {
+            Name = "NXM import",
+            TaskState = DownloadTaskState.Failed,
+            Status = "导入失败：无法解析真实下载地址",
+            FailedDetails = "无法解析真实下载地址",
+            CanRetry = true
+        };
+        var viewModel = new TaskStatusPageViewModel();
+
+        viewModel.SyncTasks([task]);
+        viewModel.SetCurrentTask(task);
+
+        Assert.AreEqual("需要补充 Mod 来源", viewModel.AdviceTitle);
+        Assert.IsTrue(viewModel.SuggestedActions.Any(action => action.Contains("补充来源", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void TaskStatus_ShouldNotTreatManifestParsingFailureAsMissingSource()
+    {
+        var task = new DownloadTaskItem
+        {
+            Name = "Broken manifest package",
+            TaskState = DownloadTaskState.Failed,
+            Status = "整合包安装失败",
+            FailedDetails = "无法解析 Collection manifest",
+            CanRetry = true
+        };
+        var viewModel = new TaskStatusPageViewModel();
+
+        viewModel.SyncTasks([task]);
+        viewModel.SetCurrentTask(task);
+
+        Assert.AreEqual("失败后的建议", viewModel.AdviceTitle);
+        Assert.IsFalse(viewModel.SuggestedActions.Any(action => action.Contains("补充 Mod 来源", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public void TaskStatus_ShouldNotSuggestAnotherTasksRetryReport()
     {
         var taskWithReport = new DownloadTaskItem

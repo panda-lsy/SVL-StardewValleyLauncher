@@ -458,7 +458,8 @@ public sealed partial class TaskStatusPageViewModel : FeaturePageViewModelBase
                text.Contains("缺少真实下载地址", StringComparison.OrdinalIgnoreCase) ||
                text.Contains("来源字段缺失", StringComparison.OrdinalIgnoreCase) ||
                text.Contains("未识别的 Mod 下载来源", StringComparison.OrdinalIgnoreCase) ||
-               text.Contains("无法解析", StringComparison.OrdinalIgnoreCase);
+               (text.Contains("无法解析", StringComparison.OrdinalIgnoreCase) &&
+                text.Contains("下载地址", StringComparison.OrdinalIgnoreCase));
     }
 
     private bool HasManualSourceFailure()

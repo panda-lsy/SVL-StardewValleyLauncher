@@ -79,7 +79,7 @@
 | 夜间主题与窗口控制区 | 主要弹窗使用动态主题资源；右键菜单显式走 Popup 主题并在应用级覆盖 `ContextMenu/MenuFlyoutPresenter`，避免独立 Popup 回落到浅色；控制按钮使用固定等宽列、统一 40×48 单元格、24×24 内容画布和布局取整；最小化横线使用显式居中矩形，避免细长 `StreamGeometry` 的 Uniform 拉伸贴到画布上沿；版本删除会清理只读属性，遇到短暂文件锁时先移出 `versions` 再后台重试；“跟随系统”现在读取 Avalonia 系统主题并监听后续切换 | `Controls/*.axaml`、`InstancesPageView.axaml`、`MainWindow.axaml`、`Resources/Theme.axaml`、`Services/ThemeService.cs`、`FeaturePagesViewModels` |
 
 下面的 293/308 条统计是早期审计快照；当前验证结果以本段为准。
-当前回归结果：Avalonia Debug 构建通过，0 警告、0 错误；迁移测试 **321 总计，其中 319 通过、2 跳过**。整合包来源回归覆盖父 Mod 与真实嵌套 ContentPack、缺少子目录 `svl-source.json` 时按 manifest 命名空间写入继承来源，以及内置 Mod 归属、多子 Mod、已有独立来源保护。本轮新增第三方嵌套 `source.childMods/parentMod` 和以 Mod 名为 key 的来源映射格式兼容：旧目录名失效时按 manifest UniqueID 找回子 Mod；纯归属条目不会被误当成下载来源，也不会被映射解析提前丢弃或进入逐项下载队列。此前还新增了旧 WPF 自定义强调色迁移、主题重应用、深色模式提亮、无效输入保护和清除恢复默认的 Headless 回归；将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，新增 Avalonia Headless 主窗口布局与冲突处理弹窗结构冒烟测试，并覆盖更新备份在元数据写入失败时自动还原原 Mod 目录的事务回滚路径。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。
+当前回归结果：Avalonia Debug 构建通过，0 警告、0 错误；迁移测试 **323 总计，其中 321 通过、2 跳过**。整合包来源回归覆盖父 Mod 与真实嵌套 ContentPack、缺少子目录 `svl-source.json` 时按 manifest 命名空间写入继承来源，以及内置 Mod 归属、多子 Mod、已有独立来源保护。本轮新增第三方嵌套 `source.childMods/parentMod` 和以 Mod 名为 key 的来源映射格式兼容：旧目录名失效时按 manifest UniqueID 找回子 Mod；纯归属条目不会被误当成下载来源，也不会被映射解析提前丢弃或进入逐项下载队列。此前还新增了旧 WPF 自定义强调色迁移、主题重应用、深色模式提亮、无效输入保护和清除恢复默认的 Headless 回归；将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，新增 Avalonia Headless 主窗口布局与冲突处理弹窗结构冒烟测试，并覆盖更新备份在元数据写入失败时自动还原原 Mod 目录的事务回滚路径。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。
 上一轮测试统计（含 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim/旧缓存路径、API 限额快照、失效 Token 资料保留及限额事件订阅异常隔离回归）：迁移测试 **308 总计，其中 306 通过、2 跳过**。
 本轮界面回退：撤销此前生成式 PNG 图标替换，恢复 `Resources/Icons.axaml` 中的原有矢量资源及动态颜色绑定；标题栏仍保留统一 24×24 画布和等宽控制列，避免回退图标后重新引入三个窗口按钮的对齐问题，并新增回归断言禁止视图重新引用 `Assets/Icons/Generated`。
 本轮修复：Modpack/Collection 的游戏版本只接受 API 明确字段，不再从整合包名称、摘要或文件名推断版本；普通 Mod 仍保留文本兜底。
@@ -273,3 +273,5 @@ junction 仍只执行结构性断开，下载缓存和临时目录继续按生�
 生命周期/结构清理，不纳入用户内容回收范围。
 
 本轮 Windows 可见 UI 复核：使用调试构建和 `SmokeInstance` 只读查看启动页、Mod 管理及实例路径列表；确认实例路径右键菜单可打开，菜单和图标选择弹窗均按深色主题渲染。实际截图发现最小化横线仍因细长 `StreamGeometry` 的 Uniform 布局落在画布上部；已改为 12×2 DIP 居中矩形，并在 Headless 布局测试中断言其中心 Y=12。弹窗通过“取消”关闭，未保存图标或个性化修改。透明开关的 Windows 合成器效果、不同 DPI/窗口状态下的命中区域仍待单独确认。
+
+本轮任务失败建议分类收紧：只有“无法解析下载地址”才作为来源缺失/来源解析问题显示补充来源建议，普通 Collection manifest 解析失败保留通用错误建议；新增两条任务状态回归。当前迁移测试 **323 总计，其中 321 通过、2 跳过**，Avalonia Debug 构建零警告、零错误。
