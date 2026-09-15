@@ -417,6 +417,10 @@ public sealed class ModpackInstallService
 
             var downloadCandidates = sourcesList
                 .Where(s => s.ValueKind == JsonValueKind.Object)
+                // 父归档会写入/整理自己的 ContentPack 子目录。清单里为保留
+                // 父子关系而单列的 parent-inherited 子项不是独立下载目标，
+                // 若父项尚未先处理就入队，会被误报成“缺少来源信息”。
+                .Where(s => !IsInheritedCompositeSourceEntry(s))
                 .Where(s => !string.IsNullOrWhiteSpace(GetJsonString(
                     s,
                     "name",
@@ -4032,12 +4036,19 @@ public sealed class ModpackInstallService
             projectId,
             fileId,
             repository);
-        return hasSource ||
-               !string.IsNullOrWhiteSpace(platform) ||
+
+        // `source` 可能只是 sourceKind/parentMod/childMods 等归属元数据，
+        // 不能因为存在这个属性就把它当成可下载来源。否则导入时会跳过
+        // bundled 分支，后续还可能把父子关系误报成“未识别的下载来源”。
+        // 字符串形态的 source（例如 "Nexus" 或 "github:owner/repo"）仍
+        // 通过 sourceText/platform 在上面完成了实际来源归一化。
+        return !string.IsNullOrWhiteSpace(platform) ||
                !string.IsNullOrWhiteSpace(downloadUrl) ||
                !string.IsNullOrWhiteSpace(projectId) ||
                !string.IsNullOrWhiteSpace(fileId) ||
-               !string.IsNullOrWhiteSpace(repository);
+               !string.IsNullOrWhiteSpace(repository) ||
+               (hasSource && sourceValue.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(sourceText));
     }
 
     private static long? ParsePositiveLongOrNull(string? value)
@@ -4637,10 +4648,17 @@ public sealed class ModpackInstallService
                 continue;
             }
 
-            if (property.Value.ValueKind == JsonValueKind.Object &&
-                LooksLikeSourceEntry(property.Value))
+            if (property.Value.ValueKind == JsonValueKind.Object)
             {
-                entries.Add(CloneSourceEntryWithFallbackName(property.Value, property.Name));
+                // 先用映射 key 补上条目名称，再判断其结构。部分第三方
+                // 导出只在 key 中保存 Mod 名，而 value 仅包含嵌套的
+                // source.parentMod/sourceKind；先判断会因缺少顶层身份而
+                // 把这类有效的父子归属条目整条丢弃。
+                var candidate = CloneSourceEntryWithFallbackName(property.Value, property.Name);
+                if (LooksLikeSourceEntry(candidate))
+                {
+                    entries.Add(candidate);
+                }
             }
             else if (property.Value.ValueKind == JsonValueKind.String &&
                      !string.IsNullOrWhiteSpace(property.Value.GetString()))
@@ -4689,7 +4707,59 @@ public sealed class ModpackInstallService
     {
         // 映射布局和单条来源使用同一套别名规则，否则仅含 site/project/file
         // 的条目会在进入实际来源解析之前被静默过滤。
-        return TryGetModSourceDescriptor(element, out _);
+        if (TryGetModSourceDescriptor(element, out _))
+        {
+            return true;
+        }
+
+        // 归属型来源没有可下载地址是合法状态，例如整合包内置 Mod，或
+        // 只有嵌套 source.childMods/parentMod 的复合 Mod。它们仍必须保留在
+        // sources.json 解析结果中，才能在导入时写回 bundled/parent-inherited
+        // 凭证；不能因没有 platform/project/file 就被当成普通对象映射丢弃。
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var hasIdentity = new[]
+        {
+            "name", "modName", "id", "uniqueId", "uniqueID", "directoryName", "directory"
+        }.Any(name => TryGetJsonPropertyIgnoreCase(element, name, out _));
+        if (!hasIdentity)
+        {
+            return false;
+        }
+
+        return TryGetJsonPropertyIgnoreCase(element, "bundled", out _) ||
+               TryGetJsonPropertyIgnoreCase(element, "sourceKind", out _) ||
+               TryGetJsonPropertyIgnoreCase(element, "parentMod", out _) ||
+               TryGetJsonPropertyIgnoreCase(element, "childMods", out _) ||
+               (TryGetJsonPropertyIgnoreCase(element, "source", out var source) &&
+                source.ValueKind == JsonValueKind.Object);
+    }
+
+    private static bool IsInheritedCompositeSourceEntry(JsonElement sourceEntry)
+    {
+        if (sourceEntry.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        if (TryGetSourceRelationProperty(sourceEntry, "parentMod", out var parentMod) &&
+            parentMod.ValueKind == JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        if (!TryGetSourceRelationProperty(sourceEntry, "sourceKind", out var sourceKind) ||
+            sourceKind.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var kind = sourceKind.GetString()?.Trim();
+        return string.Equals(kind, "parent-inherited", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "modpack-parent-inherited", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetJsonPropertyIgnoreCase(
@@ -6043,15 +6113,43 @@ public sealed class ModpackInstallService
 
     private static bool HasExplicitCompositeSourceRelation(JsonElement source)
     {
-        if (TryGetJsonPropertyIgnoreCase(source, "childMods", out var childMods) &&
+        if (TryGetSourceRelationProperty(source, "childMods", out var childMods) &&
             childMods.ValueKind == JsonValueKind.Array &&
             childMods.GetArrayLength() > 0)
         {
             return true;
         }
 
-        return TryGetJsonPropertyIgnoreCase(source, "parentMod", out var parentMod) &&
+        return TryGetSourceRelationProperty(source, "parentMod", out var parentMod) &&
                parentMod.ValueKind == JsonValueKind.Object;
+    }
+
+    /// <summary>
+    /// 读取整合包来源条目的父子关系。
+    ///
+    /// SVL 当前格式把关系放在条目顶层，但部分第三方导出器会把完整来源
+    /// 包装在 <c>source</c> 对象中，并把 childMods/parentMod 一并放进去。
+    /// 顶层字段优先，嵌套字段只作为兼容回退，避免旧字段覆盖新关系。
+    /// </summary>
+    private static bool TryGetSourceRelationProperty(
+        JsonElement sourceEntry,
+        string propertyName,
+        out JsonElement value)
+    {
+        if (TryGetJsonPropertyIgnoreCase(sourceEntry, propertyName, out value))
+        {
+            return true;
+        }
+
+        if (TryGetJsonPropertyIgnoreCase(sourceEntry, "source", out var nestedSource) &&
+            nestedSource.ValueKind == JsonValueKind.Object &&
+            TryGetJsonPropertyIgnoreCase(nestedSource, propertyName, out value))
+        {
+            return true;
+        }
+
+        value = default;
+        return false;
     }
 
     private static bool HasPersistedParentSourceRelation(string modDirectory)
@@ -6083,7 +6181,7 @@ public sealed class ModpackInstallService
         string parentDirectory,
         JsonElement sourceEntry)
     {
-        if (!TryGetJsonPropertyIgnoreCase(sourceEntry, "childMods", out var childMods) ||
+        if (!TryGetSourceRelationProperty(sourceEntry, "childMods", out var childMods) ||
             childMods.ValueKind != JsonValueKind.Array)
         {
             return;

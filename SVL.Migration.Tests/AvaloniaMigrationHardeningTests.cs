@@ -1951,6 +1951,90 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void SvlModpackImport_ShouldReadNestedSourceParentRelation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-nested-source-relation-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentPath = Path.Combine(modsPath, "Parent Mod");
+        var childPath = Path.Combine(modsPath, "Child Mod");
+        try
+        {
+            Directory.CreateDirectory(parentPath);
+            Directory.CreateDirectory(childPath);
+            File.WriteAllText(
+                Path.Combine(parentPath, "manifest.json"),
+                "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "manifest.json"),
+                "{\"Name\":\"Child Mod\",\"UniqueID\":\"Example.Child\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+
+            // 第三方导出把 childMods 放在 source 对象中，且保存了已失效的旧
+            // 路径；导入器应按子 Mod 的 UniqueID/Name 回退到实际目录。
+            using var document = JsonDocument.Parse(
+                "[{\"name\":\"Parent Mod\",\"directoryName\":\"Parent Mod\",\"source\":{\"platform\":\"Curseforge\",\"projectId\":994458,\"fileId\":8390242,\"childMods\":[{\"name\":\"Child Mod\",\"uniqueId\":\"Example.Child\",\"relativePath\":\"Old Parent/Child Mod\"}]}}]");
+            var writer = typeof(ModpackInstallService).GetMethod(
+                "WriteSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(writer);
+
+            writer!.Invoke(null, [document.RootElement.EnumerateArray().Select(item => item.Clone()).ToList(), modsPath]);
+
+            using var parentDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(parentPath, "svl-source.json")));
+            var parent = parentDocument.RootElement;
+            Assert.AreEqual("modpack-entry", parent.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("994458", parent.GetProperty("projectId").GetString());
+            Assert.AreEqual("8390242", parent.GetProperty("fileId").GetString());
+            Assert.AreEqual(1, parent.GetProperty("childMods").GetArrayLength());
+
+            using var childDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(childPath, "svl-source.json")));
+            var child = childDocument.RootElement;
+            Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("Parent Mod", child.GetProperty("parentMod").GetProperty("name").GetString());
+            Assert.IsFalse(child.TryGetProperty("projectId", out _));
+            Assert.IsFalse(child.TryGetProperty("fileId", out _));
+
+            using var inheritedEntryDocument = JsonDocument.Parse(
+                "{\"name\":\"Child Mod\",\"source\":{\"sourceKind\":\"parent-inherited\",\"parentMod\":{\"name\":\"Parent Mod\",\"relativePath\":\"Parent Mod\"}}}");
+            var isInheritedEntry = typeof(ModpackInstallService).GetMethod(
+                "IsInheritedCompositeSourceEntry",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(isInheritedEntry);
+            Assert.IsTrue((bool)isInheritedEntry!.Invoke(null, [inheritedEntryDocument.RootElement])!,
+                "嵌套 source 中的父子关系必须从独立下载队列排除");
+
+            using var relationMapDocument = JsonDocument.Parse(
+                "{\"Child Mod\":{\"source\":{\"sourceKind\":\"parent-inherited\",\"parentMod\":{\"name\":\"Parent Mod\"}}}}");
+            var parseSourceEntries = typeof(ModpackInstallService).GetMethod(
+                "ParseSourceEntries",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(parseSourceEntries);
+            var parsedEntries = (List<JsonElement>)parseSourceEntries!.Invoke(
+                null,
+                [relationMapDocument.RootElement])!;
+            Assert.AreEqual(1, parsedEntries.Count,
+                "只有归属关系、没有独立下载 ID 的子项也必须保留在来源清单解析中");
+            Assert.AreEqual("Child Mod", parsedEntries[0].GetProperty("name").GetString());
+
+            var getSourceDescriptor = typeof(ModpackInstallService).GetMethod(
+                "TryGetModSourceDescriptor",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(getSourceDescriptor);
+            object[] descriptorArguments = [inheritedEntryDocument.RootElement, null];
+            Assert.IsFalse((bool)getSourceDescriptor!.Invoke(null, descriptorArguments)!,
+                "parent-inherited 只是归属关系，不是一个可下载来源");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void ExistingCompositeSources_ShouldRepairMixedFileIdsOnReload()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-existing-composite-repair-test-" + Guid.NewGuid().ToString("N"));
