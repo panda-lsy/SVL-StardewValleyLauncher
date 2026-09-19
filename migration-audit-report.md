@@ -42,7 +42,7 @@ Windows/Linux/macOS 测试矩阵、Linux ZIP、Windows 包、macOS 双架构 `.a
 | Nexus Collection 的 `manual` 来源 | WPF 安装器仍是 TODO；Avalonia 已覆盖 NXM、API、浏览器回调及 HTTP 直链，并将 `manual` 网页/无来源条目标记为需手动处理；只有明确归档直链才自动下载 | 任务页保留来源地址并提供“打开来源”，用户完成下载后可拖入当前实例 Mods 页面；不把网页地址当压缩包 |
 | Nexus Collection 非 Premium 逐项向导 | WPF 的 `NexusCollectionWizardTask` 还提供阶段分页、上一页/下一页和手动跳过可选 Mod；Avalonia 继续使用统一安装队列，任务详情已展示当前 Mod、阶段、可选/必需状态、逐项结果，并支持打开来源或选择本地归档恢复；可选 Mod 自动失败现在进入“待处理”，用户可明确选择“选择文件并安装”或“跳过可选 Mod”，选择会持久化并在重试时生效；任务详情现已补齐 Collection Mod 列表分页、上一页/下一页导航，不改变统一队列的实际安装顺序 | 保持统一队列作为默认路径；后续仅需进行真实 Collection 的可见 UI 验收，不恢复旧任务类型 |
 | 启动器“发现新版本后自动下载”设置 | WPF 只保存 `AutoDownloadUpdate` 字段，旧启动流程未消费；Avalonia 已迁移该设置并接入更新弹窗 | 发现新版本后可自动下载首个发布资产；下载完成仍需用户点击“安装并重启”，不会静默执行安装 |
-| WPF 系统托盘设置 | `main` 的 WPF 仅保存 `MinimizeToTrayOnStartup/OnClose` 两个字段，没有 `NotifyIcon/TrayIcon`、菜单或关闭/恢复运行时逻辑；Avalonia 已迁移字段和设置界面，但没有可供对照的成熟托盘实现 | 不计为 `main` 漏迁移；如果产品仍需要托盘运行时行为，应作为独立跨平台功能设计并实现 |
+| WPF 系统托盘设置 | `main` 的 WPF 仅保存 `MinimizeToTrayOnStartup/OnClose` 两个字段，没有 `NotifyIcon/TrayIcon`、菜单或关闭/恢复运行时逻辑；Avalonia 已迁移字段和设置界面，并补齐了独立的跨平台托盘运行时 | Avalonia 已提供托盘图标、“显示主窗口/退出”菜单、启动/关闭隐藏及不支持平台回退；Windows/macOS/Linux 实机托盘图标和原生菜单仍需验收，不计为 `main` 漏迁移 |
 | 游戏启动后启动器可见性行为 | WPF 的 `LauncherVisibility` 五种行为此前只完成了配置对照，Avalonia 未接入实际启动生命周期 | 已迁移立即关闭、隐藏后随游戏退出关闭、隐藏后随游戏退出恢复、最小化、保持不变；旧枚举数值/字符串均可迁移，并由游戏进程退出事件驱动恢复 |
 | 本地 Modpack 管理列表 | `main` 的 `ModpacksLeft/RightViewModel` 仍只显示“开发中”；不是可迁移的完整功能 | 继续使用 Avalonia 的实例导入、版本设置导出和在线 Modpack 页面；未来若需要再设计独立列表 |
 | WPF 个性化字段 `PrimaryColor` | 旧配置和设置 ViewModel 有该字段，但旧 `ThemeService` 没有实际应用它；它不是 `main` 中可工作的独立功能 | 已补齐为可选自定义强调色：设置页支持 `#RGB/#RRGGBB`，留空跟随当前主题；旧默认值 `#7C4DFF` 不会改变 Stardew 默认配色；主题/深浅色切换后保持覆盖，并有无效输入保护与回归测试 |
