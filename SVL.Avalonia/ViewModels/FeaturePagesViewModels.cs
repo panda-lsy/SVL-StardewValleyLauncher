@@ -8880,9 +8880,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 // manifest.json 的 Version 字段；只比较版本号会导致用户已经
                 // 安装最新文件后仍反复看到“可更新”。当当前目录记录的 FileID
                 // 与远端最新文件一致时，以文件身份为准，不再重复提示。
-                result.HasUpdate = latestFileId > 0 &&
-                                   latestFileId != currentFileId &&
-                                   IsRemoteVersionNewer(mod.Version, remoteVersion);
+                result.HasUpdate = ShouldMarkRemoteFileAsUpdate(
+                    currentFileId,
+                    latestFileId,
+                    mod.Version,
+                    remoteVersion);
                 result.IsChecked = true;
                 result.UpdateFileId = latestFileId;
                 // 构造 NXM 链接供批量更新入队（DownloadPage 会解析并下载）
@@ -8931,24 +8933,14 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
                 await using var stream = await response.Content.ReadAsStreamAsync();
                 using var doc = await JsonDocument.ParseAsync(stream);
-                if (!doc.RootElement.TryGetProperty("data", out var files) || files.ValueKind != JsonValueKind.Array)
+                if (!TryGetCurseforgeFilesArray(doc.RootElement, out var files))
                 {
                     continue;
                 }
 
-                JsonElement? latest = null;
-                long latestFileId = -1;
-                foreach (var file in files.EnumerateArray())
-                {
-                    var fileId = GetJsonLongByCandidates(file, "id", "fileId");
-                    if (latest == null || fileId > latestFileId)
-                    {
-                        latest = file;
-                        latestFileId = fileId;
-                    }
-                }
+                var latest = TrySelectLatestCurseforgeFile(files, out var latestFileId);
 
-                if (latest.HasValue)
+                if (latest.HasValue && latestFileId > 0)
                 {
                     var remoteVersion = FirstNonEmpty(
                         ExtractVersionFromText(GetJsonStringFlexibleByCandidates(latest.Value, "displayName", "display_name")),
@@ -8957,9 +8949,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     // 与 Nexus 一样，CurseForge FileID 比 manifest 版本更能
                     // 代表当前安装的发布文件；处理“文件已更新、manifest 仍旧”
                     // 的 Mod，避免更新完成后再次提示同一文件可更新。
-                    result.HasUpdate = latestFileId > 0 &&
-                                       latestFileId != currentFileId &&
-                                       IsRemoteVersionNewer(mod.Version, remoteVersion);
+                    result.HasUpdate = ShouldMarkRemoteFileAsUpdate(
+                        currentFileId,
+                        latestFileId,
+                        mod.Version,
+                        remoteVersion);
                     result.IsChecked = true;
                     result.UpdateFileId = latestFileId;
                     // 提取 Curseforge 直链供批量更新入队
@@ -8976,6 +8970,174 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             }
         }
         return result;
+    }
+
+    /// <summary>
+    /// 文件身份优先于 manifest 版本文本。
+    ///
+    /// 很多 CurseForge/Nexus 发布包沿用旧 manifest.json 版本，或者文件名没有
+    /// 可解析的版本号。只要本地已记录稳定 FileID，远端最新 FileID 变化就说明
+    /// 发布文件已经变化；这能避免更新完成后因为元信息没同步而反复提示更新。
+    /// 当本地没有 FileID 时仍要求版本号明确变新，防止历史 Mod 被误报。
+    /// </summary>
+    private static bool ShouldMarkRemoteFileAsUpdate(
+        long currentFileId,
+        long remoteFileId,
+        string localVersion,
+        string remoteVersion)
+    {
+        if (remoteFileId <= 0 || remoteFileId == currentFileId)
+        {
+            return false;
+        }
+
+        return IsRemoteVersionNewer(localVersion, remoteVersion) ||
+               (currentFileId > 0 && !string.IsNullOrWhiteSpace(remoteVersion));
+    }
+
+    private static bool TryGetCurseforgeFilesArray(
+        JsonElement root,
+        out JsonElement files)
+    {
+        if (root.ValueKind == JsonValueKind.Array)
+        {
+            files = root;
+            return true;
+        }
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            files = default;
+            return false;
+        }
+
+        // curse.tools 的响应有 data、result、files、results 等多个历史包装；
+        // 先按语义字段查找，再递归其它对象，避免把 dependencies/modules 等
+        // 数组误当成文件列表。
+        var preferredNames = new[] { "data", "files", "result", "results", "items" };
+        foreach (var name in preferredNames)
+        {
+            if (TryGetJsonPropertyIgnoreCase(root, name, out var candidate) &&
+                TryGetCurseforgeFilesArray(candidate, out files))
+            {
+                return true;
+            }
+        }
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (preferredNames.Any(name =>
+                    string.Equals(name, property.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            if (TryGetCurseforgeFilesArray(property.Value, out files))
+            {
+                return true;
+            }
+        }
+
+        files = default;
+        return false;
+    }
+
+    private static JsonElement? TrySelectLatestCurseforgeFile(
+        JsonElement files,
+        out long fileId)
+    {
+        fileId = 0;
+        if (files.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        JsonElement latest = default;
+        var found = false;
+        var latestHasDate = false;
+        var latestDate = DateTimeOffset.MinValue;
+        var latestId = 0L;
+
+        foreach (var file in files.EnumerateArray())
+        {
+            if (file.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var availability = GetJsonStringFlexibleByCandidates(file, "isAvailable", "available");
+            if (string.Equals(availability, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var candidateId = GetJsonLongByCandidates(file, "id", "fileId", "file_id");
+            var candidateDate = TryGetCurseforgeFileDate(file, out var parsedDate);
+            var isNewer = !found ||
+                          (candidateDate && !latestHasDate) ||
+                          (candidateDate && latestHasDate && parsedDate > latestDate) ||
+                          (candidateDate == latestHasDate &&
+                           (!candidateDate || parsedDate == latestDate) &&
+                           candidateId > latestId);
+            if (!isNewer)
+            {
+                continue;
+            }
+
+            latest = file;
+            latestId = candidateId;
+            latestHasDate = candidateDate;
+            latestDate = candidateDate ? parsedDate : DateTimeOffset.MinValue;
+            found = true;
+        }
+
+        fileId = latestId;
+        return found ? latest : null;
+    }
+
+    private static bool TryGetCurseforgeFileDate(
+        JsonElement file,
+        out DateTimeOffset date)
+    {
+        var rawDate = GetJsonStringFlexibleByCandidates(
+            file,
+            "fileDate",
+            "file_date",
+            "releaseDate",
+            "release_date",
+            "uploadedAt",
+            "uploaded_at",
+            "date");
+        if (DateTimeOffset.TryParse(
+                rawDate,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out date))
+        {
+            return true;
+        }
+
+        var timestamp = GetJsonLongByCandidates(
+            file,
+            "uploadedTimestamp",
+            "uploaded_timestamp",
+            "releaseTimestamp",
+            "release_timestamp");
+        if (timestamp > 0)
+        {
+            try
+            {
+                date = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+                return true;
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Ignore malformed timestamps and fall back to FileID ordering.
+            }
+        }
+
+        date = default;
+        return false;
     }
 
     private static bool IsRemoteVersionNewer(string localVersion, string remoteVersion)
@@ -15076,7 +15238,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     {
         foreach (var candidate in candidates)
         {
-            if (!element.TryGetProperty(candidate, out var propertyElement))
+            if (!TryGetJsonPropertyIgnoreCase(element, candidate, out var propertyElement))
             {
                 continue;
             }
@@ -15086,7 +15248,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 return value;
             }
 
-            if (propertyElement.ValueKind == JsonValueKind.String && long.TryParse(propertyElement.GetString(), out value))
+            if (propertyElement.ValueKind == JsonValueKind.String &&
+                long.TryParse(
+                    propertyElement.GetString(),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out value))
             {
                 return value;
             }

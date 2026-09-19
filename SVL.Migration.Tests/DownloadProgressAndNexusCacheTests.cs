@@ -1645,6 +1645,44 @@ public sealed class DownloadProgressAndNexusCacheTests
     }
 
     [TestMethod]
+    public void CurseforgeUpdateParser_ShouldSelectNewestReleaseDateInsteadOfLargestFileId()
+    {
+        var arrayParser = typeof(VersionSettingsPageViewModel).GetMethod(
+            "TryGetCurseforgeFilesArray",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        var selector = typeof(VersionSettingsPageViewModel).GetMethod(
+            "TrySelectLatestCurseforgeFile",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(arrayParser);
+        Assert.IsNotNull(selector);
+
+        using var document = JsonDocument.Parse("""
+            {
+              "result": {
+                "data": {
+                  "files": [
+                    { "id": 9000000, "displayName": "New release 3.0.0.zip", "fileDate": "2026-01-01T00:00:00Z" },
+                    { "id": 8000000, "displayName": "Latest release 3.1.0.zip", "fileDate": "2026-02-01T00:00:00Z" }
+                  ]
+                }
+              }
+            }
+            """);
+
+        var arrayArguments = new object[] { document.RootElement, null! };
+        Assert.IsTrue((bool)arrayParser!.Invoke(null, arrayArguments)!);
+        var files = (JsonElement)arrayArguments[1]!;
+
+        var selectorArguments = new object[] { files, 0L };
+        var selected = (JsonElement?)selector!.Invoke(null, selectorArguments);
+        Assert.IsTrue(selected.HasValue);
+        Assert.AreEqual(8000000L, (long)selectorArguments[1]);
+        Assert.AreEqual(
+            "Latest release 3.1.0.zip",
+            selected!.Value.GetProperty("displayName").GetString());
+    }
+
+    [TestMethod]
     public void ExportSourceFileId_ShouldRecoverFromLegacyLocalNames()
     {
         var parser = typeof(VersionSettingsPageViewModel).GetMethod(

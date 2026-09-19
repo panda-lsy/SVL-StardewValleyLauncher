@@ -2603,6 +2603,28 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void RemoteFileUpdate_ShouldUseFileIdentityWhenManifestVersionStaysOld()
+    {
+        var viewModelType = typeof(VersionSettingsPageViewModel);
+        var guard = viewModelType.GetMethod(
+            "ShouldMarkRemoteFileAsUpdate",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.IsNotNull(guard);
+
+        var unchanged = (bool)guard!.Invoke(null, [7448774L, 7448774L, "2.9.0", "2.9.0"])!;
+        Assert.IsFalse(unchanged, "当前 FileID 已是远端目标时不能重复提示更新");
+
+        var staleManifest = (bool)guard.Invoke(null, [7448774L, 7759981L, "2.9.0", "2.9.0"])!;
+        Assert.IsTrue(staleManifest, "发布文件已变化时，即使 manifest 版本未同步也应提示更新");
+
+        var legacyWithoutFileId = (bool)guard.Invoke(null, [0L, 7759981L, "2.9.0", "2.9.0"])!;
+        Assert.IsFalse(legacyWithoutFileId, "历史来源没有 FileID 且版本未变时不能仅凭远端 ID 误报");
+
+        var versionOnly = (bool)guard.Invoke(null, [0L, 7759981L, "2.9.0", "2.9.1"])!;
+        Assert.IsTrue(versionOnly, "历史来源没有 FileID 但远端版本明确变新时仍应提示更新");
+    }
+
+    [TestMethod]
     public void ExistingCompositeSources_ShouldRecoverChildWithoutSourceCredentialByManifestNamespace()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-composite-missing-child-source-test-" + Guid.NewGuid().ToString("N"));
