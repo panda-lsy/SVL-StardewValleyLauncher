@@ -402,3 +402,12 @@ junction 仍只执行结构性断开，下载缓存和临时目录继续按生�
 状态改为显式的 `IsModEnabled`/`IsModDisabled` 绑定，避免用颜色字符串承担状态语义。
 新增浅色/深色资源回归断言；当前迁移测试仍为 **352 总计、348 通过、4 跳过**，
 Avalonia Debug 构建 0 警告/错误。
+
+2026-09-19 再次抓取上游 refs：`upstream/main=19ef4ef` 相对共同祖先仍只有
+`README.md` 说明性提交；`upstream/Dev-Avalonia=a5f9669` 没有当前工作树之外的
+提交，`upstream/Avalonia-Dev=583f3e8` 已与当前工作树一致，因此没有发现新的
+待迁移业务代码。通过已配置的 CurseForge MCP 只读核对了 `Market Town`（项目
+994458）、`More Accessories`（项目 1012214）、`Content Patcher`（项目 309243）
+和 `Cape Stardew`（项目 995972）的来源身份；这次核对不改变应用缓存或远端数据。
+Nexus MCP 已配置但当前开发环境尚未提供 API Key/Cookie，真实 Nexus 账号验收仍
+保持为发布前检查项。
