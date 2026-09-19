@@ -371,3 +371,7 @@ junction 仍只执行结构性断开，下载缓存和临时目录继续按生�
 新建版本目录。现改为先断开版本内的 `Content`/`game` junction，再将版本目录移入
 系统回收站；回收失败时保留目录并记录警告。Collection 解压目录和临时 SMAPI 包仍
 按临时生命周期清理。`SVL.Core` 与 `SVL.Desktop` Debug 构建均通过，0 警告、0 错误。
+
+随后重新抓取上游 refs：`upstream/main=19ef4ef` 在共同祖先之后仍只有 README 说明提交，
+`upstream/Dev-Avalonia=a5f9669` 没有当前工作树遗漏的提交；本轮提交 `5676700` 已快进
+到 `upstream/Avalonia-Dev`，因此当前上游 Avalonia 分支与本工作树一致。
