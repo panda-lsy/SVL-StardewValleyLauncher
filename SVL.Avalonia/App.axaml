@@ -15,6 +15,7 @@
 
       <!-- PCL 星露谷风格配色系统（ThemeService 运行时更新这些资源） -->
       <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F5EDE0" />
+      <SolidColorBrush x:Key="WindowTransparencyFallbackBrush" Color="#F5EDE0" />
       <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#D47748" />
       <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FAF7EE" />
       <SolidColorBrush x:Key="PanelBorderBrush" Color="#B89B7F" />

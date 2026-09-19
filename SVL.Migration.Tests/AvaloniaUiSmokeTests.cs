@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Animation;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -33,6 +34,18 @@ public sealed class AvaloniaUiSmokeTests
             {
                 window.Show();
                 window.UpdateLayout();
+
+                var mainPagePanel = window.GetVisualDescendants()
+                    .OfType<Border>()
+                    .Single(border => border.Classes.Contains("panel"));
+                var pagePresenter = mainPagePanel.GetVisualDescendants()
+                    .OfType<ContentControl>()
+                    .Single();
+                var pageRoot = new UserControl();
+                pagePresenter.Content = pageRoot;
+                window.UpdateLayout();
+                Assert.IsTrue(pageRoot.Background is ISolidColorBrush pageBrush && pageBrush.Color.A == 0x00,
+                    "主窗口页面根 UserControl 必须透明，避免额外叠加主题底色");
 
                 var buttons = window
                     .GetVisualDescendants()
@@ -103,6 +116,243 @@ public sealed class AvaloniaUiSmokeTests
             }
             finally
             {
+                window.Close();
+            }
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void MainWindow_ShouldKeepCaptionButtonsAlignedAndHittableAtFractionalRenderScales()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+
+        session.Dispatch(() =>
+        {
+            var window = new MainWindow();
+            try
+            {
+                window.Show();
+
+                foreach (var renderScale in new[] { 1.25, 1.5 })
+                {
+                    SetHeadlessRenderScale(window, renderScale);
+                    window.UpdateLayout();
+
+                    Assert.AreEqual(renderScale, window.RenderScaling, 0.001,
+                        $"Headless 窗口应已应用 {renderScale:P0} 渲染缩放");
+
+                    var buttons = window
+                        .GetVisualDescendants()
+                        .OfType<Button>()
+                        .Where(button => button.Classes.Contains("winCtrl"))
+                        .ToList();
+                    Assert.AreEqual(3, buttons.Count);
+                    Assert.IsTrue(buttons.All(button =>
+                            Math.Abs(button.Bounds.Width - 40) < 0.01 &&
+                            Math.Abs(button.Bounds.Height - 48) < 0.01),
+                        $"{renderScale:P0} 下三个按钮应保留相同的可点击单元格尺寸");
+
+                    var canvases = buttons
+                        .SelectMany(button => button.GetVisualDescendants().OfType<Grid>())
+                        .Where(grid => Math.Abs(grid.Bounds.Width - 24) < 0.01 &&
+                                       Math.Abs(grid.Bounds.Height - 24) < 0.01)
+                        .ToList();
+                    Assert.AreEqual(3, canvases.Count,
+                        $"{renderScale:P0} 下三个图形均应保留 24×24 画布");
+                    var minimizeButton = buttons.Single(button => button.Classes.Contains("min"));
+                    var minimizeGlyph = minimizeButton.GetVisualDescendants().OfType<Rectangle>().Single();
+                    var minimizeCanvas = minimizeGlyph.GetVisualAncestors().OfType<Grid>()
+                        .Single(grid => Math.Abs(grid.Bounds.Width - 24) < 0.01 &&
+                                        Math.Abs(grid.Bounds.Height - 24) < 0.01);
+                    var glyphCenter = minimizeGlyph.TranslatePoint(
+                        new Point(minimizeGlyph.Bounds.Width / 2, minimizeGlyph.Bounds.Height / 2),
+                        minimizeCanvas);
+                    Assert.IsNotNull(glyphCenter);
+                    Assert.IsTrue(Math.Abs(glyphCenter!.Value.Y - minimizeCanvas.Bounds.Height / 2) <= 0.5,
+                        $"{renderScale:P0} 下最小化图形中心偏差不能超过半个 DIP");
+
+                    var centers = buttons
+                        .Select(button => button.TranslatePoint(
+                            new Point(button.Bounds.Width / 2, button.Bounds.Height / 2),
+                            window))
+                        .ToList();
+                    Assert.IsTrue(centers.All(center => center.HasValue));
+                    Assert.AreEqual(1, centers
+                        .Select(center => Math.Round(center!.Value.Y, 2))
+                        .Distinct()
+                        .Count(),
+                        $"{renderScale:P0} 下三个标题栏按钮应仍在同一水平中心线上");
+                    Assert.AreEqual(3, centers
+                        .Select(center => Math.Round(center!.Value.X, 2))
+                        .Distinct()
+                        .Count(),
+                        "三个按钮必须保持独立的命中区域");
+
+                    for (var i = 0; i < buttons.Count; i++)
+                    {
+                        var button = buttons[i];
+                        Assert.IsTrue(button.IsHitTestVisible && button.IsVisible && button.IsEnabled,
+                            $"{renderScale:P0} 下窗口按钮必须保持可见、启用且参与命中测试");
+                        Assert.IsTrue(new Rect(0, 0, button.Bounds.Width, button.Bounds.Height)
+                                .Contains(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2)),
+                            $"{renderScale:P0} 下按钮中心必须落在自身命中区域内");
+                    }
+                }
+            }
+            finally
+            {
+                SetHeadlessRenderScale(window, 1d);
+                window.Close();
+            }
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    private static void SetHeadlessRenderScale(Window window, double scale)
+    {
+        // Avalonia.Headless 11.2.8 未暴露 DPI 参数；在测试窗口的 headless 实现上
+        // 改变平台缩放并发送标准 ScalingChanged 回调，覆盖 125%/150% 布局舍入路径。
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic;
+        var platformImplField = typeof(TopLevel).GetField("<PlatformImpl>k__BackingField", flags);
+        var platformImpl = platformImplField?.GetValue(window);
+        Assert.IsNotNull(platformImpl, "Headless 窗口必须已创建平台实现");
+
+        var implementationType = platformImpl!.GetType();
+        var scalingField = implementationType.GetField("<RenderScaling>k__BackingField", flags);
+        Assert.IsNotNull(scalingField, "Headless 平台应公开渲染缩放的内部存储");
+        scalingField!.SetValue(platformImpl, scale);
+
+        var scalingChangedProperty = implementationType.GetProperty(
+            "ScalingChanged",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+        var scalingChanged = scalingChangedProperty?.GetValue(platformImpl) as Action<double>;
+        Assert.IsNotNull(scalingChanged, "TopLevel 应订阅 headless 平台的缩放变化");
+        scalingChanged!(scale);
+    }
+
+    [TestMethod]
+    public void TransparencyPreference_ShouldDriveThemeAlphaAndWindowLevelHints()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+
+        session.Dispatch(() =>
+        {
+            var previousTransparency = ThemeService.TransparencyEnabled;
+            var previousPrimaryColor = ThemeService.CustomPrimaryColorHex;
+            var resources = Application.Current!.Resources;
+            var window = new MainWindow();
+            var windowResources = window.Resources;
+            var rootGrid = (Grid)window.Content!;
+            var windowBackdrop = rootGrid.Children.OfType<Border>()
+                .Single(border => border.Name == "WindowBackdrop");
+            var applyTransparency = typeof(MainWindow).GetMethod(
+                "ApplyWindowTransparency",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(applyTransparency);
+
+            try
+            {
+                Assert.AreEqual("WindowBackdrop", windowBackdrop.Name,
+                    "主窗口应使用独立主题铺层，而不是将着色画刷直接设为 Window.Background");
+                Assert.IsTrue(window.Background is ISolidColorBrush rootBackground && rootBackground.Color.A == 0x00,
+                    "主窗口根背景必须透明，避免覆盖平台透明合成材质");
+                Assert.IsFalse(windowBackdrop.IsHitTestVisible,
+                    "主题背景铺层不应挡住主窗口内容的鼠标命中");
+
+                ThemeService.SetTransparencyEnabled(false);
+                applyTransparency!.Invoke(window, [false]);
+                Assert.AreEqual((byte)0xFF,
+                    ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
+                    "关闭透明效果时主窗口背景应回到不透明");
+                Assert.AreEqual((byte)0xFF,
+                    ((ISolidColorBrush)windowBackdrop.Background!).Color.A,
+                    "窗口铺层必须实际使用主窗口作用域的不透明画刷");
+                Assert.AreEqual((byte)0xFF,
+                    ((SolidColorBrush)windowResources["PanelBackgroundBrush"]!).Color.A,
+                    "关闭透明效果时主页面面板应回到不透明，保持原有可读性");
+                Assert.AreEqual((byte)0xFF,
+                    ((SolidColorBrush)windowResources["HeaderBackgroundBrush"]!).Color.A,
+                    "关闭透明效果时主窗口标题栏应回到不透明");
+                Assert.AreEqual((byte)0xFF,
+                    ((SolidColorBrush)windowResources["WindowTransparencyFallbackBrush"]!).Color.A,
+                    "不支持透明的后端应使用不透明主题色回退");
+                CollectionAssert.AreEqual(
+                    new[] { WindowTransparencyLevel.None },
+                    window.TransparencyLevelHint.ToArray());
+                var disabledDiagnostic = DebugConsoleService.Instance.Snapshot()
+                    .LastOrDefault(entry => entry.Text.Contains(
+                        "[WindowTransparency] 设置已关闭",
+                        StringComparison.Ordinal));
+                Assert.IsNotNull(disabledDiagnostic, "关闭透明效果时应记录平台实际透明级别");
+                StringAssert.Contains(disabledDiagnostic!.Text, "requested=[None]");
+                StringAssert.Contains(disabledDiagnostic.Text, $"actual={window.ActualTransparencyLevel}");
+
+                ThemeService.SetTransparencyEnabled(true);
+                applyTransparency.Invoke(window, [true]);
+                Assert.AreEqual((byte)0x80,
+                    ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
+                    "主窗口底色必须足够透明，让 Acrylic 材质可见");
+                Assert.AreEqual((byte)0x80,
+                    ((ISolidColorBrush)windowBackdrop.Background!).Color.A,
+                    "窗口铺层应实际解析到主窗口作用域的半透明画刷");
+                Assert.AreEqual((byte)0xB3,
+                    ((SolidColorBrush)windowResources["HeaderBackgroundBrush"]!).Color.A,
+                    "主窗口标题栏应透出 Acrylic 材质");
+                Assert.AreEqual((byte)0x66,
+                    ((SolidColorBrush)windowResources["PanelBackgroundBrush"]!).Color.A,
+                    "主页面面板应使用独立半透明画刷");
+                Assert.AreEqual((byte)0xBF,
+                    ((SolidColorBrush)windowResources["CardBrush"]!).Color.A,
+                    "主页面卡片也必须半透明，避免不透明卡片遮住整个窗口的 Acrylic 材质");
+                Assert.AreEqual((byte)0xCC,
+                    ((SolidColorBrush)windowResources["SurfaceBrush"]!).Color.A,
+                    "主页面输入框与表面容器应使用半透明画刷");
+                Assert.AreEqual((byte)0xFF,
+                    ((SolidColorBrush)resources["CardBrush"]!).Color.A,
+                    "主窗口透明效果不得让 Debug/确认弹窗等其它窗口的卡片意外透明");
+
+                var shellGrid = (Grid)window.Content!;
+                var pageHost = shellGrid.Children.OfType<Grid>()
+                    .Single(grid => Grid.GetRow(grid) == 1);
+                var contentPanel = pageHost.Children.OfType<Border>()
+                    .Single(border => border.Classes.Contains("panel"));
+                var pagePresenter = (ContentControl)contentPanel.Child!;
+                var sampleCard = new Border();
+                sampleCard.Classes.Add("hintCard");
+                var samplePage = new UserControl { Content = sampleCard };
+                pagePresenter.Content = samplePage;
+                window.UpdateLayout();
+                Assert.IsTrue(samplePage.Background is ISolidColorBrush pageBackground && pageBackground.Color.A == 0,
+                    "实际嵌入的主页面根控件应透明");
+                Assert.AreEqual((byte)0xBF,
+                    ((ISolidColorBrush)sampleCard.Background!).Color.A,
+                    "实际主页面卡片必须解析到局部半透明画刷");
+                CollectionAssert.AreEqual(
+                    new[] { WindowTransparencyLevel.Transparent, WindowTransparencyLevel.AcrylicBlur },
+                    window.TransparencyLevelHint.ToArray());
+                var enabledDiagnostic = DebugConsoleService.Instance.Snapshot()
+                    .LastOrDefault(entry => entry.Text.Contains(
+                        "[WindowTransparency] 设置已开启",
+                        StringComparison.Ordinal));
+                Assert.IsNotNull(enabledDiagnostic, "启用透明效果时应记录平台实际透明级别");
+                StringAssert.Contains(enabledDiagnostic!.Text, "requested=[Transparent, AcrylicBlur]");
+                StringAssert.Contains(enabledDiagnostic.Text, $"actual={window.ActualTransparencyLevel}");
+
+                Assert.IsTrue(ThemeService.TrySetCustomPrimaryColor("#123456", out var themeError), themeError);
+                var themedHeader = (SolidColorBrush)resources["HeaderBackgroundBrush"]!;
+                var windowHeader = (SolidColorBrush)windowResources["HeaderBackgroundBrush"]!;
+                Assert.AreEqual(themedHeader.Color.R, windowHeader.Color.R,
+                    "主题强调色变化后，主窗口局部标题栏画刷应同步主题颜色");
+                Assert.AreEqual(themedHeader.Color.G, windowHeader.Color.G);
+                Assert.AreEqual(themedHeader.Color.B, windowHeader.Color.B);
+                Assert.AreEqual((byte)0xB3, windowHeader.Color.A,
+                    "主题变更同步颜色时仍须保留主窗口标题栏透明度");
+            }
+            finally
+            {
+                ThemeService.SetTransparencyEnabled(previousTransparency);
+                ThemeService.TrySetCustomPrimaryColor(previousPrimaryColor, out _);
                 window.Close();
             }
         }, CancellationToken.None).GetAwaiter().GetResult();

@@ -1764,7 +1764,7 @@ public partial class SettingsPageViewModel : ObservableObject
             return new NxmProtocolRegistrationResult
             {
                 IsSuccess = false,
-                IsSupported = OperatingSystem.IsWindows(),
+                IsSupported = OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS(),
                 IsRegistered = false,
                 Message = NxmProtocolStatusText
             };

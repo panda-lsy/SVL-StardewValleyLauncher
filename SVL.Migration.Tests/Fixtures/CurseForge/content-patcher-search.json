@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": 309243,
+      "gameId": 669,
+      "name": "Content Patcher",
+      "slug": "content-patcher",
+      "summary": "Load content packs that change the game's data, maps, and images without replacing XNB files.",
+      "downloadCount": 1897001,
+      "dateModified": "2026-03-15T05:12:24.94Z",
+      "logo": {
+        "thumbnailUrl": "https://media.forgecdn.net/avatars/thumbnails/182/370/256/256/636807483214462878.png",
+        "url": "https://media.forgecdn.net/avatars/182/370/636807483214462878.png"
+      },
+      "mainFileId": 7759981
+    },
+    {
+      "id": 317347,
+      "gameId": 669,
+      "name": "Event Repeater - A useful tool for Content Patcher Modding",
+      "slug": "event-repeater-a-useful-tool-for-content-patcher",
+      "summary": "Add depth to  your stories with the option to Repeat events over and over as you need them! Now integrates with Content Patcher!!",
+      "downloadCount": 224132,
+      "dateModified": "2025-10-05T06:23:19.673Z",
+      "logo": {
+        "thumbnailUrl": "https://media.forgecdn.net/avatars/thumbnails/844/841/256/256/638242280155519781.png",
+        "url": "https://media.forgecdn.net/avatars/844/841/638242280155519781.png"
+      },
+      "mainFileId": 7066636
+    }
+  ],
+  "pagination": {
+    "index": 0,
+    "pageSize": 2,
+    "resultCount": 2,
+    "totalCount": 58
+  }
+}

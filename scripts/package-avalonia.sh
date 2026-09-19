@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 迁移文档约定的 Unix 入口，实际参数仍由根目录 build.ps1 统一维护。
+# Unix 入口；具体目标可通过 PACKAGE_TARGETS 环境变量或第二个参数指定。
 config="${1:-Release}"
+targets="${PACKAGE_TARGETS:-${2:-all}}"
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_script="$root_dir/build.ps1"
 
@@ -16,4 +17,4 @@ if ! command -v pwsh >/dev/null 2>&1; then
   exit 1
 fi
 
-pwsh -NoProfile -File "$build_script" -Config "$config" -Targets macos
+pwsh -NoProfile -File "$build_script" -Config "$config" -Targets "$targets"

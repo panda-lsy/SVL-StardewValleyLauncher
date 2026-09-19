@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - Dev-Avalonia
+      - Avalonia-Dev
   workflow_dispatch:
 
 permissions:
@@ -15,8 +16,12 @@ concurrency:
 
 jobs:
   test:
-    name: Build and test
-    runs-on: ubuntu-latest
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -33,22 +38,9 @@ jobs:
         run: dotnet test SVL.Migration.Tests/SVL.Migration.Tests.csproj --configuration Debug --no-restore
 
   package:
-    name: Package ${{ matrix.rid }}
+    name: Package Windows x64
     needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            rid: win-x64
-          - os: ubuntu-latest
-            rid: linux-x64
-          - os: macos-15-intel
-            rid: osx-x64
-          - os: macos-14
-            rid: osx-arm64
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -59,15 +51,111 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore runtime
-        run: dotnet restore SVL.Avalonia/SVL.Avalonia.csproj --runtime ${{ matrix.rid }}
+        run: dotnet restore SVL.Avalonia/SVL.Avalonia.csproj --runtime win-x64
 
       - name: Publish
-        run: dotnet publish SVL.Avalonia/SVL.Avalonia.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --no-restore --output artifacts/${{ matrix.rid }} -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+        run: dotnet publish SVL.Avalonia/SVL.Avalonia.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:
-          name: SVL-Avalonia-${{ matrix.rid }}
-          path: artifacts/${{ matrix.rid }}
+          name: SVL-Avalonia-win-x64
+          path: artifacts/win-x64
+          if-no-files-found: error
+          retention-days: 14
+
+  package-linux:
+    name: Package Linux x64
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build Linux archive with launcher
+        shell: pwsh
+        run: ./build.ps1 -Config Release -Targets linux -OutputDirectory artifacts
+
+      - name: Verify Linux archive entry points
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = Get-ChildItem artifacts -Filter 'SVL_v*_release_Linux_x64.zip' | Select-Object -First 1
+          if ($null -eq $archive) { throw 'Linux archive was not generated.' }
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($archive.FullName)
+          try {
+            $entries = @($zip.Entries | ForEach-Object FullName)
+            if ($entries -notcontains 'SVL.Avalonia') { throw 'Linux apphost is missing from the archive.' }
+            if ($entries -notcontains 'run-svl.sh') { throw 'Linux launcher script is missing from the archive.' }
+            $launcherEntry = $zip.GetEntry('run-svl.sh')
+            $reader = [System.IO.StreamReader]::new($launcherEntry.Open())
+            try {
+              $launcherContent = $reader.ReadToEnd()
+            } finally {
+              $reader.Dispose()
+            }
+            & bash -n -c $launcherContent
+            if ($LASTEXITCODE -ne 0) { throw 'Linux launcher script failed Bash syntax validation.' }
+          } finally {
+            $zip.Dispose()
+          }
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: SVL-Avalonia-linux-x64
+          path: artifacts/SVL_v*_release_Linux_x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  package-macos:
+    name: Package macOS app bundles
+    needs: test
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build app bundles with NXM scheme and disk images
+        shell: pwsh
+        run: ./build.ps1 -Config Release -Targets macos -OutputDirectory artifacts
+
+      - name: Verify both app bundles declare the NXM scheme
+        shell: pwsh
+        run: |
+          $bundles = @(Get-ChildItem artifacts -Directory -Filter '*.app')
+          if ($bundles.Count -ne 2) { throw "Expected 2 macOS app bundles; found $($bundles.Count)." }
+          foreach ($bundle in $bundles) {
+            $plist = Join-Path $bundle.FullName 'Contents/Info.plist'
+            $apphost = Join-Path $bundle.FullName 'Contents/MacOS/SVL.Avalonia'
+            if (-not (Test-Path -LiteralPath $plist -PathType Leaf)) { throw "Missing Info.plist: $plist" }
+            if (-not (Test-Path -LiteralPath $apphost -PathType Leaf)) { throw "Missing macOS apphost: $apphost" }
+            & plutil -lint $plist
+            if ($LASTEXITCODE -ne 0) { throw "Invalid Info.plist: $plist" }
+            $scheme = & /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' $plist
+            if ($LASTEXITCODE -ne 0 -or $scheme.Trim() -ne 'nxm') { throw "NXM URL scheme is missing: $plist" }
+            $minimumSystemVersion = & /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' $plist
+            if ($LASTEXITCODE -ne 0 -or $minimumSystemVersion.Trim() -ne '14.0') {
+              throw "Unexpected macOS minimum system version in $plist: $minimumSystemVersion"
+            }
+          }
+          $images = @(Get-ChildItem artifacts -File -Filter '*.dmg')
+          if ($images.Count -ne 2) { throw "Expected 2 macOS disk images; found $($images.Count)." }
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: SVL-Avalonia-macos-apps
+          path: artifacts/*.dmg
           if-no-files-found: error
           retention-days: 14

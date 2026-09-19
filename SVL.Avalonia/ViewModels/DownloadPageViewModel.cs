@@ -121,15 +121,15 @@ public partial class DownloadPageViewModel : ObservableObject
     private bool _pendingTasksResumeStarted;
     private int _catalogLoadToken;
     private bool _forceHotModsLoad;
-    private readonly List<string> _modAllResults = [];
-    private readonly List<string> _modpackAllResults = [];
+    private readonly List<ModSearchResultItem> _modAllResults = [];
+    private readonly List<ModSearchResultItem> _modpackAllResults = [];
     private bool _modHasMore;
     private bool _modpackHasMore;
     private bool _modGameVersionsLoaded;
     private bool _isLoadingModGameVersions;
     private DateTimeOffset _lastNexusAuthReminderAt = DateTimeOffset.MinValue;
     private bool _suppressNexusAuthNotificationThisSession;
-    private readonly Dictionary<string, (DateTime CreatedAt, List<string> Results, bool HasMore)> _modResultsCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (DateTime CreatedAt, List<ModSearchResultItem> Results, bool HasMore)> _modResultsCache = new(StringComparer.Ordinal);
 
     public event Action<DownloadTaskItem>? TaskSelected;
 
@@ -146,8 +146,6 @@ public partial class DownloadPageViewModel : ObservableObject
     public event Action? NavigateToInstancesRequested;
 
     public event Action? NavigateToSettingsRequested;
-
-    public event Action<string>? OpenDetailsRequested;
 
     /// <summary>目录卡片使用结构化身份打开详情，避免展示文本变化后丢失来源 ID。</summary>
     public event Action<CatalogResourceIdentity>? OpenStructuredDetailsRequested;
@@ -545,7 +543,7 @@ public partial class DownloadPageViewModel : ObservableObject
 
     public ObservableCollection<DownloadTaskItem> FinishedTasks { get; } = [];
 
-    public ObservableCollection<string> SearchResults { get; } = [];
+    public ObservableCollection<ModSearchResultItem> SearchResults { get; } = [];
 
     public ObservableCollection<DownloadCatalogItem> CategoryItems { get; } = [];
 
@@ -1652,7 +1650,7 @@ public partial class DownloadPageViewModel : ObservableObject
     [RelayCommand]
     private async Task OpenCatalogItemDetails(DownloadCatalogItem? item)
     {
-        if (item == null || string.IsNullOrWhiteSpace(item.DisplayText))
+        if (item == null)
         {
             return;
         }
@@ -1665,7 +1663,7 @@ public partial class DownloadPageViewModel : ObservableObject
         }
         else
         {
-            OpenDetailsRequested?.Invoke(item.DisplayText);
+            Status = "该资源没有可用的详情来源";
         }
     }
 
@@ -1686,21 +1684,20 @@ public partial class DownloadPageViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void OpenSearchResultDetails(string? item)
+    private void OpenSearchResultDetails(ModSearchResultItem? item)
     {
-        if (string.IsNullOrWhiteSpace(item))
+        if (item == null)
         {
             return;
         }
 
-        var parsedItem = ParseCatalogItem(item);
-        if (HasUsableCatalogIdentity(parsedItem.Identity))
+        if (HasUsableCatalogIdentity(item.Identity))
         {
-            OpenStructuredDetailsRequested?.Invoke(parsedItem.Identity);
+            OpenStructuredDetailsRequested?.Invoke(item.Identity);
         }
         else
         {
-            OpenDetailsRequested?.Invoke(item);
+            Status = "该资源没有可用的详情来源";
         }
     }
 
@@ -1721,9 +1718,14 @@ public partial class DownloadPageViewModel : ObservableObject
         item.IsLoadingDetails = true;
         try
         {
-            var details = HasUsableCatalogIdentity(item.Identity)
-                ? await _remoteCatalogService.GetResourceDetailsAsync(item.Identity)
-                : await _remoteCatalogService.GetResourceDetailsAsync(item.DisplayText);
+            if (!HasUsableCatalogIdentity(item.Identity))
+            {
+                item.Summary = "该资源没有可用的详情来源";
+                item.HasLoadedDetails = true;
+                return;
+            }
+
+            var details = await _remoteCatalogService.GetResourceDetailsAsync(item.Identity);
             if (!string.IsNullOrWhiteSpace(details.Source))
             {
                 item.SourceTag = details.Source;
@@ -1837,15 +1839,14 @@ public partial class DownloadPageViewModel : ObservableObject
         }
 
         var selected = SearchResults[0];
-        Status = $"已选择: {selected}";
-        var parsedItem = ParseCatalogItem(selected);
-        if (HasUsableCatalogIdentity(parsedItem.Identity))
+        Status = $"已选择: {selected.Name}";
+        if (HasUsableCatalogIdentity(selected.Identity))
         {
-            OpenStructuredDetailsRequested?.Invoke(parsedItem.Identity);
+            OpenStructuredDetailsRequested?.Invoke(selected.Identity);
         }
         else
         {
-            OpenDetailsRequested?.Invoke(selected);
+            Status = "该资源没有可用的详情来源";
         }
     }
 
@@ -2219,11 +2220,7 @@ public partial class DownloadPageViewModel : ObservableObject
             }
         }
 
-        task.FailedDetails = string.Empty;
-        task.CanRetry = false;
-        task.CanCancel = false;
-        task.Progress = 0;
-        task.SetState(DownloadTaskState.Pending, "已加入队列（重试）");
+        ResetTaskForRetry(task);
         Status = $"任务已重新入队: {task.Name}";
         EmitLog($"任务重试入队: {task.Name}");
         SaveTaskState();
@@ -4433,7 +4430,7 @@ public partial class DownloadPageViewModel : ObservableObject
                 _forceHotModsLoad = false;
                 _modHasMore = cachedHasMore;
                 TotalModPages = cachedHasMore ? CurrentModPage + 1 : CurrentModPage;
-                ReplaceStringCollection(SearchResults, cachedResults);
+                ReplaceSearchResults(cachedResults);
                 SyncModCategoryItems(cachedResults);
                 Status = cachedResults.Count == 0
                     ? (isHotModsLoad ? "未获取到热门 Mod，请调整来源后重试" : "未找到匹配 Mod")
@@ -4471,7 +4468,7 @@ public partial class DownloadPageViewModel : ObservableObject
 
         try
         {
-            List<string> results;
+            List<ModSearchResultItem> results;
             string queryHint;
 
             switch (SelectedCategory)
@@ -4479,8 +4476,7 @@ public partial class DownloadPageViewModel : ObservableObject
                 case DownloadCategory.Smapi:
                     queryHint = string.IsNullOrWhiteSpace(SmapiSearchText) ? "SMAPI" : $"SMAPI {SmapiSearchText.Trim()}";
                     EmitLog($"[Catalog] SMAPI query='{queryHint}', source='{SelectedSmapiSource}'");
-                    results = (await _remoteCatalogService.SearchSmapiAsync(queryHint, SelectedSmapiSource))
-                        .Select(ToCatalogDisplayText).ToList();
+                    results = await _remoteCatalogService.SearchSmapiAsync(queryHint, SelectedSmapiSource);
                     break;
 
                 case DownloadCategory.Mods:
@@ -4499,7 +4495,7 @@ public partial class DownloadPageViewModel : ObservableObject
                         CurrentModPage,
                         ModPageSize);
                     _modHasMore = paged.HasMore;
-                    results = paged.Items.Select(ToCatalogDisplayText).ToList();
+                    results = paged.Items.ToList();
 
                     TotalModPages = _modHasMore ? CurrentModPage + 1 : CurrentModPage;
                     SetCachedModResults(BuildModCacheKey(queryHint, isHotModsLoad, CurrentModPage), results, _modHasMore);
@@ -4513,7 +4509,7 @@ public partial class DownloadPageViewModel : ObservableObject
                     EmitLog($"[Catalog] Modpack query='{queryHint}', source='{modpackSource}', autoHot={isAutoHotCollectionsLoad}");
                     var modpackPaged = await _remoteCatalogService.SearchModpacksPagedAsync(queryHint, modpackSource, CurrentModpackPage, ModpackPageSize);
                     _modpackHasMore = modpackPaged.HasMore;
-                    results = modpackPaged.Items.Select(ToCatalogDisplayText).ToList();
+                    results = modpackPaged.Items.ToList();
                     TotalModpackPages = _modpackHasMore ? CurrentModpackPage + 1 : CurrentModpackPage;
                     break;
 
@@ -4530,7 +4526,7 @@ public partial class DownloadPageViewModel : ObservableObject
 
             EmitLog($"[Catalog] Loaded raw results={results.Count}, category={SelectedCategory}");
 
-            ReplaceStringCollection(SearchResults, results);
+            ReplaceSearchResults(results);
             if (SelectedCategory == DownloadCategory.Smapi)
             {
                 CategoryItems.Clear();
@@ -4639,12 +4635,12 @@ public partial class DownloadPageViewModel : ObservableObject
         }
     }
 
-    private void SyncCategoryItems(IEnumerable<string> results)
+    private void SyncCategoryItems(IEnumerable<ModSearchResultItem> results)
     {
         CategoryItems.Clear();
         foreach (var result in results)
         {
-            var item = ParseCatalogItem(result);
+            var item = CreateCatalogItem(result);
             if (SelectedCategory == DownloadCategory.Mods)
             {
                 ApplyModLocalizationPreferenceToItem(item);
@@ -4659,12 +4655,12 @@ public partial class DownloadPageViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCategoryItems));
     }
 
-    private void SyncModCategoryItems(IEnumerable<string> results)
+    private void SyncModCategoryItems(IEnumerable<ModSearchResultItem> results)
     {
         CategoryItems.Clear();
         foreach (var result in results)
         {
-            var item = ParseCatalogItem(result);
+            var item = CreateCatalogItem(result);
             ApplyModLocalizationPreferenceToItem(item);
             CategoryItems.Add(item);
         }
@@ -4676,12 +4672,12 @@ public partial class DownloadPageViewModel : ObservableObject
         OnPropertyChanged(nameof(IsModsPageable));
     }
 
-    private void SyncModpackCategoryItems(IEnumerable<string> results)
+    private void SyncModpackCategoryItems(IEnumerable<ModSearchResultItem> results)
     {
         CategoryItems.Clear();
         foreach (var result in results)
         {
-            CategoryItems.Add(ParseCatalogItem(result));
+            CategoryItems.Add(CreateCatalogItem(result));
         }
 
         OnPropertyChanged(nameof(HasNoCategoryItems));
@@ -4702,7 +4698,7 @@ public partial class DownloadPageViewModel : ObservableObject
         var pageItems = _modAllResults.Skip(skip).Take(ModPageSize);
         foreach (var result in pageItems)
         {
-            var item = ParseCatalogItem(result);
+            var item = CreateCatalogItem(result);
             ApplyModLocalizationPreferenceToItem(item);
             CategoryItems.Add(item);
         }
@@ -4724,7 +4720,7 @@ public partial class DownloadPageViewModel : ObservableObject
         var pageItems = _modpackAllResults.Skip(skip).Take(ModpackPageSize);
         foreach (var result in pageItems)
         {
-            CategoryItems.Add(ParseCatalogItem(result));
+            CategoryItems.Add(CreateCatalogItem(result));
         }
 
         OnPropertyChanged(nameof(HasNoCategoryItems));
@@ -4746,7 +4742,7 @@ public partial class DownloadPageViewModel : ObservableObject
         ]);
     }
 
-    private bool TryGetCachedModResults(string key, out List<string> results, out bool hasMore)
+    private bool TryGetCachedModResults(string key, out List<ModSearchResultItem> results, out bool hasMore)
     {
         results = [];
         hasMore = false;
@@ -4766,7 +4762,7 @@ public partial class DownloadPageViewModel : ObservableObject
         return true;
     }
 
-    private void SetCachedModResults(string key, IEnumerable<string> results, bool hasMore)
+    private void SetCachedModResults(string key, IEnumerable<ModSearchResultItem> results, bool hasMore)
     {
         _modResultsCache[key] = (DateTime.Now, [..results], hasMore);
     }
@@ -4799,12 +4795,12 @@ public partial class DownloadPageViewModel : ObservableObject
         item.UseLocalizedSummary = useLocalized;
     }
 
-    private void SyncSmapiSourceItems(IEnumerable<string> results)
+    private void SyncSmapiSourceItems(IEnumerable<ModSearchResultItem> results)
     {
         ClearSmapiSourceItems();
 
         var parsedItems = results
-            .Select(ParseCatalogItem)
+            .Select(CreateCatalogItem)
             .Where(item => !string.IsNullOrWhiteSpace(item.SourceKey))
             .ToList();
 
@@ -4884,7 +4880,6 @@ public partial class DownloadPageViewModel : ObservableObject
             _ => "0"
         };
 
-        var displayText = $"[{sourceLabel}#{sourceId}] {SmapiDefaultName} | metric= | time= | icon=avares://SVL.Avalonia/Assets/Icons/Modded.png | {SmapiDefaultSummary}";
         return new DownloadCatalogItem
         {
             Identity = new CatalogResourceIdentity(
@@ -4893,7 +4888,7 @@ public partial class DownloadPageViewModel : ObservableObject
                 ResolveCatalogSource(sourceKey),
                 false,
                 string.Empty),
-            DisplayText = displayText,
+            DisplayText = SmapiDefaultName,
             Name = SmapiDefaultName,
             SourceTag = sourceLabel,
             SourceKey = sourceKey,
@@ -5286,221 +5281,45 @@ public partial class DownloadPageViewModel : ObservableObject
         OnPropertyChanged(nameof(HasNoSmapiItems));
     }
 
-    /// <summary>
-    /// 把结构化搜索结果项转换回 DownloadPage 目录卡片使用的 displayText 字符串。
-    /// DownloadPage 目录路径未迁移到结构化模型，依赖 displayText 字符串经 ParseCatalogItem 解析，
-    /// 故在此边界做一次结构化→字符串转换，保持 DownloadPage 内部表示不变。
-    /// </summary>
-    private static string ToCatalogDisplayText(Models.ModSearchResultItem item)
+    private static DownloadCatalogItem CreateCatalogItem(ModSearchResultItem item)
     {
-        var sb = new StringBuilder();
-        // Identity.Name 是原始名，item.Name 是汉化优先名
-        var originalName = !string.IsNullOrWhiteSpace(item.Identity.Name) ? item.Identity.Name : item.Name;
-        var hasLocalization = !string.Equals(originalName, item.Name, StringComparison.Ordinal);
-        sb.Append('[').Append(item.SourceTag).Append("] ").Append(originalName);
-        AppendDisplaySegment(sb, "metric", item.Stat);
-        AppendDisplaySegment(sb, "time", item.TimeTag);
-        AppendDisplaySegment(sb, "icon", item.IconUrl);
-        AppendDisplaySegment(sb, "fullIcon", item.FullIconUrl);
-        AppendDisplaySegment(sb, "type", item.ModType);
-        AppendDisplaySegment(sb, "compat", item.GameVersionTag);
-        // Collection slug 透传：DownloadPage 仍以 displayText 字符串携带身份，详情页据此拉取 revisions。
-        AppendDisplaySegment(sb, "slug", item.CollectionSlug);
-        // 显式传递汉化字段，让 ParseCatalogItem 能正确填充 LocalizedName/LocalizedSummary
-        if (hasLocalization)
-        {
-            AppendDisplaySegment(sb, "zhName", item.Name);
-        }
-        if (!string.IsNullOrWhiteSpace(item.Summary))
-        {
-            sb.Append(" | ").Append(item.Summary);
-        }
-
-        return sb.ToString();
-    }
-
-    private static void AppendDisplaySegment(StringBuilder sb, string key, string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return;
-        }
-
-        sb.Append(" | ").Append(key).Append('=').Append(value);
-    }
-
-    private static DownloadCatalogItem ParseCatalogItem(string result)
-    {
-        var parts = result.Split('|', StringSplitOptions.TrimEntries);
-        var header = parts.Length > 0 ? parts[0] : result;
-        var stat = string.Empty;
-        var metricTag = string.Empty;
-        var timeTag = string.Empty;
-        var iconSource = string.Empty;
-        var fullIconSource = string.Empty;
-        var summary = string.Empty;
-        var sourceName = string.Empty;
-        var sourceSummary = string.Empty;
-        var localizedName = string.Empty;
-        var localizedSummary = string.Empty;
-        var modTypeTag = string.Empty;
-        var gameVersionTag = string.Empty;
-
-        for (var index = 1; index < parts.Length; index++)
-        {
-            var segment = parts[index].Trim();
-            if (string.IsNullOrWhiteSpace(segment))
-            {
-                continue;
-            }
-
-            if (segment.StartsWith("metric=", StringComparison.OrdinalIgnoreCase))
-            {
-                metricTag = segment[7..].Trim();
-                if (string.IsNullOrWhiteSpace(stat))
-                {
-                    stat = metricTag;
-                }
-
-                continue;
-            }
-
-            if (segment.StartsWith("time=", StringComparison.OrdinalIgnoreCase))
-            {
-                timeTag = segment[5..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("icon=", StringComparison.OrdinalIgnoreCase))
-            {
-                iconSource = segment[5..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("fullIcon=", StringComparison.OrdinalIgnoreCase))
-            {
-                fullIconSource = segment[9..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("type=", StringComparison.OrdinalIgnoreCase))
-            {
-                modTypeTag = segment[5..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("compat=", StringComparison.OrdinalIgnoreCase))
-            {
-                gameVersionTag = segment[7..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("srcName=", StringComparison.OrdinalIgnoreCase))
-            {
-                sourceName = segment[8..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("srcSummary=", StringComparison.OrdinalIgnoreCase))
-            {
-                sourceSummary = segment[11..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("zhName=", StringComparison.OrdinalIgnoreCase))
-            {
-                localizedName = segment[7..].Trim();
-                continue;
-            }
-
-            if (segment.StartsWith("zhSummary=", StringComparison.OrdinalIgnoreCase))
-            {
-                localizedSummary = segment[10..].Trim();
-                continue;
-            }
-
-            // slug= 段由 DisplayText 携带供详情页使用，这里仅消费以避免被误判为 summary。
-            if (segment.StartsWith("slug=", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(stat))
-            {
-                stat = segment;
-                metricTag = segment;
-            }
-            else if (string.IsNullOrWhiteSpace(summary))
-            {
-                summary = segment;
-            }
-            else
-            {
-                summary = string.Concat(summary, " | ", segment);
-            }
-        }
-
-        var sourceTag = string.Empty;
-        var name = header;
-
-        if (header.StartsWith("[", StringComparison.Ordinal))
-        {
-            var index = header.IndexOf(']');
-            if (index > 1)
-            {
-                sourceTag = header[1..index].Trim();
-                name = header[(index + 1)..].Trim();
-            }
-        }
-
-        var sourceHead = sourceTag;
-        var sourceSplitIndex = sourceTag.IndexOf('#');
-        if (sourceSplitIndex > 0)
-        {
-            sourceHead = sourceTag[..sourceSplitIndex];
-        }
-
-        var sourceKey = ResolveSourceKey(sourceHead);
-        var sourceLabel = ResolveSourceLabel(sourceKey, sourceHead);
-        var sourceId = 0L;
-        if (sourceSplitIndex > 0)
-        {
-            long.TryParse(sourceTag[(sourceSplitIndex + 1)..].Trim(), out sourceId);
-        }
-
-        var collectionSlug = parts
-            .Skip(1)
-            .Select(part => part.Trim())
-            .Where(part => part.StartsWith("slug=", StringComparison.OrdinalIgnoreCase))
-            .Select(part => part[5..].Trim())
-            .FirstOrDefault() ?? string.Empty;
+        var identity = item.Identity;
+        var sourceKey = ResolveSourceKey(identity.Source);
+        var sourceName = string.IsNullOrWhiteSpace(identity.Name) ? item.Name : identity.Name;
+        var sourceSummary = string.IsNullOrWhiteSpace(item.SourceSummary) ? item.Summary : item.SourceSummary;
 
         return new DownloadCatalogItem
         {
-            Identity = new CatalogResourceIdentity(
-                sourceId,
-                string.IsNullOrWhiteSpace(name) ? result : name,
-                ResolveCatalogSource(sourceKey),
-                sourceHead.Contains("pack", StringComparison.OrdinalIgnoreCase) ||
-                sourceHead.Contains("collection", StringComparison.OrdinalIgnoreCase),
-                collectionSlug),
-            DisplayText = result,
-            Name = string.IsNullOrWhiteSpace(name) ? result : name,
-            SourceTag = sourceLabel,
+            Identity = identity,
+            DisplayText = string.IsNullOrWhiteSpace(item.Name) ? sourceName : item.Name,
+            Name = sourceName,
+            SourceTag = ResolveSourceLabel(sourceKey, item.SourceDisplay),
             SourceKey = sourceKey,
-            Stat = stat,
-            MetricTag = metricTag,
-            TimeTag = timeTag,
-            IconSource = iconSource,
-            FullIconSource = fullIconSource,
-            Summary = string.IsNullOrWhiteSpace(sourceSummary) ? summary : sourceSummary,
-            SourceName = string.IsNullOrWhiteSpace(sourceName) ? name : sourceName,
-            SourceSummary = string.IsNullOrWhiteSpace(sourceSummary) ? summary : sourceSummary,
-            LocalizedName = localizedName,
-            LocalizedSummary = localizedSummary,
-            ModTypeTag = modTypeTag,
-            GameVersionTag = gameVersionTag
+            Stat = item.Stat,
+            MetricTag = item.Stat,
+            TimeTag = item.TimeTag,
+            Summary = sourceSummary,
+            SourceName = sourceName,
+            SourceSummary = sourceSummary,
+            LocalizedName = item.LocalizedName,
+            LocalizedSummary = item.LocalizedSummary,
+            ModTypeTag = item.ModType,
+            GameVersionTag = item.GameVersionTag,
+            IconSource = item.IconUrl,
+            FullIconSource = item.FullIconUrl
         };
+    }
+
+    private void ReplaceSearchResults(IEnumerable<ModSearchResultItem> source)
+    {
+        SearchResults.Clear();
+        foreach (var item in source)
+        {
+            if (item != null)
+            {
+                SearchResults.Add(item);
+            }
+        }
     }
 
     private static bool HasUsableCatalogIdentity(CatalogResourceIdentity identity)
@@ -5519,24 +5338,15 @@ public partial class DownloadPageViewModel : ObservableObject
         };
     }
 
-    private static string ResolveSourceKey(string sourceText)
+    private static string ResolveSourceKey(CatalogSource source)
     {
-        if (sourceText.Contains("github", StringComparison.OrdinalIgnoreCase))
+        return source switch
         {
-            return "github";
-        }
-
-        if (sourceText.Contains("nexus", StringComparison.OrdinalIgnoreCase))
-        {
-            return "nexusmods";
-        }
-
-        if (sourceText.Contains("curse", StringComparison.OrdinalIgnoreCase))
-        {
-            return "curseforge";
-        }
-
-        return "unknown";
+            CatalogSource.GitHub => "github",
+            CatalogSource.NexusMods => "nexusmods",
+            CatalogSource.Curseforge => "curseforge",
+            _ => "unknown"
+        };
     }
 
     private static string ResolveSourceLabel(string sourceKey, string fallback)
@@ -6044,6 +5854,29 @@ public partial class DownloadPageViewModel : ObservableObject
     }
 
     /// <summary>整合包安装任务执行：按 TaskKind 路由到 ModpackInstallService 的 SVL 或 Curseforge 流程。</summary>
+    private static bool ApplyModpackInstallOutcomeToTask(
+        DownloadTaskItem task,
+        ModpackInstallResult result)
+    {
+        task.InstalledPath = result.RuntimePath;
+        task.InstalledDirectory = result.VersionRootPath;
+
+        var hasFailedMods = result.FailedMods is { Count: > 0 };
+        // 部分完成仍有失败项：不可报告为 Completed/100%，且必须保留失败清单
+        // 供任务详情显示、复制和重试；完整成功则清掉可能残留的旧错误详情。
+        task.Progress = hasFailedMods ? 99 : 100;
+        task.SetState(
+            hasFailedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
+            hasFailedMods
+                ? $"部分完成（{result.FailedMods.Count} 个 Mod 下载失败，可重试）"
+                : "已完成");
+        task.CanRetry = hasFailedMods;
+        task.FailedDetails = hasFailedMods
+            ? string.Join("\n", result.FailedMods)
+            : string.Empty;
+        return hasFailedMods;
+    }
+
     private Task ExecuteModpackInstallTaskAsync(DownloadTaskItem task)
     {
         return ExecuteModpackInstallTaskAsync(task, task.SourceUrl);
@@ -6105,26 +5938,13 @@ public partial class DownloadPageViewModel : ObservableObject
 
             if (result.IsSuccess)
             {
-                task.InstalledPath = result.RuntimePath;
-                task.InstalledDirectory = result.VersionRootPath;
-                var hasFailedMods = result.FailedMods.Count > 0;
-                // 部分完成仍有失败项，不能把任务条渲染成满格；只有所有 Mod
-                // 都安装成功时才显示 100%。
-                task.Progress = hasFailedMods ? 99 : 100;
-                var failText = hasFailedMods
-                    ? $"（{result.FailedMods.Count} 个 Mod 下载失败，可重试）"
-                    : string.Empty;
-                task.SetState(
-                    hasFailedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
-                    hasFailedMods ? $"部分完成{failText}" : "已完成");
-                task.CanRetry = hasFailedMods;
+                var hasFailedMods = ApplyModpackInstallOutcomeToTask(task, result);
                 Status = hasFailedMods
                     ? $"整合包安装部分完成: {task.Name}"
                     : $"整合包安装完成: {task.Name}";
                 EmitLog($"整合包安装{(hasFailedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {result.RuntimePath}, 安装 {result.InstalledMods.Count} 个, 失败 {result.FailedMods.Count} 个");
                 if (result.FailedMods.Count > 0)
                 {
-                    task.FailedDetails = string.Join("\n", result.FailedMods);
                     EmitLog($"失败 Mod 列表:\n{task.FailedDetails}");
                 }
                 // 通知 MainWindowViewModel 刷新 LaunchPage/InstancesPage 实例列表
@@ -7148,24 +6968,13 @@ public partial class DownloadPageViewModel : ObservableObject
 
                 if (modpackResult.IsSuccess)
                 {
-                    task.InstalledPath = modpackResult.RuntimePath;
-                    task.InstalledDirectory = modpackResult.VersionRootPath;
-                    var hasFailedMods = modpackResult.FailedMods.Count > 0;
-                    task.Progress = hasFailedMods ? 99 : 100;
-                    var failText = hasFailedMods
-                        ? $"（{modpackResult.FailedMods.Count} 个 Mod 下载失败，可重试）"
-                        : string.Empty;
-                    task.SetState(
-                        hasFailedMods ? DownloadTaskState.Failed : DownloadTaskState.Completed,
-                        hasFailedMods ? $"部分完成{failText}" : "已完成");
-                    task.CanRetry = hasFailedMods;
+                    var hasFailedMods = ApplyModpackInstallOutcomeToTask(task, modpackResult);
                     Status = hasFailedMods
                         ? $"整合包安装部分完成: {task.Name}"
                         : $"整合包安装完成: {task.Name}";
                     EmitLog($"整合包安装{(hasFailedMods ? "部分完成" : "完成")}: {task.Name}, 运行目录: {modpackResult.RuntimePath}, 安装 {modpackResult.InstalledMods.Count} 个, 失败 {modpackResult.FailedMods.Count} 个");
                     if (modpackResult.FailedMods.Count > 0)
                     {
-                        task.FailedDetails = string.Join("\n", modpackResult.FailedMods);
                         EmitLog($"失败 Mod 列表:\n{task.FailedDetails}");
                     }
                     // 通知 MainWindowViewModel 刷新 LaunchPage/InstancesPage 实例列表
@@ -8829,56 +8638,7 @@ public partial class DownloadPageViewModel : ObservableObject
             DownloadTasks.Clear();
             foreach (var record in records)
             {
-                var recoveredTask = new DownloadTaskItem
-                {
-                    Name = record.Name,
-                    Status = record.Status,
-                    Progress = record.Progress,
-                    TaskState = record.TaskState ?? InferTaskStateFromStatus(record.Status),
-                    CanRetry = record.CanRetry,
-                    CanCancel = record.CanCancel,
-                    TaskKind = record.TaskKind,
-                    TaskAction = record.TaskAction,
-                    SourceModId = record.SourceModId,
-                    SourceFileId = record.SourceFileId,
-                    SourcePlatform = record.SourcePlatform,
-                    SourceRepository = record.SourceRepository,
-                    CollectionSlug = record.CollectionSlug,
-                    CollectionRevision = record.CollectionRevision,
-                    SourceUrl = record.SourceUrl,
-                    OutputFilePath = record.OutputFilePath,
-                    InstalledPath = record.InstalledPath,
-                    InstalledDirectory = record.InstalledDirectory,
-                    ReportPath = record.ReportPath,
-                    BackupPath = record.BackupPath,
-                    FailedDetails = record.FailedDetails,
-                    RetryReportPath = record.RetryReportPath,
-                    TargetGamePath = record.TargetGamePath,
-                    TargetInstanceName = record.TargetInstanceName,
-                    CustomIconPath = record.CustomIconPath,
-                    SkipConflictPrompt = record.SkipConflictPrompt,
-                    SpeedText = record.SpeedText,
-                    EtaText = record.EtaText,
-                    TotalSizeText = record.TotalSizeText,
-                    DownloadedSizeText = record.DownloadedSizeText,
-                    SubProgressText = record.SubProgressText,
-                    SubProgress = record.SubProgress,
-                    StatusIconSource = string.Empty,
-                    DependencyUrls = record.DependencyUrls ?? [],
-                    FailedDownloadUrls = record.FailedDownloadUrls ?? [],
-                    ConflictPreviewItems = record.ConflictPreviewItems ?? []
-                };
-                foreach (var modItem in record.CollectionModItems ?? [])
-                {
-                    recoveredTask.SyncCollectionModProgress(
-                        modItem.Name,
-                        modItem.Phase,
-                        modItem.Optional,
-                        modItem.State,
-                        modItem.Message,
-                        modItem.SourceUrl,
-                        modItem.RequiresManualAction);
-                }
+                var recoveredTask = CreateRecoveredTask(record);
 
                 DownloadTasks.Add(recoveredTask);
                 NormalizeRecoveredTaskState(recoveredTask);
@@ -8889,6 +8649,72 @@ public partial class DownloadPageViewModel : ObservableObject
         {
             // Ignore broken persisted state and keep in-memory defaults.
         }
+    }
+
+    private static DownloadTaskItem CreateRecoveredTask(DownloadTaskStateRecord record)
+    {
+        var recoveredTask = new DownloadTaskItem
+        {
+            Name = record.Name,
+            Status = record.Status,
+            Progress = record.Progress,
+            TaskState = record.TaskState ?? InferTaskStateFromStatus(record.Status),
+            CanRetry = record.CanRetry,
+            CanCancel = record.CanCancel,
+            TaskKind = record.TaskKind,
+            TaskAction = record.TaskAction,
+            SourceModId = record.SourceModId,
+            SourceFileId = record.SourceFileId,
+            SourcePlatform = record.SourcePlatform,
+            SourceRepository = record.SourceRepository,
+            CollectionSlug = record.CollectionSlug,
+            CollectionRevision = record.CollectionRevision,
+            SourceUrl = record.SourceUrl,
+            OutputFilePath = record.OutputFilePath,
+            InstalledPath = record.InstalledPath,
+            InstalledDirectory = record.InstalledDirectory,
+            ReportPath = record.ReportPath,
+            BackupPath = record.BackupPath,
+            FailedDetails = record.FailedDetails,
+            RetryReportPath = record.RetryReportPath,
+            TargetGamePath = record.TargetGamePath,
+            TargetInstanceName = record.TargetInstanceName,
+            CustomIconPath = record.CustomIconPath,
+            SkipConflictPrompt = record.SkipConflictPrompt,
+            SpeedText = record.SpeedText,
+            EtaText = record.EtaText,
+            TotalSizeText = record.TotalSizeText,
+            DownloadedSizeText = record.DownloadedSizeText,
+            SubProgressText = record.SubProgressText,
+            SubProgress = record.SubProgress,
+            StatusIconSource = string.Empty,
+            DependencyUrls = record.DependencyUrls ?? [],
+            FailedDownloadUrls = record.FailedDownloadUrls ?? [],
+            ConflictPreviewItems = record.ConflictPreviewItems ?? []
+        };
+
+        foreach (var modItem in record.CollectionModItems ?? [])
+        {
+            recoveredTask.SyncCollectionModProgress(
+                modItem.Name,
+                modItem.Phase,
+                modItem.Optional,
+                modItem.State,
+                modItem.Message,
+                modItem.SourceUrl,
+                modItem.RequiresManualAction);
+        }
+
+        return recoveredTask;
+    }
+
+    private static void ResetTaskForRetry(DownloadTaskItem task)
+    {
+        task.FailedDetails = string.Empty;
+        task.CanRetry = false;
+        task.CanCancel = false;
+        task.Progress = 0;
+        task.SetState(DownloadTaskState.Pending, "已加入队列（重试）");
     }
 
     private static void NormalizeRecoveredTaskState(DownloadTaskItem task)

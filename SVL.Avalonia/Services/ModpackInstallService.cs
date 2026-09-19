@@ -418,9 +418,10 @@ public sealed class ModpackInstallService
             var downloadCandidates = sourcesList
                 .Where(s => s.ValueKind == JsonValueKind.Object)
                 // 父归档会写入/整理自己的 ContentPack 子目录。清单里为保留
-                // 父子关系而单列的 parent-inherited 子项不是独立下载目标，
-                // 若父项尚未先处理就入队，会被误报成“缺少来源信息”。
-                .Where(s => !IsInheritedCompositeSourceEntry(s))
+                // 父子关系而单列的 parent-inherited 子项通常不是独立下载目标；
+                // 但带 installTargetUniqueId + archiveSource 的导出条目表示子 Mod
+                // 已从父归档拆分/历史版本迁移，必须按指定身份从对应父归档补装。
+                .Where(s => !IsInheritedCompositeSourceEntry(s) || IsTargetedInheritedArchiveEntry(s))
                 .Where(s => !string.IsNullOrWhiteSpace(GetJsonString(
                     s,
                     "name",
@@ -449,9 +450,13 @@ public sealed class ModpackInstallService
                     "directory") ?? "unknown";
                 var sourceDirectoryName = GetJsonString(source, "directoryName");
                 var expectedDirectoryName = SanitizeModDirectoryName(sourceDirectoryName, modName);
-                if (bundledModNames.Contains(expectedDirectoryName) ||
-                    IsInstalledModDirectory(Path.Combine(modsPath, expectedDirectoryName)) ||
-                    IsMatchingInstalledMod(modsPath, source, expectedDirectoryName))
+                var isTargetedInheritedArchiveEntry = IsTargetedInheritedArchiveEntry(source);
+                var alreadyInstalled = isTargetedInheritedArchiveEntry
+                    ? IsTargetedInheritedChildVersionInstalled(modsPath, source)
+                    : IsInstalledModDirectory(Path.Combine(modsPath, expectedDirectoryName)) ||
+                      IsMatchingInstalledMod(modsPath, source, expectedDirectoryName);
+                if (bundledModNames.Contains(expectedDirectoryName) && !isTargetedInheritedArchiveEntry ||
+                    alreadyInstalled)
                 {
                     bundledModNames.Add(expectedDirectoryName);
                     continue;
@@ -1927,6 +1932,94 @@ public sealed class ModpackInstallService
         }
     }
 
+    internal static bool ArchiveContainsModIdentity(
+        string archivePath,
+        string expectedUniqueId,
+        string? expectedVersion = null)
+    {
+        if (string.IsNullOrWhiteSpace(archivePath) ||
+            string.IsNullOrWhiteSpace(expectedUniqueId) ||
+            !File.Exists(archivePath) ||
+            !IsValidModArchive(archivePath))
+        {
+            return false;
+        }
+
+        var stagingDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "SVL",
+            "mod-archive-identity-check",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(stagingDirectory);
+            ExtractModArchive(archivePath, stagingDirectory);
+            // 身份探测必须枚举所有层级。常规安装器会折叠父 Mod 内部的
+            // manifest，但归档来源审计需要确认那些被父 Mod 包含的子 Mod。
+            var manifestDirectories = EnumerateFilesSafe(stagingDirectory, "manifest.json")
+                .Select(Path.GetDirectoryName)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(path!))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var directory in manifestDirectories)
+            {
+                if (!IsInstalledModDirectory(directory))
+                {
+                    continue;
+                }
+
+                var manifestPath = FindManifestPath(directory);
+                if (string.IsNullOrWhiteSpace(manifestPath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    using var document = JsonDocument.Parse(
+                        ReadTextFileWithBom(manifestPath),
+                        ManifestJsonOptions);
+                    var uniqueId = GetJsonString(
+                        document.RootElement,
+                        "UniqueID",
+                        "UniqueId",
+                        "unique_id");
+                    var version = GetJsonString(document.RootElement, "Version", "version");
+                    if (string.Equals(uniqueId, expectedUniqueId, StringComparison.OrdinalIgnoreCase) &&
+                        (string.IsNullOrWhiteSpace(expectedVersion) ||
+                         string.Equals(version, expectedVersion, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // Ignore a malformed manifest and continue scanning sibling Mods.
+                }
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(stagingDirectory))
+                {
+                    Directory.Delete(stagingDirectory, recursive: true);
+                }
+            }
+            catch
+            {
+                // Temporary inspection cleanup must not affect the caller.
+            }
+        }
+    }
+
     private static bool IsInstalledModDirectory(string modDirectory)
     {
         if (!Directory.Exists(modDirectory))
@@ -2249,6 +2342,36 @@ public sealed class ModpackInstallService
         string preferredName,
         out List<string> installedNames)
     {
+        return InstallDownloadedModArchiveCore(
+            zipPath,
+            modsPath,
+            preferredName,
+            expectedUniqueId: null,
+            out installedNames);
+    }
+
+    internal static bool InstallDownloadedModArchiveTargeted(
+        string zipPath,
+        string modsPath,
+        string preferredName,
+        string expectedUniqueId,
+        out List<string> installedNames)
+    {
+        return InstallDownloadedModArchiveCore(
+            zipPath,
+            modsPath,
+            preferredName,
+            expectedUniqueId,
+            out installedNames);
+    }
+
+    private static bool InstallDownloadedModArchiveCore(
+        string zipPath,
+        string modsPath,
+        string preferredName,
+        string? expectedUniqueId,
+        out List<string> installedNames)
+    {
         installedNames = [];
         if (!IsValidModArchive(zipPath))
         {
@@ -2260,7 +2383,21 @@ public sealed class ModpackInstallService
         try
         {
             ExtractModArchive(zipPath, stagingDirectory);
-            var manifestDirectories = GetInstallableManifestDirectories(stagingDirectory);
+            // 常规归档只整理最外层 Mod；目标子 Mod 恢复则必须扫描所有 manifest，
+            // 因为子 Mod 可能嵌在一个自身也有 manifest 的父 Mod 文件夹里。
+            var manifestDirectories = string.IsNullOrWhiteSpace(expectedUniqueId)
+                ? GetInstallableManifestDirectories(stagingDirectory)
+                : EnumerateFilesSafe(stagingDirectory, "manifest.json")
+                    .Select(Path.GetDirectoryName)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(path!))
+                    .Where(IsInstalledModDirectory)
+                    .Where(directory =>
+                        TryReadModManifestIdentity(directory, out _, out var uniqueId) &&
+                        string.Equals(uniqueId, expectedUniqueId, StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
             var reservedTargetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (manifestDirectories.Count == 0)
             {
@@ -3258,6 +3395,22 @@ public sealed class ModpackInstallService
         CancellationToken ct,
         Action<ModpackInstallProgress>? onProgress = null)
     {
+        if (IsTargetedInheritedArchiveEntry(source))
+        {
+            if (!TryGetTargetedInheritedArchiveDescriptor(source, out var targetUniqueId, out var archiveDescriptor))
+            {
+                return ModSourceDownloadResult.Failed("嵌套子 Mod 缺少有效的父级归档来源信息");
+            }
+
+            return await DownloadInheritedChildFromArchiveAsync(
+                source,
+                targetUniqueId,
+                archiveDescriptor,
+                modsPath,
+                ct,
+                onProgress);
+        }
+
         if (!TryGetModSourceDescriptor(source, out var descriptor))
         {
             return ModSourceDownloadResult.Failed("source 字段缺失或格式不受支持");
@@ -3658,6 +3811,163 @@ public sealed class ModpackInstallService
         }
 
         return ModSourceDownloadResult.Failed("未识别的 Mod 下载来源");
+    }
+
+    private async Task<ModSourceDownloadResult> DownloadInheritedChildFromArchiveAsync(
+        JsonElement sourceEntry,
+        string targetUniqueId,
+        ModSourceDescriptor archiveSource,
+        string modsPath,
+        CancellationToken ct,
+        Action<ModpackInstallProgress>? onProgress)
+    {
+        if (!IsCurseforgePlatform(archiveSource.Platform) ||
+            !TryParsePositiveLong(archiveSource.ProjectId, out var projectId) ||
+            !TryParsePositiveLong(archiveSource.FileId, out var fileId))
+        {
+            return ModSourceDownloadResult.Failed(
+                "嵌套子 Mod 的父归档来源不完整（目前需要 CurseForge ProjectID 和 FileID）");
+        }
+
+        var modName = GetJsonString(sourceEntry, "name", "modName", "uniqueId") ?? targetUniqueId;
+        var preferredName = SanitizeModDirectoryName(
+            GetJsonString(sourceEntry, "directoryName"),
+            modName);
+        string? cachedArchive = null;
+        var localArchive = Path.Combine(modsPath, "_downloads", $"cf-{projectId}-{fileId}.zip");
+        if (IsValidModArchiveFile(localArchive))
+        {
+            cachedArchive = localArchive;
+        }
+        else if (CurseforgeDownloadCache.TryGet(projectId, fileId, out var sharedArchive, IsValidModArchiveFile))
+        {
+            cachedArchive = sharedArchive;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cachedArchive))
+        {
+            return InstallInheritedChildFromArchive(
+                    cachedArchive,
+                    modsPath,
+                    preferredName,
+                    targetUniqueId,
+                    sourceEntry,
+                    out _)
+                ? ModSourceDownloadResult.Success()
+                : ModSourceDownloadResult.Failed("父归档缓存中未找到指定身份的嵌套子 Mod");
+        }
+
+        var downloadUrl = IsLikelyDirectDownloadUrl(archiveSource.DownloadUrl)
+            ? archiveSource.DownloadUrl
+            : await _remoteCatalogService.ResolveCurseforgeFileDownloadUrlAsync(
+                projectId,
+                fileId,
+                string.Empty,
+                ct);
+        if (string.IsNullOrWhiteSpace(downloadUrl))
+        {
+            return ModSourceDownloadResult.Failed("无法解析嵌套子 Mod 的父归档下载地址");
+        }
+
+        var temporaryArchive = Path.Combine(
+            modsPath,
+            "_downloads",
+            $"cf-{projectId}-{fileId}-child-{Guid.NewGuid():N}.zip");
+        Directory.CreateDirectory(Path.GetDirectoryName(temporaryArchive)!);
+        try
+        {
+            onProgress?.Invoke(new ModpackInstallProgress
+            {
+                Percent = 47,
+                StepText = "步骤 4/6: 下载未打包 Mod",
+                SubProgressText = $"{modName}: 正在获取父归档中的嵌套子 Mod"
+            });
+            await _httpDownloadService.DownloadAsync(
+                downloadUrl,
+                temporaryArchive,
+                null,
+                ct,
+                cacheValidator: IsValidModArchiveFile);
+            CurseforgeDownloadCache.Save(projectId, fileId, temporaryArchive, IsValidModArchiveFile);
+
+            return InstallInheritedChildFromArchive(
+                    temporaryArchive,
+                    modsPath,
+                    preferredName,
+                    targetUniqueId,
+                    sourceEntry,
+                    out _)
+                ? ModSourceDownloadResult.Success()
+                : ModSourceDownloadResult.Failed("父归档下载成功，但其中没有清单指定的嵌套子 Mod");
+        }
+        finally
+        {
+            try { File.Delete(temporaryArchive); } catch { }
+        }
+    }
+
+    internal static bool InstallInheritedChildFromArchive(
+        string archivePath,
+        string modsPath,
+        string preferredName,
+        string expectedUniqueId,
+        JsonElement sourceEntry,
+        out List<string> installedNames)
+    {
+        installedNames = [];
+        if (string.IsNullOrWhiteSpace(expectedUniqueId) ||
+            !TryGetSourceRelationProperty(sourceEntry, "parentMod", out var parentMod) ||
+            parentMod.ValueKind != JsonValueKind.Object ||
+            !TryGetSourceRelationProperty(sourceEntry, "archiveSource", out var archiveSource) ||
+            archiveSource.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var expectedVersion = GetJsonString(sourceEntry, "version");
+        if (!ArchiveContainsModIdentity(archivePath, expectedUniqueId, expectedVersion))
+        {
+            return false;
+        }
+
+        if (!InstallDownloadedModArchiveTargeted(
+                archivePath,
+                modsPath,
+                preferredName,
+                expectedUniqueId,
+                out installedNames) ||
+            installedNames.Count == 0)
+        {
+            return false;
+        }
+
+        var parentReference = JsonNode.Parse(parentMod.GetRawText()) as JsonObject;
+        var archiveSourceNode = JsonNode.Parse(archiveSource.GetRawText()) as JsonObject;
+        if (parentReference == null || archiveSourceNode == null)
+        {
+            return false;
+        }
+
+        parentReference["archiveSource"] = archiveSourceNode.DeepClone();
+        var childDirectory = Path.Combine(modsPath, installedNames[0]);
+        var childSource = ReadSourceCredentialNode(childDirectory) ?? new JsonObject();
+        RemoveIndependentSourceFields(childSource);
+        childSource["sourceKind"] = "parent-inherited";
+        childSource["isParentMod"] = false;
+        childSource["parentMod"] = parentReference;
+        childSource["childMods"] = new JsonArray();
+        try
+        {
+            AtomicFileWriter.WriteUtf8(
+                Path.Combine(childDirectory, "svl-source.json"),
+                childSource.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch
+        {
+            // 文件归属凭证写入失败不应抹去成功安装结果；导出时仍可按父清单恢复。
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -4338,11 +4648,17 @@ public sealed class ModpackInstallService
 
     private static bool HasActionableDownloadSource(JsonElement source)
     {
-        if (!TryGetModSourceDescriptor(source, out var descriptor))
+        if (!TryGetModSourceDescriptor(source, out var descriptor) &&
+            !TryGetTargetedInheritedArchiveDescriptor(source, out _, out descriptor))
         {
             return false;
         }
 
+        return HasActionableDownloadDescriptor(descriptor);
+    }
+
+    private static bool HasActionableDownloadDescriptor(ModSourceDescriptor descriptor)
+    {
         if (Uri.TryCreate(descriptor.DownloadUrl, UriKind.Absolute, out var uri) &&
             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps ||
              uri.Scheme.Equals("nxm", StringComparison.OrdinalIgnoreCase)))
@@ -4760,6 +5076,78 @@ public sealed class ModpackInstallService
         var kind = sourceKind.GetString()?.Trim();
         return string.Equals(kind, "parent-inherited", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(kind, "modpack-parent-inherited", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTargetedInheritedArchiveEntry(JsonElement sourceEntry)
+    {
+        return !string.IsNullOrWhiteSpace(GetJsonString(sourceEntry, "installTargetUniqueId"));
+    }
+
+    private static bool TryGetTargetedInheritedArchiveDescriptor(
+        JsonElement sourceEntry,
+        out string targetUniqueId,
+        out ModSourceDescriptor descriptor)
+    {
+        targetUniqueId = GetJsonString(sourceEntry, "installTargetUniqueId") ?? string.Empty;
+        descriptor = new ModSourceDescriptor(null, null, null, null, null, null, null);
+        return !string.IsNullOrWhiteSpace(targetUniqueId) &&
+               TryGetSourceRelationProperty(sourceEntry, "parentMod", out var parentMod) &&
+               parentMod.ValueKind == JsonValueKind.Object &&
+               TryGetSourceRelationProperty(sourceEntry, "archiveSource", out var archiveSource) &&
+               archiveSource.ValueKind == JsonValueKind.Object &&
+               TryGetModSourceDescriptor(archiveSource, out descriptor);
+    }
+
+    private static bool IsTargetedInheritedChildVersionInstalled(
+        string modsPath,
+        JsonElement sourceEntry)
+    {
+        var expectedUniqueId = GetJsonString(sourceEntry, "installTargetUniqueId");
+        var expectedVersion = GetJsonString(sourceEntry, "version");
+        if (string.IsNullOrWhiteSpace(expectedUniqueId) || !Directory.Exists(modsPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (var directory in Directory.GetDirectories(modsPath))
+            {
+                if (!IsInstalledModDirectory(directory))
+                {
+                    continue;
+                }
+
+                var manifestPath = FindManifestPath(directory);
+                if (string.IsNullOrWhiteSpace(manifestPath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    using var document = JsonDocument.Parse(ReadTextFileWithBom(manifestPath), ManifestJsonOptions);
+                    var uniqueId = GetJsonString(document.RootElement, "UniqueID", "UniqueId", "unique_id");
+                    var version = GetJsonString(document.RootElement, "Version", "version");
+                    if (string.Equals(uniqueId, expectedUniqueId, StringComparison.OrdinalIgnoreCase) &&
+                        (string.IsNullOrWhiteSpace(expectedVersion) ||
+                         string.Equals(version, expectedVersion, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // 忽略单个损坏的 Mod 清单，继续扫描其它安装目录。
+                }
+            }
+        }
+        catch
+        {
+            // 目录扫描失败时保守地允许后续下载/校验流程给出具体结果。
+        }
+
+        return false;
     }
 
     private static bool TryGetJsonPropertyIgnoreCase(
@@ -5352,7 +5740,10 @@ public sealed class ModpackInstallService
                 continue;
             }
 
-            var parentReference = CreateParentModReference(modsPath, parentDirectory);
+            var parentSource = sourceByDirectory.TryGetValue(parentDirectory, out var resolvedParentSource)
+                ? resolvedParentSource
+                : null;
+            var parentReference = CreateParentModReference(modsPath, parentDirectory, parentSource);
             var childSource = ReadSourceCredentialNode(directory) ?? new JsonObject();
 
             // 当前归档中的嵌套目录都是父文件的一部分，不能用旧的
@@ -5366,7 +5757,8 @@ public sealed class ModpackInstallService
             childSource["parentMod"] = parentReference;
             childSource["childMods"] = BuildChildReferences(
                 modsPath,
-                childDirectoriesByParent.TryGetValue(directory, out var children) ? children : []);
+                childDirectoriesByParent.TryGetValue(directory, out var children) ? children : [],
+                childSource);
             sourceByDirectory[directory] = childSource;
         }
 
@@ -5379,7 +5771,7 @@ public sealed class ModpackInstallService
 
             var children = pair.Value;
             source["isParentMod"] = children.Count > 0;
-            source["childMods"] = BuildChildReferences(modsPath, children);
+            source["childMods"] = BuildChildReferences(modsPath, children, source);
         }
 
         foreach (var directory in allDirectories)
@@ -5419,39 +5811,94 @@ public sealed class ModpackInstallService
 
     private static JsonArray BuildChildReferences(
         string modsPath,
-        IReadOnlyCollection<string> childDirectories)
+        IReadOnlyCollection<string> childDirectories,
+        JsonObject? parentSource = null)
     {
         var references = new JsonArray();
+        var archiveSource = CreateArchiveSourceNode(parentSource);
         foreach (var childDirectory in childDirectories)
         {
             TryReadModManifestIdentity(childDirectory, out var name, out var uniqueId);
             var relativePath = Path.GetRelativePath(modsPath, childDirectory)
                 .Replace(Path.DirectorySeparatorChar, '/')
                 .Replace(Path.AltDirectorySeparatorChar, '/');
-            references.Add(new JsonObject
+            var reference = new JsonObject
             {
                 ["id"] = string.IsNullOrWhiteSpace(uniqueId) ? relativePath : uniqueId,
                 ["name"] = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(childDirectory) : name,
                 ["relativePath"] = relativePath,
                 ["uniqueId"] = uniqueId
-            });
+            };
+            if (archiveSource != null)
+            {
+                reference["archiveSource"] = archiveSource.DeepClone();
+            }
+
+            references.Add(reference);
         }
 
         return references;
     }
 
-    private static JsonObject CreateParentModReference(string modsPath, string parentDirectory)
+    private static JsonObject CreateParentModReference(
+        string modsPath,
+        string parentDirectory,
+        JsonObject? parentSource = null)
     {
         TryReadModManifestIdentity(parentDirectory, out var name, out var uniqueId);
         var relativePath = Path.GetRelativePath(modsPath, parentDirectory)
             .Replace(Path.DirectorySeparatorChar, '/')
             .Replace(Path.AltDirectorySeparatorChar, '/');
-        return new JsonObject
+        var reference = new JsonObject
         {
             ["id"] = string.IsNullOrWhiteSpace(uniqueId) ? relativePath : uniqueId,
             ["name"] = string.IsNullOrWhiteSpace(name) ? Path.GetFileName(parentDirectory) : name,
             ["relativePath"] = relativePath
         };
+        var archiveSource = CreateArchiveSourceNode(parentSource ?? ReadSourceCredentialNode(parentDirectory));
+        if (archiveSource != null)
+        {
+            reference["archiveSource"] = archiveSource;
+        }
+
+        return reference;
+    }
+
+    private static JsonObject? CreateArchiveSourceNode(JsonObject? source)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        var candidate = source;
+        if (string.IsNullOrWhiteSpace(GetJsonNodeString(candidate, "projectId", "project_id", "modId")) &&
+            source["parentMod"] is JsonObject parentReference &&
+            parentReference["archiveSource"] is JsonObject inheritedArchiveSource)
+        {
+            candidate = inheritedArchiveSource;
+        }
+
+        var platform = GetJsonNodeString(candidate, "platform", "site", "provider");
+        var projectId = GetJsonNodeString(candidate, "projectId", "project_id", "modId", "project");
+        var fileId = GetJsonNodeString(candidate, "fileId", "file_id", "file");
+        var repository = GetJsonNodeString(candidate, "repository", "repo", "githubRepository");
+        var fileName = GetJsonNodeString(candidate, "fileName", "file_name", "logicalFilename");
+        if (string.IsNullOrWhiteSpace(platform) ||
+            (string.IsNullOrWhiteSpace(projectId) && string.IsNullOrWhiteSpace(repository)))
+        {
+            return null;
+        }
+
+        var snapshot = new JsonObject
+        {
+            ["platform"] = NormalizeSourcePlatform(platform)
+        };
+        if (!string.IsNullOrWhiteSpace(projectId)) snapshot["projectId"] = projectId;
+        if (!string.IsNullOrWhiteSpace(fileId)) snapshot["fileId"] = fileId;
+        if (!string.IsNullOrWhiteSpace(repository)) snapshot["repository"] = repository;
+        if (!string.IsNullOrWhiteSpace(fileName)) snapshot["fileName"] = fileName;
+        return snapshot;
     }
 
     private static JsonObject? ReadSourceCredentialNode(string modDirectory)
@@ -5788,10 +6235,10 @@ public sealed class ModpackInstallService
     /// 修复旧版本把同一归档中的父 Mod、ContentPack 分别记录成独立来源
     /// 的情况。
     ///
-    /// 旧数据经常只保留 projectId，不同子条目还带着旧 fileId；因此按
-    /// “平台 + 项目 ID”分组，再用 manifest 的 ContentPackFor 形态确认
-    /// “恰好一个父 Mod + 一个或多个 ContentPack”。只修改来源凭证，不
-    /// 移动、删除或覆盖用户 Mod 文件。
+    /// 只有来源身份完全一致的目录才可能来自同一归档。不同 FileID 即使
+    /// 属于同一项目，也必须作为独立 Modpack 条目保留；仅对缺少来源凭证
+    /// 的旧子目录，才使用 manifest 命名空间补救。只修改来源凭证，不移动、
+    /// 删除或覆盖用户 Mod 文件。
     /// </summary>
     internal static void RepairCompositeSourceCredentials(string modsPath)
     {
@@ -5835,19 +6282,24 @@ public sealed class ModpackInstallService
                         "project_id",
                         "modId",
                         "mod_id") ?? string.Empty;
+                    var fileId = GetJsonNodeString(
+                        item.Source!,
+                        "fileId",
+                        "file_id") ?? string.Empty;
                     return new
                     {
                         item.Directory,
                         item.Source,
                         Platform = platform,
-                        ProjectId = projectId
+                        ProjectId = projectId,
+                        FileId = fileId
                     };
                 })
                 .Where(item =>
                     !string.IsNullOrWhiteSpace(item.Platform) &&
                     TryParsePositiveLong(item.ProjectId, out _))
                 .GroupBy(
-                    item => $"{item.Platform}:{item.ProjectId}",
+                    item => $"{item.Platform}:{item.ProjectId}:{item.FileId}",
                     StringComparer.OrdinalIgnoreCase);
 
             foreach (var group in candidates)
@@ -5869,14 +6321,15 @@ public sealed class ModpackInstallService
                 }
 
                 var parentDirectory = parentCandidates[0];
+                var sourceIdentity = group.First();
                 var directories = sourceDirectories
                     .Where(directory =>
                         string.Equals(directory, parentDirectory, StringComparison.OrdinalIgnoreCase) ||
                         IsMatchingSourceCredential(
                             directory,
-                            group.Key.Split(':', 2)[0],
-                            group.Key.Split(':', 2).Length == 2 ? group.Key.Split(':', 2)[1] : null,
-                            expectedFileId: null))
+                            sourceIdentity.Platform,
+                            sourceIdentity.ProjectId,
+                            sourceIdentity.FileId))
                     .ToList();
 
                 // 旧导入可能只给父 Mod 写入来源，子 ContentPack 没有
@@ -5889,6 +6342,17 @@ public sealed class ModpackInstallService
                         directories.Contains(directory, StringComparer.OrdinalIgnoreCase) ||
                         !TryReadContentPackForFlag(directory, out var isContentPack) ||
                         !isContentPack)
+                    {
+                        continue;
+                    }
+
+                    // 已有来源文件代表该 Mod 曾被作为独立条目或另一归档写入。
+                    // 仅凭 UniqueID 前缀不能证明它属于当前父归档；尤其同一
+                    // CurseForge 项目的不同 FileID 可能是独立版本/条目。只有
+                    // 来源完全缺失的旧子目录，才允许用 manifest 命名空间补救；
+                    // 有来源的条目必须在上面的精确 FileID 分组中匹配后才能继承。
+                    if (File.Exists(Path.Combine(directory, "svl-source.json")) ||
+                        File.Exists(Path.Combine(directory, ".source.json")))
                     {
                         continue;
                     }
@@ -6052,7 +6516,15 @@ public sealed class ModpackInstallService
                     continue;
                 }
 
-                var sourceJson = BuildSourceCredentialJson(source, descriptor);
+                // 一个旧导出/第三方清单可能同时把子 Mod 列为独立来源，
+                // 又残留在父 Mod 的 childMods 中。只要子条目带有与父归档
+                // 不同的稳定来源身份，就以逐 Mod 条目为准：不能先继承父源，
+                // 再因为 parentMod 标记而跳过该 Mod 自己的来源。
+                var sourceForPersistence = FilterIndependentlySourcedChildren(
+                    source,
+                    descriptor,
+                    sourcesList);
+                var sourceJson = sourceForPersistence.GetRawText();
                 var incomingFileId = descriptor.FileId;
                 var sourceUniqueId = GetJsonString(source, "uniqueId", "uniqueID", "unique_id") ??
                                      GetJsonString(source, "unique_id");
@@ -6072,11 +6544,15 @@ public sealed class ModpackInstallService
                 {
                     var sourceFilePath = Path.Combine(modDir, "svl-source.json");
 
-                    // 父归档已经为该目录写入 parent-inherited 后，清单中的
-                    // 子 Mod 独立条目不能再次覆盖它，否则下一次更新会把
-                    // 子 Mod 当成独立来源。显式父条目仍允许写入自己的根目录。
+                    // 父条目已写入 parent-inherited 时，只有来源身份与父归档
+                    // 不同的独立 Modpack 条目才允许解除继承并写入自己的来源；
+                    // 来源相同或无法证明不同的条目继续遵循父子归属关系。
                     if (!HasExplicitCompositeSourceRelation(source) &&
-                        HasPersistedParentSourceRelation(modDir))
+                        HasPersistedParentSourceRelation(modDir) &&
+                        !HasDifferentIndependentSourceFromPersistedParent(
+                            modsPath,
+                            modDir,
+                            descriptor))
                     {
                         continue;
                     }
@@ -6104,7 +6580,7 @@ public sealed class ModpackInstallService
                     }
 
                     AtomicFileWriter.WriteUtf8(sourceFilePath, sourceJson);
-                    WriteInheritedChildSourceCredentials(modsPath, modDir, source);
+                    WriteInheritedChildSourceCredentials(modsPath, modDir, sourceForPersistence);
                 }
             }
             catch { }
@@ -6122,6 +6598,211 @@ public sealed class ModpackInstallService
 
         return TryGetSourceRelationProperty(source, "parentMod", out var parentMod) &&
                parentMod.ValueKind == JsonValueKind.Object;
+    }
+
+    private static JsonElement FilterIndependentlySourcedChildren(
+        JsonElement sourceEntry,
+        ModSourceDescriptor parentDescriptor,
+        IReadOnlyList<JsonElement> allSourceEntries)
+    {
+        var sourceNode = JsonNode.Parse(BuildSourceCredentialJson(sourceEntry, parentDescriptor)) as JsonObject;
+        if (sourceNode == null || FindJsonArrayProperty(sourceNode, "childMods") is not { } childMods)
+        {
+            return ParseClonedJsonElement(BuildSourceCredentialJson(sourceEntry, parentDescriptor));
+        }
+
+        var removedAny = false;
+        for (var index = childMods.Count - 1; index >= 0; index--)
+        {
+            if (childMods[index] is not JsonObject childReference ||
+                !HasDistinctIndependentSourceEntry(childReference, parentDescriptor, allSourceEntries))
+            {
+                continue;
+            }
+
+            childMods.RemoveAt(index);
+            removedAny = true;
+        }
+
+        if (removedAny && childMods.Count == 0)
+        {
+            SetJsonNodePropertyIgnoreCase(sourceNode, "isParentMod", JsonValue.Create(false));
+        }
+
+        return ParseClonedJsonElement(
+            sourceNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static JsonArray? FindJsonArrayProperty(JsonObject source, string propertyName)
+    {
+        foreach (var property in source)
+        {
+            if (string.Equals(property.Key, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Value as JsonArray;
+            }
+        }
+
+        return null;
+    }
+
+    private static void SetJsonNodePropertyIgnoreCase(
+        JsonObject source,
+        string propertyName,
+        JsonNode? value)
+    {
+        var existingName = source
+            .Select(property => property.Key)
+            .FirstOrDefault(name => string.Equals(name, propertyName, StringComparison.OrdinalIgnoreCase));
+        source[existingName ?? propertyName] = value;
+    }
+
+    private static bool HasDistinctIndependentSourceEntry(
+        JsonObject childReference,
+        ModSourceDescriptor parentDescriptor,
+        IReadOnlyList<JsonElement> allSourceEntries)
+    {
+        foreach (var candidate in allSourceEntries)
+        {
+            if (IsInheritedCompositeSourceEntry(candidate) ||
+                !TryGetModSourceDescriptor(candidate, out var childDescriptor) ||
+                !HasActionableSourceDescriptor(childDescriptor) ||
+                !SourceEntryMatchesChildReference(candidate, childReference))
+            {
+                continue;
+            }
+
+            if (SourceDescriptorsHaveDifferentStableIdentity(parentDescriptor, childDescriptor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SourceEntryMatchesChildReference(
+        JsonElement sourceEntry,
+        JsonObject childReference)
+    {
+        var expectedUniqueId = GetJsonNodeString(
+            childReference,
+            "uniqueId",
+            "uniqueID",
+            "unique_id");
+        var sourceUniqueId = GetJsonString(sourceEntry, "uniqueId", "uniqueID", "unique_id");
+        if (!string.IsNullOrWhiteSpace(expectedUniqueId) && !string.IsNullOrWhiteSpace(sourceUniqueId))
+        {
+            return string.Equals(expectedUniqueId, sourceUniqueId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var expectedNames = new[]
+        {
+            GetJsonNodeString(childReference, "name", "modName", "displayName"),
+            GetJsonNodeString(childReference, "relativePath", "path") is { Length: > 0 } path
+                ? Path.GetFileName(path.Replace('/', Path.DirectorySeparatorChar))
+                : string.Empty
+        }.Where(value => !string.IsNullOrWhiteSpace(value));
+        var sourceNames = new[]
+        {
+            GetJsonString(sourceEntry, "name", "modName", "displayName"),
+            GetJsonString(sourceEntry, "directoryName", "directory")
+        }.Where(value => !string.IsNullOrWhiteSpace(value));
+
+        return expectedNames.Any(expected => sourceNames.Any(actual =>
+            string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static bool HasActionableSourceDescriptor(ModSourceDescriptor descriptor)
+    {
+        if (!string.IsNullOrWhiteSpace(descriptor.DownloadUrl))
+        {
+            return true;
+        }
+
+        if (IsGitHubPlatform(descriptor.Platform) &&
+            RemoteCatalogService.TryNormalizeGitHubRepository(descriptor.Repository, out _))
+        {
+            return true;
+        }
+
+        return (IsNexusPlatform(descriptor.Platform) || IsCurseforgePlatform(descriptor.Platform)) &&
+               TryParsePositiveLong(descriptor.ProjectId, out _);
+    }
+
+    private static bool SourceDescriptorsHaveDifferentStableIdentity(
+        ModSourceDescriptor left,
+        ModSourceDescriptor right)
+    {
+        var leftPlatform = string.IsNullOrWhiteSpace(left.Platform)
+            ? string.Empty
+            : NormalizeSourcePlatform(left.Platform);
+        var rightPlatform = string.IsNullOrWhiteSpace(right.Platform)
+            ? string.Empty
+            : NormalizeSourcePlatform(right.Platform);
+        if (!string.IsNullOrWhiteSpace(leftPlatform) &&
+            !string.IsNullOrWhiteSpace(rightPlatform) &&
+            !string.Equals(leftPlatform, rightPlatform, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(left.ProjectId) &&
+            !string.IsNullOrWhiteSpace(right.ProjectId) &&
+            !string.Equals(left.ProjectId, right.ProjectId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(left.FileId) &&
+            !string.IsNullOrWhiteSpace(right.FileId) &&
+            !string.Equals(left.FileId, right.FileId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 完整的平台/项目/文件 ID 是权威身份；别名仓库或刷新后的下载 URL
+        // 即使不同，也不能把同一归档中的子 Mod 误判为独立来源。
+        if (!string.IsNullOrWhiteSpace(leftPlatform) &&
+            string.Equals(leftPlatform, rightPlatform, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(left.ProjectId) &&
+            string.Equals(left.ProjectId, right.ProjectId, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(left.FileId) &&
+            string.Equals(left.FileId, right.FileId, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(left.Repository) &&
+            !string.IsNullOrWhiteSpace(right.Repository) &&
+            !string.Equals(left.Repository, right.Repository, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(left.DownloadUrl) &&
+            !string.IsNullOrWhiteSpace(right.DownloadUrl) &&
+            TryGetStableDownloadLocation(left.DownloadUrl, out var leftLocation) &&
+            TryGetStableDownloadLocation(right.DownloadUrl, out var rightLocation) &&
+            !string.Equals(leftLocation, rightLocation, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetStableDownloadLocation(string value, out string location)
+    {
+        location = string.Empty;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return false;
+        }
+
+        location = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        return !string.IsNullOrWhiteSpace(location);
     }
 
     /// <summary>
@@ -6176,6 +6857,44 @@ public sealed class ModpackInstallService
                parentMod is JsonObject;
     }
 
+    private static bool HasDifferentIndependentSourceFromPersistedParent(
+        string modsPath,
+        string childDirectory,
+        ModSourceDescriptor incomingDescriptor)
+    {
+        var childSource = ReadSourceCredentialNode(childDirectory);
+        if (childSource == null ||
+            !childSource.TryGetPropertyValue("parentMod", out var parentNode) ||
+            parentNode is not JsonObject parentReference)
+        {
+            return false;
+        }
+
+        var relativePath = GetJsonNodeString(parentReference, "relativePath", "path");
+        var parentDirectory = ResolveModRelativePath(modsPath, relativePath);
+        if (string.IsNullOrWhiteSpace(parentDirectory))
+        {
+            return false;
+        }
+
+        var parentSource = ReadSourceCredentialNode(parentDirectory);
+        if (parentSource == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var parentElement = ParseClonedJsonElement(parentSource.ToJsonString());
+            return TryGetModSourceDescriptor(parentElement, out var parentDescriptor) &&
+                   SourceDescriptorsHaveDifferentStableIdentity(parentDescriptor, incomingDescriptor);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void WriteInheritedChildSourceCredentials(
         string modsPath,
         string parentDirectory,
@@ -6200,10 +6919,10 @@ public sealed class ModpackInstallService
             }
 
             var childSource = ReadSourceCredentialNode(childDirectory) ?? new JsonObject();
-            // childMods 是父文件内部目录映射的权威关系。即使旧版本曾经给
-            // 子目录写过独立 project/file，也必须清掉，避免它在下一次更新
-            // 检查时被误认为可独立下载的来源；真正可撤回的信息由 parentMod
-            // 和父级来源共同提供。
+            // childMods 已先过滤掉在整合包清单中具有不同稳定来源身份的
+            // 独立条目。剩余引用确认属于当前父归档，必须清理旧版本误写的
+            // 子级 project/file，避免同一归档的子 Mod 被单独更新；撤回来源
+            // 由 parentMod 和父级归档共同提供。
             RemoveIndependentSourceFields(childSource);
             childSource["sourceKind"] = "parent-inherited";
 

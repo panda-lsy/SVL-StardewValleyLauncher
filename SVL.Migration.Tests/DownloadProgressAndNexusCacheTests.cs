@@ -374,6 +374,167 @@ public sealed class DownloadProgressAndNexusCacheTests
     }
 
     [TestMethod]
+    public void PartialModpackFailure_ShouldSurvivePersistenceRecoveryAndRetryPreparation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-partial-modpack-recovery-test-" + Guid.NewGuid().ToString("N"));
+        var gamePath = Path.Combine(root, "game");
+        var instanceName = "Recoverable Pack";
+        var runtimePath = Path.Combine(gamePath, "versions", instanceName);
+        var archivePath = Path.Combine(root, "recoverable-pack.zip");
+        var statePath = Path.Combine(root, "download-tasks.json.gz");
+        try
+        {
+            Directory.CreateDirectory(runtimePath);
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                WriteArchiveText(
+                    archive,
+                    "modpack.json",
+                    "{\"name\":\"Recoverable Pack\",\"version\":\"1.0.0\",\"mods\":[]}");
+            }
+
+            var task = new DownloadTaskItem
+            {
+                Name = "整合包安装 - Recoverable Pack",
+                TaskKind = DownloadTaskKind.SvlModpack,
+                TaskAction = DownloadTaskAction.InstallModpack,
+                TaskState = DownloadTaskState.Installing,
+                Status = "整合包安装中",
+                SourceUrl = "https://example.invalid/recoverable-pack.zip",
+                OutputFilePath = archivePath,
+                TargetGamePath = gamePath,
+                TargetInstanceName = instanceName,
+                CustomIconPath = Path.Combine(root, "pack-icon.png"),
+                SkipConflictPrompt = true
+            };
+            var applyOutcome = typeof(DownloadPageViewModel).GetMethod(
+                "ApplyModpackInstallOutcomeToTask",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(applyOutcome);
+            var hasFailures = (bool)applyOutcome!.Invoke(null,
+            [
+                task,
+                ModpackInstallResult.Success(
+                    runtimePath,
+                    runtimePath,
+                    ["Installed Child Mod"],
+                    ["Missing Child Mod: 缺少可用下载来源"])
+            ])!;
+
+            Assert.IsTrue(hasFailures);
+            new DownloadTaskStateStore().Save(statePath, [task]);
+            var records = new DownloadTaskStateStore().Load(statePath, out var brokenStatePath);
+            Assert.AreEqual(string.Empty, brokenStatePath);
+            Assert.AreEqual(1, records.Count);
+
+            var restore = typeof(DownloadPageViewModel).GetMethod(
+                "CreateRecoveredTask",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            var normalize = typeof(DownloadPageViewModel).GetMethod(
+                "NormalizeRecoveredTaskState",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(restore);
+            Assert.IsNotNull(normalize);
+
+            var recoveredTask = (DownloadTaskItem)restore!.Invoke(null, [records[0]])!;
+            normalize!.Invoke(null, [recoveredTask]);
+
+            Assert.AreEqual(DownloadTaskState.Failed, recoveredTask.TaskState);
+            Assert.IsTrue(recoveredTask.CanRetry);
+            Assert.AreEqual("Missing Child Mod: 缺少可用下载来源", recoveredTask.FailedDetails);
+            Assert.AreEqual(archivePath, recoveredTask.OutputFilePath);
+            Assert.AreEqual("https://example.invalid/recoverable-pack.zip", recoveredTask.SourceUrl);
+            Assert.AreEqual(gamePath, recoveredTask.TargetGamePath);
+            Assert.AreEqual(instanceName, recoveredTask.TargetInstanceName);
+            Assert.AreEqual(runtimePath, recoveredTask.InstalledPath);
+            Assert.AreEqual(runtimePath, recoveredTask.InstalledDirectory);
+            Assert.AreEqual(task.CustomIconPath, recoveredTask.CustomIconPath);
+            Assert.IsTrue(recoveredTask.SkipConflictPrompt);
+
+            var reuseArchive = typeof(DownloadPageViewModel).GetMethod(
+                "ShouldReuseLocalPackageArchive",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            var updateExisting = typeof(DownloadPageViewModel).GetMethod(
+                "HasPreviouslyInstalledModpackRuntime",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            var prepareRetry = typeof(DownloadPageViewModel).GetMethod(
+                "ResetTaskForRetry",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(reuseArchive);
+            Assert.IsNotNull(updateExisting);
+            Assert.IsNotNull(prepareRetry);
+
+            Assert.IsTrue((bool)reuseArchive!.Invoke(null, [recoveredTask])!);
+            Assert.IsTrue((bool)updateExisting!.Invoke(null, [recoveredTask])!);
+
+            prepareRetry!.Invoke(null, [recoveredTask]);
+
+            Assert.AreEqual(DownloadTaskState.Pending, recoveredTask.TaskState);
+            Assert.AreEqual("已加入队列（重试）", recoveredTask.Status);
+            Assert.AreEqual(0, recoveredTask.Progress);
+            Assert.IsFalse(recoveredTask.CanRetry);
+            Assert.IsFalse(recoveredTask.CanCancel);
+            Assert.AreEqual(string.Empty, recoveredTask.FailedDetails);
+            Assert.AreEqual(archivePath, recoveredTask.OutputFilePath);
+            Assert.IsTrue((bool)reuseArchive.Invoke(null, [recoveredTask])!);
+            Assert.IsTrue((bool)updateExisting.Invoke(null, [recoveredTask])!);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ModpackInstallOutcome_ShouldKeepPartialFailureVisibleAndRetryable()
+    {
+        var applyOutcome = typeof(DownloadPageViewModel).GetMethod(
+            "ApplyModpackInstallOutcomeToTask",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.IsNotNull(applyOutcome);
+
+        var task = new DownloadTaskItem
+        {
+            Name = "Partial Pack",
+            Progress = 72,
+            FailedDetails = "stale failure",
+            CanRetry = false
+        };
+        var partialResult = ModpackInstallResult.Success(
+            "C:\\Game\\versions\\Partial Pack",
+            "C:\\Game\\versions\\Partial Pack",
+            ["Installed Mod"],
+            ["Missing Mod: 缺少可用下载来源"]);
+
+        var hasFailures = (bool)applyOutcome!.Invoke(null, [task, partialResult])!;
+
+        Assert.IsTrue(hasFailures);
+        Assert.AreEqual(DownloadTaskState.Failed, task.TaskState);
+        Assert.AreEqual(99, task.Progress);
+        Assert.IsTrue(task.CanRetry);
+        StringAssert.Contains(task.Status, "部分完成");
+        Assert.AreEqual("Missing Mod: 缺少可用下载来源", task.FailedDetails);
+        Assert.AreEqual("C:\\Game\\versions\\Partial Pack", task.InstalledPath);
+        Assert.AreEqual("C:\\Game\\versions\\Partial Pack", task.InstalledDirectory);
+
+        var completeResult = ModpackInstallResult.Success(
+            "C:\\Game\\versions\\Partial Pack",
+            "C:\\Game\\versions\\Partial Pack",
+            ["Installed Mod", "Previously Missing Mod"]);
+        hasFailures = (bool)applyOutcome.Invoke(null, [task, completeResult])!;
+
+        Assert.IsFalse(hasFailures);
+        Assert.AreEqual(DownloadTaskState.Completed, task.TaskState);
+        Assert.AreEqual(100, task.Progress);
+        Assert.IsFalse(task.CanRetry);
+        Assert.AreEqual("已完成", task.Status);
+        Assert.AreEqual(string.Empty, task.FailedDetails);
+    }
+
+    [TestMethod]
     public void RecoveredSmapiTask_ShouldUseUpdateModeWhenInstanceDirectoryExists()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-smapi-retry-runtime-test-" + Guid.NewGuid().ToString("N"));
@@ -3369,7 +3530,9 @@ public sealed class DownloadProgressAndNexusCacheTests
         var root = Path.Combine(Path.GetTempPath(), "svl-svl-retry-mode-test-" + Guid.NewGuid().ToString("N"));
         var gamePath = Path.Combine(root, "Game");
         var packagePath = Path.Combine(root, "retry-pack.zip");
-        var instanceName = "Retry-" + Guid.NewGuid().ToString("N")[..8];
+        // 假 SMAPI 服务写入的是占位文本 DLL，没有真实 PE FileVersion；
+        // 在实例名中带上目标版本，模拟真实运行时可识别版本，避免测试依赖机器缓存或外网。
+        var instanceName = "Retry SMAPI 4.5.2-" + Guid.NewGuid().ToString("N")[..8];
         var settingsStore = new AppUserSettingsStore(Path.Combine(root, "settings"));
         var registry = new InstanceRegistryStore();
 

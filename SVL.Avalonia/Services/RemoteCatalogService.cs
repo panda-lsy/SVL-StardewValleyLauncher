@@ -762,97 +762,6 @@ public sealed class RemoteCatalogService
         return await ApplyCommunityLocalizationToDetailsAsync(identity, details);
     }
 
-    /// <summary>
-    /// displayText 字符串重载（DownloadPage/VersionSettingsPage 未迁移到结构化模型，仍传 displayText）。
-    /// 内部解析 header 的 [Source#Id] 构造 CatalogResourceIdentity 后委托给结构化重载。
-    /// </summary>
-    public async Task<CatalogResourceDetails> GetResourceDetailsAsync(string displayText)
-    {
-        if (string.IsNullOrWhiteSpace(displayText))
-        {
-            return CatalogResourceDetails.Empty;
-        }
-
-        var identity = ParseIdentityFromDisplayText(displayText);
-        return await GetResourceDetailsAsync(identity);
-    }
-
-    private static CatalogResourceIdentity ParseIdentityFromDisplayText(string displayText)
-    {
-        var header = displayText;
-        var pipeIndex = displayText.IndexOf('|');
-        if (pipeIndex >= 0)
-        {
-            header = displayText[..pipeIndex].Trim();
-        }
-
-        if (!header.StartsWith("[", StringComparison.Ordinal))
-        {
-            return new CatalogResourceIdentity(0, header, CatalogSource.Unknown, false, string.Empty);
-        }
-
-        var closeIndex = header.IndexOf(']');
-        if (closeIndex <= 1)
-        {
-            return new CatalogResourceIdentity(0, header, CatalogSource.Unknown, false, string.Empty);
-        }
-
-        var sourceSegment = header[1..closeIndex].Trim();
-        var nameSegment = header[(closeIndex + 1)..].Trim();
-        var sourceParts = sourceSegment.Split('#', 2, StringSplitOptions.TrimEntries);
-        var sourceToken = sourceParts[0];
-        var resourceIdText = sourceParts.Length > 1 ? sourceParts[1] : string.Empty;
-        long.TryParse(resourceIdText, out var resourceId);
-
-        var source = ResolveCatalogSource(sourceToken);
-        var isModpack = sourceToken.Contains("Pack", StringComparison.OrdinalIgnoreCase) ||
-                        sourceToken.Contains("Collection", StringComparison.OrdinalIgnoreCase);
-
-        // 从 displayText 段中解析 slug=xxx（Collection 详情所需）。
-        var slug = ExtractDisplaySegment(displayText, "slug=");
-
-        return new CatalogResourceIdentity(resourceId, nameSegment, source, isModpack, slug);
-    }
-
-    private static string ExtractDisplaySegment(string displayText, string prefix)
-    {
-        if (string.IsNullOrWhiteSpace(displayText))
-        {
-            return string.Empty;
-        }
-
-        var parts = displayText.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        foreach (var segment in parts)
-        {
-            if (segment.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return segment[prefix.Length..].Trim();
-            }
-        }
-
-        return string.Empty;
-    }
-
-    private static CatalogSource ResolveCatalogSource(string sourceToken)
-    {
-        if (sourceToken.Contains("github", StringComparison.OrdinalIgnoreCase))
-        {
-            return CatalogSource.GitHub;
-        }
-
-        if (sourceToken.Contains("nexus", StringComparison.OrdinalIgnoreCase))
-        {
-            return CatalogSource.NexusMods;
-        }
-
-        if (sourceToken.Contains("curse", StringComparison.OrdinalIgnoreCase))
-        {
-            return CatalogSource.Curseforge;
-        }
-
-        return CatalogSource.Unknown;
-    }
-
     private async Task<CatalogResourceDetails> ApplyCommunityLocalizationToDetailsAsync(
         CatalogResourceIdentity identity,
         CatalogResourceDetails details)
@@ -1709,37 +1618,60 @@ public sealed class RemoteCatalogService
             return [];
         }
 
-        var fallbackCount = Math.Min(Math.Max(safeCount * 8, 120), 240);
-        var fallbackRequestBody = new
+        var safeOffset = Math.Max(0, offset);
+        var requiredMatchCount = (long)safeOffset + safeCount;
+        var matchedFallbackItems = new List<RemoteSearchItem>();
+        var rawOffset = 0;
+        while (rawOffset < MaxLocalSearchCandidates &&
+               matchedFallbackItems.Count < requiredMatchCount)
         {
-            query = graphQlQuery,
-            variables = new
+            var requestCount = Math.Min(MaxNexusSearchBatch, MaxLocalSearchCandidates - rawOffset);
+            var fallbackRequestBody = new
             {
-                filter = new
+                query = graphQlQuery,
+                variables = new
                 {
-                    gameDomainName = new[] { new { op = "EQUALS", value = NexusGameDomain } }
-                },
-                sort = new[]
-                {
-                    new
+                    filter = new
                     {
-                        downloads = new { direction = "DESC" }
-                    }
-                },
-                offset = 0,
-                count = fallbackCount
-            }
-        };
+                        gameDomainName = new[] { new { op = "EQUALS", value = NexusGameDomain } }
+                    },
+                    sort = new[]
+                    {
+                        new
+                        {
+                            downloads = new { direction = "DESC" }
+                        }
+                    },
+                    offset = rawOffset,
+                    count = requestCount
+                }
+            };
 
-        using var fallbackDoc = await ExecuteNexusGraphQlAsync(fallbackRequestBody, settings);
-        if (fallbackDoc == null)
-        {
-            return [];
+            using var fallbackDoc = await ExecuteNexusGraphQlAsync(fallbackRequestBody, settings);
+            if (fallbackDoc == null)
+            {
+                break;
+            }
+
+            var batch = ParseNexusModsFromGraphQl(fallbackDoc.RootElement);
+            if (batch.Count == 0)
+            {
+                break;
+            }
+
+            matchedFallbackItems.AddRange(batch.Where(item =>
+                item.Name.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                item.Summary.Contains(normalized, StringComparison.OrdinalIgnoreCase)));
+
+            rawOffset += batch.Count;
+            if (batch.Count < requestCount)
+            {
+                break;
+            }
         }
 
-        return ParseNexusModsFromGraphQl(fallbackDoc.RootElement)
-            .Where(item => item.Name.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
-                           item.Summary.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+        return matchedFallbackItems
+            .Skip(safeOffset)
             .Take(safeCount)
             .ToList();
     }
@@ -4491,6 +4423,9 @@ public sealed class RemoteCatalogService
             Identity = new CatalogResourceIdentity(item.ResourceId, item.Name, source, isModpack, item.CollectionSlug ?? string.Empty),
             Name = displayName,
             Summary = displaySummary,
+            SourceSummary = item.Summary,
+            LocalizedName = item.LocalizedName,
+            LocalizedSummary = item.LocalizedSummary,
             Stat = item.Stat,
             TimeTag = item.TimeTag,
             IconUrl = item.IconUrl,

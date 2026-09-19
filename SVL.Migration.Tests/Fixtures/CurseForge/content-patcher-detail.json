@@ -1,0 +1,32 @@
+{
+  "data": {
+    "id": 309243,
+    "gameId": 669,
+    "name": "Content Patcher",
+    "slug": "content-patcher",
+    "summary": "Load content packs that change the game's data, maps, and images without replacing XNB files.",
+    "downloadCount": 1897001,
+    "dateModified": "2026-03-15T05:12:24.94Z",
+    "logo": {
+      "thumbnailUrl": "https://media.forgecdn.net/avatars/thumbnails/182/370/256/256/636807483214462878.png",
+      "url": "https://media.forgecdn.net/avatars/182/370/636807483214462878.png"
+    },
+    "mainFileId": 7759981,
+    "latestFilesIndexes": [
+      {
+        "gameVersion": "1.6.15",
+        "fileId": 7153624,
+        "filename": "Content Patcher 2.8.1 2.8.1.zip",
+        "releaseType": 1,
+        "gameVersionTypeId": 587
+      },
+      {
+        "gameVersion": "1.6.8",
+        "fileId": 5365386,
+        "filename": "Content Patcher 2.1.0 2.1.0.zip",
+        "releaseType": 1,
+        "gameVersionTypeId": 587
+      }
+    ]
+  }
+}

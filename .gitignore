@@ -8,6 +8,7 @@ bin/
 obj/
 publish/
 out/
+**/.avalonia-build-tasks/
 [Bb]uild[Ll]og.*
 *.buildlog
 

@@ -1,0 +1,57 @@
+{
+  "data": [
+    {
+      "id": 5346378,
+      "gameId": 669,
+      "modId": 1012878,
+      "isAvailable": true,
+      "displayName": "Blissful Valley 1.2.0",
+      "fileName": "Blissful Valley-1.2.0.cfmodpack",
+      "releaseType": 1,
+      "fileDate": "2024-05-15T18:31:34.313Z",
+      "fileLength": 29199958,
+      "downloadCount": 18952,
+      "downloadUrl": "https://edge.forgecdn.net/files/5346/378/Blissful%20Valley-1.2.0.cfmodpack",
+      "gameVersions": ["1.6.8"],
+      "sortableGameVersions": [
+        {
+          "gameVersionName": "1.6.8",
+          "gameVersionPadded": "0000000001.0000000006.0000000008",
+          "gameVersion": "1.6.8",
+          "gameVersionReleaseDate": "2024-05-01T00:00:00Z",
+          "gameVersionTypeId": 587
+        }
+      ],
+      "dependencies": [],
+      "fileFingerprint": 3075345998,
+      "modules": [{ "name": "manifest.json", "fingerprint": 1365769249 }]
+    },
+    {
+      "id": 5322297,
+      "gameId": 669,
+      "modId": 1012878,
+      "isAvailable": true,
+      "displayName": "Blissful Valley v1.0.0",
+      "fileName": "Blissful Valley-1.0.0.cfmodpack",
+      "releaseType": 1,
+      "fileDate": "2024-05-07T01:31:35.81Z",
+      "fileLength": 29056561,
+      "downloadCount": 669,
+      "downloadUrl": "https://edge.forgecdn.net/files/5322/297/Blissful%20Valley-1.0.0.cfmodpack",
+      "gameVersions": ["1.6.8"],
+      "sortableGameVersions": [
+        {
+          "gameVersionName": "1.6.8",
+          "gameVersionPadded": "0000000001.0000000006.0000000008",
+          "gameVersion": "1.6.8",
+          "gameVersionReleaseDate": "2024-05-01T00:00:00Z",
+          "gameVersionTypeId": 587
+        }
+      ],
+      "dependencies": [],
+      "fileFingerprint": 3275862520,
+      "modules": [{ "name": "manifest.json", "fingerprint": 873920861 }]
+    }
+  ],
+  "pagination": { "index": 0, "pageSize": 30, "resultCount": 2, "totalCount": 2 }
+}

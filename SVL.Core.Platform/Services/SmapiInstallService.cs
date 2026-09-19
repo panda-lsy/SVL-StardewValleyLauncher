@@ -300,36 +300,42 @@ public sealed class SmapiInstallService : ISmapiInstallService
     }
 
     /// <summary>
-    /// 更新模式清理：清空运行时目录中的旧版本文件，保留用户数据。
+    /// 更新模式清理：把旧运行时文件整体移入回收站，保留用户数据。
     /// 参考旧架构 SmapiDownloadTask.CleanupVersionDirectoryForUpdate：
-    /// - Mods 目录整体保留，仅删除 SMAPI 附带模组（ConsoleCommands/SaveBackup），安装时会随新版本重新写入
+    /// - Mods 目录整体保留，仅移走 SMAPI 附带模组（ConsoleCommands/SaveBackup），安装时会随新版本重新写入
     /// - .svl-* 前缀文件为启动器元数据（如自定义实例图标 .svl-instance-icon.*），保留
-    /// - junction/symlink 子目录（如旧架构的 Content 连接）用 rmdir 移除，避免跟随连接误删源目录
-    /// 清理为 best-effort：单个文件删除失败仅记日志，后续复制会覆盖同名文件。
+    /// - junction/symlink 子目录（如旧架构的 Content 连接）只移除链接本身，避免跟随连接误删源目录
+    /// 先把待替换条目移入同卷暂存目录，再整体移入回收站；若回收站失败，会回滚暂存并中止更新。
     /// </summary>
-    private static void CleanupRuntimeDirectoryForUpdate(string runtimePath, Action<string>? logger)
+    internal static void CleanupRuntimeDirectoryForUpdate(
+        string runtimePath,
+        Action<string>? logger,
+        Func<string, (bool Success, string Message)>? moveToRecycleBin = null)
     {
         if (string.IsNullOrWhiteSpace(runtimePath) || !Directory.Exists(runtimePath))
         {
             return;
         }
 
+        runtimePath = Path.GetFullPath(runtimePath);
+        moveToRecycleBin ??= TryMoveToRecycleBinWithMessage;
         var modsPath = Path.Combine(runtimePath, "Mods");
-        if (Directory.Exists(modsPath))
+        var entriesToStage = new List<string>();
+        var linkedDirectories = new List<DirectoryInfo>();
+        if (Directory.Exists(modsPath) && !IsJunctionOrSymlink(modsPath))
         {
             foreach (var bundledMod in new[] { "ConsoleCommands", "SaveBackup" })
             {
                 var bundledPath = Path.Combine(modsPath, bundledMod);
                 if (Directory.Exists(bundledPath))
                 {
-                    try
+                    if (IsJunctionOrSymlink(bundledPath))
                     {
-                        Directory.Delete(bundledPath, true);
-                        logger?.Invoke($"  已删除 SMAPI 附带模组: {bundledMod}");
+                        linkedDirectories.Add(new DirectoryInfo(bundledPath));
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        logger?.Invoke($"  删除 SMAPI 附带模组失败: {bundledMod} ({ex.Message})");
+                        entriesToStage.Add(bundledPath);
                     }
                 }
             }
@@ -343,14 +349,7 @@ public sealed class SmapiInstallService : ISmapiInstallService
                 continue;
             }
 
-            try
-            {
-                file.Delete();
-            }
-            catch (Exception ex)
-            {
-                logger?.Invoke($"  删除文件失败: {file.Name} ({ex.Message})");
-            }
+            entriesToStage.Add(file.FullName);
         }
 
         foreach (var dir in dirInfo.GetDirectories())
@@ -360,24 +359,185 @@ public sealed class SmapiInstallService : ISmapiInstallService
                 continue;
             }
 
+            if (IsJunctionOrSymlink(dir.FullName))
+            {
+                linkedDirectories.Add(dir);
+            }
+            else
+            {
+                entriesToStage.Add(dir.FullName);
+            }
+        }
+
+        // SMAPI 旧布局可能把 Content/game 目录链接到 Base 游戏目录。
+        // 这里只拆除链接对象，不会递归触碰链接目标。
+        foreach (var linkedDirectory in linkedDirectories)
+        {
             try
             {
-                if (IsJunctionOrSymlink(dir.FullName))
+                RemoveJunction(linkedDirectory.FullName);
+                logger?.Invoke($"  已移除旧运行时目录链接（目标内容保留）: {linkedDirectory.Name}");
+            }
+            catch (Exception ex)
+            {
+                logger?.Invoke($"  移除旧运行时目录链接失败: {linkedDirectory.Name} ({ex.Message})");
+            }
+        }
+
+        if (entriesToStage.Count == 0)
+        {
+            logger?.Invoke("  没有需要回收的旧运行时文件（用户 Mods 与 SVL 元数据已保留）");
+            return;
+        }
+
+        var parentPath = Directory.GetParent(runtimePath)?.FullName
+            ?? throw new IOException($"无法为 SMAPI 更新暂存目录解析父路径: {runtimePath}");
+        var stagingRoot = Path.Combine(parentPath, $".svl-smapi-update-{Guid.NewGuid():N}");
+        var stagedEntries = new List<(string OriginalPath, string StagedPath, bool IsDirectory)>();
+
+        try
+        {
+            Directory.CreateDirectory(stagingRoot);
+            foreach (var sourcePath in entriesToStage)
+            {
+                if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
                 {
-                    RemoveJunction(dir.FullName);
+                    continue;
+                }
+
+                var relativePath = Path.GetRelativePath(runtimePath, sourcePath);
+                var stagedPath = Path.Combine(stagingRoot, relativePath);
+                var stagedParent = Path.GetDirectoryName(stagedPath);
+                if (!string.IsNullOrWhiteSpace(stagedParent))
+                {
+                    Directory.CreateDirectory(stagedParent);
+                }
+
+                var isDirectory = Directory.Exists(sourcePath);
+                if (isDirectory)
+                {
+                    Directory.Move(sourcePath, stagedPath);
                 }
                 else
                 {
-                    dir.Delete(true);
+                    File.Move(sourcePath, stagedPath);
+                }
+
+                stagedEntries.Add((sourcePath, stagedPath, isDirectory));
+            }
+        }
+        catch (Exception ex)
+        {
+            var restoreErrors = RestoreStagedRuntimeEntries(stagedEntries, stagingRoot);
+            var restoreSummary = restoreErrors.Count == 0
+                ? "已恢复暂存条目"
+                : $"部分条目仍保留在暂存目录 {stagingRoot}: {string.Join("; ", restoreErrors)}";
+            throw new IOException($"SMAPI 更新前暂存旧运行时文件失败，已中止更新；{restoreSummary}。", ex);
+        }
+
+        if (stagedEntries.Count == 0)
+        {
+            if (Directory.Exists(stagingRoot))
+            {
+                Directory.Delete(stagingRoot, recursive: true);
+            }
+
+            return;
+        }
+
+        (bool Success, string Message) recycleResult;
+        try
+        {
+            recycleResult = moveToRecycleBin(stagingRoot);
+        }
+        catch (Exception ex)
+        {
+            recycleResult = (false, ex.Message);
+        }
+
+        var stagingStillExists = Directory.Exists(stagingRoot) || File.Exists(stagingRoot);
+        if (recycleResult.Success && !stagingStillExists)
+        {
+            logger?.Invoke("  旧 SMAPI 运行时文件已整体移入回收站（用户 Mods 与 SVL 元数据已保留）");
+            return;
+        }
+
+        if (!stagingStillExists)
+        {
+            throw new IOException(
+                $"回收站操作报告失败，但旧运行时暂存目录已消失；请检查系统回收站/应用回收目录后再继续更新。原因：{recycleResult.Message}");
+        }
+
+        var rollbackErrors = RestoreStagedRuntimeEntries(stagedEntries, stagingRoot);
+        if (rollbackErrors.Count == 0)
+        {
+            throw new IOException($"无法将旧 SMAPI 运行时文件移入回收站，已恢复原文件并中止更新：{recycleResult.Message}");
+        }
+
+        throw new IOException(
+            $"无法将旧 SMAPI 运行时文件移入回收站，且部分回滚失败；剩余文件保留在 {stagingRoot}。原因：{recycleResult.Message}；回滚错误：{string.Join("; ", rollbackErrors)}");
+    }
+
+    private static (bool Success, string Message) TryMoveToRecycleBinWithMessage(string path)
+    {
+        var success = RecycleBinService.TryMoveToRecycleBin(path, out var message);
+        return (success, message);
+    }
+
+    private static List<string> RestoreStagedRuntimeEntries(
+        IReadOnlyList<(string OriginalPath, string StagedPath, bool IsDirectory)> stagedEntries,
+        string stagingRoot)
+    {
+        var errors = new List<string>();
+        for (var index = stagedEntries.Count - 1; index >= 0; index--)
+        {
+            var entry = stagedEntries[index];
+            if (!File.Exists(entry.StagedPath) && !Directory.Exists(entry.StagedPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                if (File.Exists(entry.OriginalPath) || Directory.Exists(entry.OriginalPath))
+                {
+                    throw new IOException($"原路径已重新出现: {entry.OriginalPath}");
+                }
+
+                var originalParent = Path.GetDirectoryName(entry.OriginalPath);
+                if (!string.IsNullOrWhiteSpace(originalParent))
+                {
+                    Directory.CreateDirectory(originalParent);
+                }
+
+                if (entry.IsDirectory)
+                {
+                    Directory.Move(entry.StagedPath, entry.OriginalPath);
+                }
+                else
+                {
+                    File.Move(entry.StagedPath, entry.OriginalPath);
                 }
             }
             catch (Exception ex)
             {
-                logger?.Invoke($"  删除目录失败: {dir.Name} ({ex.Message})");
+                errors.Add($"{entry.OriginalPath}: {ex.Message}");
             }
         }
 
-        logger?.Invoke("  旧版本目录清理完成（用户 Mods 已保留）");
+        if (errors.Count == 0 && Directory.Exists(stagingRoot))
+        {
+            try
+            {
+                Directory.Delete(stagingRoot, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"清理空暂存目录失败 {stagingRoot}: {ex.Message}");
+            }
+        }
+
+        return errors;
     }
 
     /// <summary>

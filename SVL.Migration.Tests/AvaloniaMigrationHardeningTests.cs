@@ -1752,6 +1752,380 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void ExportChildSource_ShouldFindHistoricalParentArchiveContainingInstalledChildVersion()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "svl-child-parent-archive-lineage-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentPath = Path.Combine(modsPath, "[] MarketTown");
+        var childPath = Path.Combine(modsPath, "[CP] CloneNPC_RSV");
+        var cachePath = Path.Combine(root, "curseforge-cache");
+        Directory.CreateDirectory(parentPath);
+        Directory.CreateDirectory(childPath);
+        Directory.CreateDirectory(cachePath);
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(parentPath, "manifest.json"),
+                "{\"Name\":\"Market Town\",\"UniqueID\":\"d5a1lamdtd.MarketTown\",\"Version\":\"6.7.1\"}");
+            File.WriteAllText(
+                Path.Combine(parentPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"sourceKind\":\"modpack-entry\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "manifest.json"),
+                "{\"Name\":\"MarketTown - Cloned NPC RSV\",\"UniqueID\":\"d5a1lamdtd.MarketTown.CloneNPC_RSV\",\"Version\":\"5.0.0\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "svl-source.json"),
+                "{\"sourceKind\":\"parent-inherited\",\"parentMod\":{\"id\":\"d5a1lamdtd.MarketTown\",\"name\":\"Market Town\",\"relativePath\":\"[] MarketTown\"}}");
+
+            CreateParentArchive(
+                Path.Combine(cachePath, "cf-994458-8390242.zip"),
+                "6.7.1",
+                includeCloneNpc: false);
+            CreateParentArchive(
+                Path.Combine(cachePath, "cf-994458-5276101.zip"),
+                "5.5.0",
+                includeCloneNpc: true);
+
+            var archiveMatcher = typeof(ModpackInstallService).GetMethod(
+                "ArchiveContainsModIdentity",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(archiveMatcher);
+            Assert.IsFalse((bool)archiveMatcher!.Invoke(null,
+            [
+                Path.Combine(cachePath, "cf-994458-8390242.zip"),
+                "d5a1lamdtd.MarketTown.CloneNPC_RSV",
+                "5.0.0"
+            ])!);
+            Assert.IsTrue((bool)archiveMatcher.Invoke(null,
+            [
+                Path.Combine(cachePath, "cf-994458-5276101.zip"),
+                "d5a1lamdtd.MarketTown.CloneNPC_RSV",
+                "5.0.0"
+            ])!);
+
+            var child = new ModManageItem
+            {
+                FullPath = childPath,
+                ParentModId = parentPath,
+                ParentModName = "Market Town",
+                UniqueId = "d5a1lamdtd.MarketTown.CloneNPC_RSV",
+                Version = "5.0.0"
+            };
+            var resolver = typeof(VersionSettingsPageViewModel).GetMethod(
+                "ResolveExportArchiveSourceForChild",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(resolver);
+
+            var archiveSource = resolver!.Invoke(null, [child, cachePath]);
+            Assert.IsNotNull(archiveSource);
+            Assert.AreEqual("Curseforge", archiveSource!.GetType().GetProperty("Platform")?.GetValue(archiveSource));
+            Assert.AreEqual("994458", archiveSource.GetType().GetProperty("ProjectId")?.GetValue(archiveSource));
+            Assert.AreEqual("5276101", archiveSource.GetType().GetProperty("FileId")?.GetValue(archiveSource));
+
+            var currentOnlyCache = Path.Combine(root, "current-only-cache");
+            Directory.CreateDirectory(currentOnlyCache);
+            File.Copy(
+                Path.Combine(cachePath, "cf-994458-8390242.zip"),
+                Path.Combine(currentOnlyCache, "cf-994458-8390242.zip"));
+            Assert.IsNull(resolver.Invoke(null, [child, currentOnlyCache]));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+
+        static void CreateParentArchive(string path, string parentVersion, bool includeCloneNpc)
+        {
+            using var archive = System.IO.Compression.ZipFile.Open(
+                path,
+                System.IO.Compression.ZipArchiveMode.Create);
+            WriteArchiveText(
+                archive,
+                "MarketTown/[] MarketTown/manifest.json",
+                $"{{\"Name\":\"Market Town\",\"UniqueID\":\"d5a1lamdtd.MarketTown\",\"Version\":\"{parentVersion}\"}}");
+            if (includeCloneNpc)
+            {
+                WriteArchiveText(
+                    archive,
+                    "MarketTown/[CP] MarketTown/[CP] CloneNPC_RSV/manifest.json",
+                    "{\"Name\":\"MarketTown - Cloned NPC RSV\",\"UniqueID\":\"d5a1lamdtd.MarketTown.CloneNPC_RSV\",\"Version\":\"5.0.0\"}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ModpackInstall_TargetsNestedChildInHistoricalParentArchiveWithoutDowngradingParent()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "svl-targeted-parent-archive-child-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var currentParentArchive = Path.Combine(root, "cf-994458-8390242.zip");
+        var historicalParentArchive = Path.Combine(root, "cf-994458-5276101.zip");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            using (var archive = System.IO.Compression.ZipFile.Open(
+                       currentParentArchive,
+                       System.IO.Compression.ZipArchiveMode.Create))
+            {
+                WriteArchiveText(
+                    archive,
+                    "MarketTown/manifest.json",
+                    "{\"Name\":\"Market Town\",\"UniqueID\":\"d5a1lamdtd.MarketTown\",\"Version\":\"6.7.1\"}");
+                WriteArchiveText(archive, "MarketTown/content.json", "{}");
+            }
+
+            using (var archive = System.IO.Compression.ZipFile.Open(
+                       historicalParentArchive,
+                       System.IO.Compression.ZipArchiveMode.Create))
+            {
+                WriteArchiveText(
+                    archive,
+                    "MarketTown/manifest.json",
+                    "{\"Name\":\"Market Town\",\"UniqueID\":\"d5a1lamdtd.MarketTown\",\"Version\":\"5.5.0\"}");
+                WriteArchiveText(archive, "MarketTown/content.json", "{}");
+                WriteArchiveText(
+                    archive,
+                    "MarketTown/[CP] CloneNPC_RSV/manifest.json",
+                    "{\"Name\":\"MarketTown - Cloned NPC RSV\",\"UniqueID\":\"d5a1lamdtd.MarketTown.CloneNPC_RSV\",\"Version\":\"5.0.0\"}");
+                WriteArchiveText(archive, "MarketTown/[CP] CloneNPC_RSV/content.json", "{}");
+            }
+
+            var installArchive = typeof(ModpackInstallService).GetMethod(
+                "InstallDownloadedModArchive",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(installArchive);
+            var parentArguments = new object[] { currentParentArchive, modsPath, "Market Town", null! };
+            Assert.IsTrue((bool)installArchive!.Invoke(null, parentArguments)!);
+            var parentDirectoryName = ((List<string>)parentArguments[3]).Single();
+
+            using var sourceDocument = JsonDocument.Parse(
+                """
+                {
+                  "name":"MarketTown - Cloned NPC RSV",
+                  "directoryName":"[CP] CloneNPC_RSV",
+                  "version":"5.0.0",
+                  "installTargetUniqueId":"d5a1lamdtd.MarketTown.CloneNPC_RSV",
+                  "sourceKind":"parent-inherited",
+                  "parentMod":{"id":"d5a1lamdtd.MarketTown","name":"Market Town","relativePath":"MarketTown"},
+                  "archiveSource":{"platform":"Curseforge","projectId":"994458","fileId":"5276101","fileName":"cf-994458-5276101.zip"}
+                }
+                """);
+            var installChild = typeof(ModpackInstallService).GetMethod(
+                "InstallInheritedChildFromArchive",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(installChild);
+            var childArguments = new object[]
+            {
+                historicalParentArchive,
+                modsPath,
+                "[CP] CloneNPC_RSV",
+                "d5a1lamdtd.MarketTown.CloneNPC_RSV",
+                sourceDocument.RootElement,
+                null!
+            };
+
+            Assert.IsTrue((bool)installChild!.Invoke(null, childArguments)!);
+
+            var parentManifest = File.ReadAllText(Path.Combine(modsPath, parentDirectoryName, "manifest.json"));
+            StringAssert.Contains(parentManifest, "6.7.1");
+            var childManifest = File.ReadAllText(Path.Combine(modsPath, "[CP] CloneNPC_RSV", "manifest.json"));
+            StringAssert.Contains(childManifest, "5.0.0");
+            var childSource = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(modsPath, "[CP] CloneNPC_RSV", "svl-source.json")));
+            Assert.AreEqual(
+                "parent-inherited",
+                childSource.RootElement.GetProperty("sourceKind").GetString());
+            Assert.AreEqual(
+                "5276101",
+                childSource.RootElement.GetProperty("parentMod").GetProperty("archiveSource").GetProperty("fileId").GetString());
+            Assert.IsFalse(childSource.RootElement.TryGetProperty("fileId", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ModpackSourceWriting_ShouldKeepExplicitChildEntryIndependentFromStaleParentRelation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-modpack-independent-child-source-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentDirectory = Path.Combine(modsPath, "Parent Mod");
+        var childDirectory = Path.Combine(modsPath, "Child Mod");
+        try
+        {
+            Directory.CreateDirectory(parentDirectory);
+            Directory.CreateDirectory(childDirectory);
+            File.WriteAllText(
+                Path.Combine(parentDirectory, "manifest.json"),
+                "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\",\"EntryDll\":\"Parent.dll\"}");
+            File.WriteAllText(
+                Path.Combine(childDirectory, "manifest.json"),
+                "{\"Name\":\"Child Mod\",\"UniqueID\":\"Example.Parent.Child\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+
+            static JsonElement ParseEntry(string json)
+            {
+                using var document = JsonDocument.Parse(json);
+                return document.RootElement.Clone();
+            }
+
+            var sources = new List<JsonElement>
+            {
+                ParseEntry(
+                    "{\"name\":\"Parent Mod\",\"directoryName\":\"Parent Mod\",\"uniqueId\":\"Example.Parent\",\"childMods\":[{\"name\":\"Child Mod\",\"uniqueId\":\"Example.Parent.Child\",\"relativePath\":\"Child Mod\"}],\"source\":{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"sourceKind\":\"modpack-entry\"}}"),
+                ParseEntry(
+                    "{\"name\":\"Child Mod\",\"directoryName\":\"Child Mod\",\"uniqueId\":\"Example.Parent.Child\",\"source\":{\"platform\":\"NexusMods\",\"projectId\":\"19309\",\"fileId\":\"5276101\",\"sourceKind\":\"modpack-entry\"}}")
+            };
+
+            var writer = typeof(ModpackInstallService).GetMethod(
+                "WriteSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(writer);
+            writer!.Invoke(null, [sources, modsPath]);
+
+            using var parentDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(parentDirectory, "svl-source.json")));
+            Assert.AreEqual(0, parentDocument.RootElement.GetProperty("childMods").GetArrayLength());
+
+            using var childDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(childDirectory, "svl-source.json")));
+            var child = childDocument.RootElement;
+            Assert.AreEqual("NexusMods", child.GetProperty("platform").GetString());
+            Assert.AreEqual("19309", child.GetProperty("projectId").GetString());
+            Assert.AreEqual("5276101", child.GetProperty("fileId").GetString());
+            Assert.AreEqual("modpack-entry", child.GetProperty("sourceKind").GetString());
+            Assert.IsFalse(child.TryGetProperty("parentMod", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void RepairCompositeSourceCredentials_ShouldNotMergeDifferentFilesFromSameProject()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-modpack-distinct-file-source-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentDirectory = Path.Combine(modsPath, "Parent Mod");
+        var childDirectory = Path.Combine(modsPath, "Child Mod");
+        try
+        {
+            Directory.CreateDirectory(parentDirectory);
+            Directory.CreateDirectory(childDirectory);
+            File.WriteAllText(
+                Path.Combine(parentDirectory, "manifest.json"),
+                "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\",\"EntryDll\":\"Parent.dll\"}");
+            File.WriteAllText(
+                Path.Combine(childDirectory, "manifest.json"),
+                "{\"Name\":\"Child Mod\",\"UniqueID\":\"Example.Parent.Child\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+            File.WriteAllText(
+                Path.Combine(parentDirectory, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"sourceKind\":\"modpack-entry\"}");
+            File.WriteAllText(
+                Path.Combine(childDirectory, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"5276101\",\"sourceKind\":\"modpack-entry\"}");
+
+            var repair = typeof(ModpackInstallService).GetMethod(
+                "RepairCompositeSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(repair);
+            repair!.Invoke(null, [modsPath]);
+
+            using var parentDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(parentDirectory, "svl-source.json")));
+            Assert.IsFalse(parentDocument.RootElement.TryGetProperty("childMods", out var children) &&
+                           children.EnumerateArray().Any(child =>
+                               child.GetProperty("uniqueId").GetString() == "Example.Parent.Child"));
+
+            using var childDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(childDirectory, "svl-source.json")));
+            var childSource = childDocument.RootElement;
+            Assert.AreEqual("5276101", childSource.GetProperty("fileId").GetString());
+            Assert.AreEqual("modpack-entry", childSource.GetProperty("sourceKind").GetString());
+            Assert.IsFalse(childSource.TryGetProperty("parentMod", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void SvlModpackImport_ShouldKeepSameArchiveChildInheritedWhenAlsoListed()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-modpack-same-archive-child-source-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentDirectory = Path.Combine(modsPath, "Parent Mod");
+        var childDirectory = Path.Combine(modsPath, "Child Mod");
+        try
+        {
+            Directory.CreateDirectory(parentDirectory);
+            Directory.CreateDirectory(childDirectory);
+            File.WriteAllText(
+                Path.Combine(parentDirectory, "manifest.json"),
+                "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\",\"EntryDll\":\"Parent.dll\"}");
+            File.WriteAllText(
+                Path.Combine(childDirectory, "manifest.json"),
+                "{\"Name\":\"Child Mod\",\"UniqueID\":\"Example.Parent.Child\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+
+            static JsonElement ParseEntry(string json)
+            {
+                using var document = JsonDocument.Parse(json);
+                return document.RootElement.Clone();
+            }
+
+            var sources = new List<JsonElement>
+            {
+                ParseEntry(
+                    "{\"name\":\"Parent Mod\",\"directoryName\":\"Parent Mod\",\"uniqueId\":\"Example.Parent\",\"childMods\":[{\"name\":\"Child Mod\",\"uniqueId\":\"Example.Parent.Child\",\"relativePath\":\"Child Mod\"}],\"source\":{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"repository\":\"parent-alias\",\"downloadUrl\":\"https://cdn.example.test/archive-parent.zip\"}}"),
+                ParseEntry(
+                    "{\"name\":\"Child Mod\",\"directoryName\":\"Child Mod\",\"uniqueId\":\"Example.Parent.Child\",\"source\":{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"repository\":\"child-alias\",\"downloadUrl\":\"https://mirror.example.test/alternate-name.zip\"}}")
+            };
+
+            var writer = typeof(ModpackInstallService).GetMethod(
+                "WriteSourceCredentials",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(writer);
+            writer!.Invoke(null, [sources, modsPath]);
+
+            using var childDocument = JsonDocument.Parse(
+                File.ReadAllText(Path.Combine(childDirectory, "svl-source.json")));
+            var child = childDocument.RootElement;
+            Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
+            Assert.AreEqual("Parent Mod", child.GetProperty("parentMod").GetProperty("name").GetString());
+            Assert.IsFalse(child.TryGetProperty("projectId", out _));
+            Assert.IsFalse(child.TryGetProperty("fileId", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void ModpackInstall_ShouldBuildParentTreeForBundledSiblingContentPacks()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-bundled-composite-source-test-" + Guid.NewGuid().ToString("N"));
@@ -1818,6 +2192,15 @@ public sealed class AvaloniaMigrationHardeningTests
             Directory.CreateDirectory(current);
             File.WriteAllText(Path.Combine(backup, "manifest.json"), "same");
             File.WriteAllText(Path.Combine(current, "manifest.json"), "same");
+            Directory.CreateDirectory(Path.Combine(backup, "nested"));
+            Directory.CreateDirectory(Path.Combine(current, "nested"));
+            var largeBytes = new byte[160_000];
+            for (var index = 0; index < largeBytes.Length; index++)
+            {
+                largeBytes[index] = (byte)(index % 251);
+            }
+            File.WriteAllBytes(Path.Combine(backup, "nested", "large.bin"), largeBytes);
+            File.WriteAllBytes(Path.Combine(current, "nested", "large.bin"), largeBytes);
             File.WriteAllText(Path.Combine(backup, ".svl-backup.json"), "backup metadata");
             File.WriteAllText(Path.Combine(backup, ".svl-update-chain.json"), "update metadata");
 
@@ -1829,15 +2212,33 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.IsNotNull(result);
             Assert.IsFalse((bool)result!.GetType().GetProperty("HasDifferences")!.GetValue(result)!);
             Assert.AreEqual(
-                "相同 1 个，内容不同 0 个，仅备份中 0 个，仅原有 Mod 中 0 个。",
+                "相同 2 个，内容不同 0 个，仅备份中 0 个，仅原有 Mod 中 0 个。",
                 result.GetType().GetProperty("Summary")!.GetValue(result));
 
-            File.WriteAllText(Path.Combine(current, "content.json"), "new file");
+            File.WriteAllText(Path.Combine(current, "nested", "existing-only.txt"), "new file");
+            File.WriteAllText(Path.Combine(backup, "backup-only.txt"), "old file");
+            using (var stream = new FileStream(
+                       Path.Combine(current, "nested", "large.bin"),
+                       FileMode.Open,
+                       FileAccess.Write,
+                       FileShare.ReadWrite))
+            {
+                stream.Position = 128 * 1024 + 17;
+                stream.WriteByte((byte)(largeBytes[128 * 1024 + 17] ^ 0xff));
+            }
+
             result = compare.Invoke(null, [backup, current]);
+            Assert.IsTrue((bool)result!.GetType().GetProperty("HasDifferences")!.GetValue(result)!);
+            Assert.AreEqual(
+                "相同 1 个，内容不同 1 个，仅备份中 1 个，仅原有 Mod 中 1 个。",
+                result.GetType().GetProperty("Summary")!.GetValue(result));
+
+            var missingDirectory = Path.Combine(root, "directory-disappeared-during-compare");
+            result = compare.Invoke(null, [backup, missingDirectory]);
             Assert.IsTrue((bool)result!.GetType().GetProperty("HasDifferences")!.GetValue(result)!);
             StringAssert.Contains(
                 (string)result.GetType().GetProperty("Summary")!.GetValue(result)!,
-                "仅原有 Mod 中 1 个");
+                "结果不完整");
         }
         finally
         {
@@ -1902,7 +2303,7 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
-    public void SvlModpackImport_ShouldNotOverwriteInheritedChildWithPerEntrySource()
+    public void SvlModpackImport_ShouldPreservePerEntrySourceOverStaleParentLink()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-child-source-order-test-" + Guid.NewGuid().ToString("N"));
         var modsPath = Path.Combine(root, "Mods");
@@ -1936,10 +2337,11 @@ public sealed class AvaloniaMigrationHardeningTests
             using var childDocument = JsonDocument.Parse(
                 File.ReadAllText(Path.Combine(childPath, "svl-source.json")));
             var child = childDocument.RootElement;
-            Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
-            Assert.AreEqual("Parent Mod", child.GetProperty("parentMod").GetProperty("relativePath").GetString());
-            Assert.IsFalse(child.TryGetProperty("projectId", out _));
-            Assert.IsFalse(child.TryGetProperty("fileId", out _));
+            Assert.AreEqual("Curseforge", child.GetProperty("platform").GetString());
+            Assert.AreEqual("111", child.GetProperty("projectId").GetString());
+            Assert.AreEqual("222", child.GetProperty("fileId").GetString());
+            Assert.AreEqual("modpack-entry", child.GetProperty("sourceKind").GetString());
+            Assert.IsFalse(child.TryGetProperty("parentMod", out _));
         }
         finally
         {
@@ -2035,7 +2437,7 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
-    public void ExistingCompositeSources_ShouldRepairMixedFileIdsOnReload()
+    public void ExistingCompositeSources_ShouldKeepDistinctFileEntriesIndependentOnReload()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-existing-composite-repair-test-" + Guid.NewGuid().ToString("N"));
         var modsPath = Path.Combine(root, "Mods");
@@ -2086,19 +2488,18 @@ public sealed class AvaloniaMigrationHardeningTests
                 File.ReadAllText(Path.Combine(parentPath, "svl-source.json")));
             var parent = parentDocument.RootElement;
             Assert.AreEqual("modpack-entry", parent.GetProperty("sourceKind").GetString());
-            Assert.IsTrue(parent.GetProperty("isParentMod").GetBoolean());
-            Assert.AreEqual(childPaths.Length, parent.GetProperty("childMods").GetArrayLength());
+            Assert.IsFalse(parent.TryGetProperty("childMods", out var parentChildren) &&
+                           parentChildren.EnumerateArray().Any());
 
             foreach (var childPath in childPaths)
             {
                 using var childDocument = JsonDocument.Parse(
                     File.ReadAllText(Path.Combine(childPath, "svl-source.json")));
                 var child = childDocument.RootElement;
-                Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
-                Assert.IsFalse(child.TryGetProperty("projectId", out _));
-                Assert.IsFalse(child.TryGetProperty("fileId", out _));
-                Assert.IsFalse(child.GetProperty("hasUpdate").GetBoolean());
-                Assert.AreEqual("未检查", child.GetProperty("updateStatus").GetString());
+                Assert.AreEqual("5276101", child.GetProperty("fileId").GetString());
+                Assert.AreEqual("modpack-entry", child.GetProperty("sourceKind").GetString());
+                Assert.IsTrue(child.GetProperty("hasUpdate").GetBoolean());
+                Assert.IsFalse(child.TryGetProperty("parentMod", out _));
             }
         }
         finally
@@ -2111,7 +2512,7 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
-    public void ExistingMarketTownCompositeSources_ShouldRepairRealFolderNames()
+    public void ExistingMarketTownSources_ShouldKeepChildFromDifferentArchiveIndependent()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-market-town-composite-repair-test-" + Guid.NewGuid().ToString("N"));
         var modsPath = Path.Combine(root, "Mods");
@@ -2145,18 +2546,18 @@ public sealed class AvaloniaMigrationHardeningTests
                 File.ReadAllText(Path.Combine(parentPath, "svl-source.json")));
             var parent = parentDocument.RootElement;
             Assert.AreEqual("modpack-entry", parent.GetProperty("sourceKind").GetString());
-            Assert.IsTrue(parent.GetProperty("isParentMod").GetBoolean());
-            Assert.AreEqual("[CP] CloneNPC_RSV", parent.GetProperty("childMods")[0].GetProperty("relativePath").GetString());
+            Assert.IsFalse(parent.TryGetProperty("childMods", out var children) &&
+                           children.EnumerateArray().Any(child =>
+                               child.GetProperty("uniqueId").GetString() == "d5a1lamdtd.MarketTown.CloneNPC_RSV"));
 
             using var childDocument = JsonDocument.Parse(
                 File.ReadAllText(Path.Combine(childPath, "svl-source.json")));
             var child = childDocument.RootElement;
-            Assert.AreEqual("parent-inherited", child.GetProperty("sourceKind").GetString());
-            Assert.AreEqual("[] MarketTown", child.GetProperty("parentMod").GetProperty("relativePath").GetString());
-            Assert.IsFalse(child.TryGetProperty("projectId", out _));
-            Assert.IsFalse(child.TryGetProperty("fileId", out _));
-            Assert.IsFalse(child.GetProperty("hasUpdate").GetBoolean());
-            Assert.AreEqual("未检查", child.GetProperty("updateStatus").GetString());
+            Assert.AreEqual("Curseforge", child.GetProperty("platform").GetString());
+            Assert.AreEqual("994458", child.GetProperty("projectId").GetString());
+            Assert.AreEqual("5276101", child.GetProperty("fileId").GetString());
+            Assert.AreEqual("modpack-entry", child.GetProperty("sourceKind").GetString());
+            Assert.IsFalse(child.TryGetProperty("parentMod", out _));
         }
         finally
         {
@@ -2291,6 +2692,115 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
+    public void VersionSettings_ShouldNotInheritOrGroupIndependentEntryWithStaleParentReference()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-independent-child-stale-parent-test-" + Guid.NewGuid().ToString("N"));
+        var modsPath = Path.Combine(root, "Mods");
+        var parentPath = Path.Combine(modsPath, "Parent Mod");
+        var childPath = Path.Combine(modsPath, "Child Mod");
+        try
+        {
+            Directory.CreateDirectory(parentPath);
+            Directory.CreateDirectory(childPath);
+            File.WriteAllText(
+                Path.Combine(parentPath, "manifest.json"),
+                "{\"Name\":\"Parent Mod\",\"UniqueID\":\"Example.Parent\",\"EntryDll\":\"Parent.dll\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "manifest.json"),
+                "{\"Name\":\"Child Mod\",\"UniqueID\":\"Example.Parent.Child\",\"ContentPackFor\":{\"UniqueID\":\"Pathoschild.ContentPatcher\"}}");
+            File.WriteAllText(
+                Path.Combine(parentPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"sourceKind\":\"modpack-entry\",\"isParentMod\":true,\"childMods\":[{\"name\":\"Child Mod\",\"uniqueId\":\"Example.Parent.Child\",\"relativePath\":\"Child Mod\"}]}");
+            File.WriteAllText(
+                Path.Combine(childPath, "svl-source.json"),
+                "{\"platform\":\"NexusMods\",\"projectId\":\"19309\",\"fileId\":\"5276101\",\"sourceKind\":\"modpack-entry\",\"parentMod\":{\"name\":\"Parent Mod\",\"relativePath\":\"Parent Mod\"}}");
+
+            var reader = typeof(VersionSettingsPageViewModel).GetMethod(
+                "TryReadSourceCredential",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var inheritedGuard = typeof(VersionSettingsPageViewModel).GetMethod(
+                "IsInheritedModpackSource",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var independentIdentityGuard = typeof(VersionSettingsPageViewModel).GetMethod(
+                "HasDistinctIndependentSourceCredential",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var hierarchyBuilder = typeof(VersionSettingsPageViewModel).GetMethod(
+                "BuildModHierarchy",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(reader);
+            Assert.IsNotNull(inheritedGuard);
+            Assert.IsNotNull(independentIdentityGuard);
+            Assert.IsNotNull(hierarchyBuilder);
+
+            // 相同稳定 ID 即使带有不同的备用 URL/仓库别名，也还是同一归档；
+            // 这些字段不能把父归属子 Mod 错标为独立来源。
+            File.WriteAllText(
+                Path.Combine(parentPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"repository\":\"parent-alias\",\"downloadUrl\":\"https://cdn.example.test/archive-parent.zip\",\"sourceKind\":\"modpack-entry\"}");
+            File.WriteAllText(
+                Path.Combine(childPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"repository\":\"child-alias\",\"downloadUrl\":\"https://mirror.example.test/alternate-name.zip\",\"sourceKind\":\"modpack-entry\"}");
+            var sameIdentityParent = reader!.Invoke(null, [parentPath]);
+            var sameIdentityChild = reader.Invoke(null, [childPath]);
+            Assert.IsNotNull(sameIdentityParent);
+            Assert.IsNotNull(sameIdentityChild);
+            Assert.IsFalse((bool)independentIdentityGuard!.Invoke(
+                    null,
+                    [sameIdentityChild, sameIdentityParent])!,
+                "完全一致的平台/项目/FileID 必须覆盖备用 URL 或仓库别名差异");
+
+            File.WriteAllText(
+                Path.Combine(parentPath, "svl-source.json"),
+                "{\"platform\":\"Curseforge\",\"projectId\":\"994458\",\"fileId\":\"8390242\",\"sourceKind\":\"modpack-entry\",\"isParentMod\":true,\"childMods\":[{\"name\":\"Child Mod\",\"uniqueId\":\"Example.Parent.Child\",\"relativePath\":\"Child Mod\"}]}");
+            File.WriteAllText(
+                Path.Combine(childPath, "svl-source.json"),
+                "{\"platform\":\"NexusMods\",\"projectId\":\"19309\",\"fileId\":\"5276101\",\"sourceKind\":\"modpack-entry\",\"parentMod\":{\"name\":\"Parent Mod\",\"relativePath\":\"Parent Mod\"}}");
+
+            var credential = reader!.Invoke(null, [childPath]);
+            Assert.IsNotNull(credential);
+            Assert.IsFalse((bool)inheritedGuard!.Invoke(null, [childPath, credential])!,
+                "当前子项的来源与父归档不同，应按独立 Modpack 条目检查更新");
+
+            var parentItem = new ModManageItem
+            {
+                DisplayName = "Parent Mod",
+                FolderName = "Parent Mod",
+                FullPath = parentPath,
+                UniqueId = "Example.Parent"
+            };
+            var childItem = new ModManageItem
+            {
+                DisplayName = "Child Mod",
+                FolderName = "Child Mod",
+                FullPath = childPath,
+                UniqueId = "Example.Parent.Child"
+            };
+            var viewModel = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(
+                typeof(VersionSettingsPageViewModel));
+            SetPrivateField(
+                viewModel,
+                "<Mods>k__BackingField",
+                new System.Collections.ObjectModel.ObservableCollection<ModManageItem>
+                {
+                    parentItem,
+                    childItem
+                });
+
+            hierarchyBuilder!.Invoke(viewModel, [modsPath]);
+            Assert.IsFalse(childItem.IsChildMod,
+                "陈旧 parentMod/childMods 不能把不同来源的 Modpack 条目折叠为父 Mod 子项");
+            Assert.IsFalse(parentItem.IsCompositeParent);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void VersionSettings_ShouldNotInferParentFromLegacyModpackEntry()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-legacy-modpack-entry-content-pack-test-" + Guid.NewGuid().ToString("N"));
@@ -2391,7 +2901,9 @@ public sealed class AvaloniaMigrationHardeningTests
         {
             var catalog = new RemoteCatalogService(new AppUserSettingsStore(root));
             var details = new ModDetailsPageViewModel(catalog, new DialogService());
-            details.SetResource("[NexusMods#29868] Content Patcher", "");
+            details.SetResource(
+                new CatalogResourceIdentity(29868, "Content Patcher", CatalogSource.NexusMods, false, string.Empty),
+                "");
 
             details.DownloadOptions.Add("暂无可下载文件");
             details.SelectedDownloadOption = "暂无可下载文件";
@@ -2451,7 +2963,9 @@ public sealed class AvaloniaMigrationHardeningTests
         {
             var catalog = new RemoteCatalogService(new AppUserSettingsStore(root));
             var details = new ModDetailsPageViewModel(catalog, new DialogService());
-            details.SetResource("[Curseforge#1012214] Content Patcher", "");
+            details.SetResource(
+                new CatalogResourceIdentity(1012214, "Content Patcher", CatalogSource.Curseforge, false, string.Empty),
+                "");
 
             details.DownloadOptions.Add(
                 "File 5312529: Content Patcher 2.9.0 | https://example.invalid/content-patcher.zip ~~channel=Release;gamever=1.6");
@@ -4426,16 +4940,37 @@ public sealed class AvaloniaMigrationHardeningTests
     }
 
     [TestMethod]
-    public void DownloadCatalogItem_ShouldKeepStructuredIdentityForDetails()
+    public void DownloadCatalogItem_ShouldKeepStructuredIdentityAndBothSummaryLanguages()
     {
-        var parser = typeof(DownloadPageViewModel).GetMethod(
-            "ParseCatalogItem",
+        var mapper = typeof(DownloadPageViewModel).GetMethod(
+            "CreateCatalogItem",
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
-        Assert.IsNotNull(parser);
+        Assert.IsNotNull(mapper);
 
-        var item = parser!.Invoke(
+        var searchResult = new ModSearchResultItem
+        {
+            Identity = new CatalogResourceIdentity(
+                12345,
+                "Source title",
+                CatalogSource.Curseforge,
+                true,
+                "test-pack"),
+            Name = "本地化标题",
+            Summary = "本地化摘要 | 包含管道符",
+            SourceSummary = "Original summary | source text",
+            LocalizedName = "本地化标题",
+            LocalizedSummary = "本地化摘要 | 包含管道符",
+            Stat = "10 次下载",
+            TimeTag = "今天",
+            IconUrl = "https://example.invalid/icon.png",
+            FullIconUrl = "https://example.invalid/full-icon.png",
+            ModType = "Content",
+            GameVersionTag = "1.6.15"
+        };
+
+        var item = mapper!.Invoke(
             null,
-            ["[CurseforgePack#12345] 测试整合包 | slug=test-pack | metric=10"])
+            [searchResult])
             as DownloadCatalogItem;
 
         Assert.IsNotNull(item);
@@ -4443,6 +4978,95 @@ public sealed class AvaloniaMigrationHardeningTests
         Assert.AreEqual(CatalogSource.Curseforge, item.Identity.Source);
         Assert.IsTrue(item.Identity.IsModpack);
         Assert.AreEqual("test-pack", item.Identity.CollectionSlug);
+        Assert.AreEqual("Source title", item.SourceName);
+        Assert.AreEqual("本地化标题", item.DisplayName);
+        Assert.AreEqual("Original summary | source text", item.SourceSummary);
+        Assert.AreEqual("本地化摘要 | 包含管道符", item.DisplaySummary);
+        Assert.AreEqual("https://example.invalid/icon.png", item.IconSource);
+        Assert.AreEqual("https://example.invalid/full-icon.png", item.FullIconSource);
+
+        item.UseLocalizedName = false;
+        item.UseLocalizedSummary = false;
+        Assert.AreEqual("Source title", item.DisplayName);
+        Assert.AreEqual("Original summary | source text", item.DisplaySummary);
+        Assert.IsNull(typeof(DownloadPageViewModel).GetMethod(
+            "ParseCatalogItem",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic));
+    }
+
+    [TestMethod]
+    public void RemoteCatalogSearchMapping_ShouldRetainSourceAndLocalizedTextSeparately()
+    {
+        var remoteItemType = typeof(RemoteCatalogService).GetNestedType(
+            "RemoteSearchItem",
+            System.Reflection.BindingFlags.NonPublic);
+        Assert.IsNotNull(remoteItemType);
+
+        var remoteItem = Activator.CreateInstance(remoteItemType!, nonPublic: true);
+        Assert.IsNotNull(remoteItem);
+        SetRemoteProperty(remoteItem!, "ResourceId", 4321L);
+        SetRemoteProperty(remoteItem!, "Name", "Original name");
+        SetRemoteProperty(remoteItem!, "Summary", "Original summary");
+        SetRemoteProperty(remoteItem!, "LocalizedName", "本地化名称");
+        SetRemoteProperty(remoteItem!, "LocalizedSummary", "本地化摘要");
+        SetRemoteProperty(remoteItem!, "CollectionSlug", "source-slug");
+
+        var mapper = typeof(RemoteCatalogService).GetMethod(
+            "ToSearchResultItem",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.IsNotNull(mapper);
+
+        var result = mapper!.Invoke(null, [remoteItem, CatalogSource.NexusMods, true]) as ModSearchResultItem;
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("Original name", result!.Identity.Name);
+        Assert.AreEqual("本地化名称", result.Name);
+        Assert.AreEqual("Original summary", result.SourceSummary);
+        Assert.AreEqual("本地化摘要", result.Summary);
+        Assert.AreEqual("本地化摘要", result.LocalizedSummary);
+        Assert.AreEqual("source-slug", result.Identity.CollectionSlug);
+
+        static void SetRemoteProperty(object target, string propertyName, object value)
+        {
+            var property = target.GetType().GetProperty(propertyName);
+            Assert.IsNotNull(property, $"RemoteSearchItem 缺少 {propertyName} 属性");
+            property!.SetValue(target, value);
+        }
+    }
+
+    [TestMethod]
+    public void VersionSettingsOnlineDetails_ShouldCreateStructuredSourceIdentity()
+    {
+        var builder = typeof(VersionSettingsPageViewModel).GetMethod(
+            "TryBuildOnlineDetailIdentity",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.IsNotNull(builder);
+
+        var nexusItem = new ModManageItem
+        {
+            DisplayName = "Content Patcher",
+            NexusModsProjectId = "29868"
+        };
+        object[] nexusArguments = [nexusItem, "Content Patcher", null];
+        Assert.IsTrue((bool)builder!.Invoke(null, nexusArguments)!);
+        var nexusIdentity = (CatalogResourceIdentity)nexusArguments[2]!;
+        Assert.AreEqual(29868L, nexusIdentity.ResourceId);
+        Assert.AreEqual(CatalogSource.NexusMods, nexusIdentity.Source);
+
+        var curseforgeItem = new ModManageItem
+        {
+            DisplayName = "Content Patcher",
+            CurseforgeProjectId = "1012214"
+        };
+        object[] curseforgeArguments = [curseforgeItem, "Content Patcher", null];
+        Assert.IsTrue((bool)builder.Invoke(null, curseforgeArguments)!);
+        var curseforgeIdentity = (CatalogResourceIdentity)curseforgeArguments[2]!;
+        Assert.AreEqual(1012214L, curseforgeIdentity.ResourceId);
+        Assert.AreEqual(CatalogSource.Curseforge, curseforgeIdentity.Source);
+
+        var noSourceItem = new ModManageItem { DisplayName = "Unknown Mod" };
+        object[] missingArguments = [noSourceItem, "Unknown Mod", null];
+        Assert.IsFalse((bool)builder.Invoke(null, missingArguments)!);
     }
 
     [TestMethod]
@@ -4554,24 +5178,33 @@ public sealed class AvaloniaMigrationHardeningTests
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-export-roundtrip-test-" + Guid.NewGuid().ToString("N"));
         var sourceInstance = Path.Combine(root, "source-instance");
-        var sourceMod = Path.Combine(sourceInstance, "Mods", "ActualMod");
+        var sourceMod = Path.Combine(sourceInstance, "Mods", "Content Patcher");
         var outputPath = Path.Combine(root, "Round Trip Pack.zip");
         var modArchivePath = Path.Combine(root, "cached-mod.zip");
         var targetBase = Path.Combine(root, "target-base");
-        const long projectId = 987654321;
-        const long fileId = 123456789;
-        var cachePath = NexusDownloadCache.GetCachePath(projectId, fileId);
+        const long projectId = 309243;
+        const long fileId = 7448774;
+        var cachePath = CurseforgeDownloadCache.GetCachePath(projectId, fileId);
         var registry = new InstanceRegistryStore();
         byte[] existingCache = null;
+        var iconPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..",
+            "SVL.Avalonia", "Assets", "Icons", "icon.png"));
+        var iconBytes = File.ReadAllBytes(iconPath);
+        CollectionAssert.AreEqual(
+            new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A },
+            iconBytes.Take(8).ToArray(),
+            "回环测试使用实际 PNG 图标，避免无效字节掩盖图标导入问题");
 
         try
         {
             Directory.CreateDirectory(Path.Combine(sourceMod, "config"));
             File.WriteAllText(
                 Path.Combine(sourceMod, "manifest.json"),
-                "{\"Name\":\"Actual Mod\",\"UniqueID\":\"Example.ActualMod\",\"Version\":\"1.2.3\"}");
+                "{\"Name\":\"Content Patcher\",\"UniqueID\":\"Pathoschild.ContentPatcher\",\"Version\":\"2.9.0\"}");
             File.WriteAllText(Path.Combine(sourceMod, "config", "config.json"), "{\"enabled\":true}");
-            File.WriteAllBytes(Path.Combine(sourceInstance, ".svl-instance-icon-smapi.png"), [7, 8, 9, 10]);
+            File.WriteAllBytes(Path.Combine(sourceInstance, ".svl-instance-icon-smapi.png"), iconBytes);
 
             using (var archive = System.IO.Compression.ZipFile.Open(
                        modArchivePath,
@@ -4579,16 +5212,16 @@ public sealed class AvaloniaMigrationHardeningTests
             {
                 WriteArchiveText(
                     archive,
-                    "Release/ActualMod/manifest.json",
-                    "{\"Name\":\"Actual Mod\",\"UniqueID\":\"Example.ActualMod\",\"Version\":\"1.2.3\"}");
-                WriteArchiveText(archive, "Release/ActualMod/content.json", "{}");
+                    "Release/Content Patcher/manifest.json",
+                    "{\"Name\":\"Content Patcher\",\"UniqueID\":\"Pathoschild.ContentPatcher\",\"Version\":\"2.9.0\"}");
+                WriteArchiveText(archive, "Release/Content Patcher/content.json", "{}");
             }
 
             if (File.Exists(cachePath))
             {
                 existingCache = File.ReadAllBytes(cachePath);
             }
-            NexusDownloadCache.Save(projectId, fileId, modArchivePath);
+            CurseforgeDownloadCache.Save(projectId, fileId, modArchivePath);
 
             // 直接调用导出页的实际打包方法，避免把“导出包格式”另写一套测试实现。
             var viewModel = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(
@@ -4607,17 +5240,17 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.IsNotNull(itemType);
             var item = Activator.CreateInstance(itemType!, nonPublic: true);
             Assert.IsNotNull(item);
-            SetProperty(item!, "Name", "Actual Mod");
-            SetProperty(item!, "UniqueId", "Example.ActualMod");
-            SetProperty(item!, "Version", "1.2.3");
+            SetProperty(item!, "Name", "Content Patcher");
+            SetProperty(item!, "UniqueId", "Pathoschild.ContentPatcher");
+            SetProperty(item!, "Version", "2.9.0");
             SetProperty(item!, "Author", "SVL Test");
             SetProperty(item!, "ModPath", sourceMod);
-            SetProperty(item!, "DirectoryName", "ActualMod");
-            SetProperty(item!, "SourcePlatform", "NexusMods");
+            SetProperty(item!, "DirectoryName", "Content Patcher");
+            SetProperty(item!, "SourcePlatform", "Curseforge");
             SetProperty(item!, "SourceProjectId", projectId.ToString());
             SetProperty(item!, "SourceFileId", fileId.ToString());
-            SetProperty(item!, "SourceFileName", "File 123456789_ Actual Mod 1.2.3.zip");
-            SetProperty(item!, "SourceDownloadUrl", $"nxm://stardewvalley/mods/{projectId}/files/{fileId}");
+            SetProperty(item!, "SourceFileName", "Content Patcher 2.9.0 2.9.0.zip");
+            SetProperty(item!, "SourceDownloadUrl", "https://edge.forgecdn.net/files/7448/774/Content%20Patcher%202.9.0%202.9.0.zip");
 
             var itemListType = typeof(List<>).MakeGenericType(itemType!);
             var itemList = Activator.CreateInstance(itemListType)!;
@@ -4635,14 +5268,15 @@ public sealed class AvaloniaMigrationHardeningTests
                 Assert.IsNotNull(exported.GetEntry("modpack.json"));
                 Assert.IsNotNull(exported.GetEntry("sources.json"));
                 Assert.IsNotNull(exported.GetEntry("icon.png"));
-                Assert.IsNotNull(exported.GetEntry("settings/Mods/ActualMod/config/config.json"));
+                Assert.IsNotNull(exported.GetEntry("settings/Mods/Content Patcher/config/config.json"));
 
                 using var sourcesReader = new StreamReader(exported.GetEntry("sources.json")!.Open());
                 var sourcesJson = await sourcesReader.ReadToEndAsync();
                 StringAssert.Contains(sourcesJson, projectId.ToString());
                 StringAssert.Contains(sourcesJson, fileId.ToString());
-                StringAssert.Contains(sourcesJson, "File 123456789_");
-                StringAssert.Contains(sourcesJson, "nxm://stardewvalley");
+                StringAssert.Contains(sourcesJson, "Curseforge");
+                StringAssert.Contains(sourcesJson, "Content Patcher 2.9.0 2.9.0.zip");
+                StringAssert.Contains(sourcesJson, "https://edge.forgecdn.net/files/7448/774/");
             }
 
             // 模拟导出包里混入了没有 manifest.json 的内置目录：它不能被静默
@@ -4680,25 +5314,34 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual(1, result.FailedMods.Count);
             StringAssert.Contains(result.FailedMods[0], "BrokenBundledMod");
             var importedRoot = Path.Combine(targetBase, "versions", "Imported Round Trip");
-            Assert.IsTrue(File.Exists(Path.Combine(importedRoot, "Mods", "ActualMod", "manifest.json")));
-            Assert.IsTrue(File.Exists(Path.Combine(importedRoot, "Mods", "ActualMod", "content.json")));
+            Assert.IsTrue(File.Exists(Path.Combine(importedRoot, "Mods", "Content Patcher", "manifest.json")));
+            Assert.IsTrue(File.Exists(Path.Combine(importedRoot, "Mods", "Content Patcher", "content.json")));
             Assert.AreEqual(
                 "{\"enabled\":true}",
-                File.ReadAllText(Path.Combine(importedRoot, "Mods", "ActualMod", "config", "config.json")));
-            Assert.IsFalse(Directory.Exists(Path.Combine(importedRoot, "Mods", "Actual Mod")));
+                File.ReadAllText(Path.Combine(importedRoot, "Mods", "Content Patcher", "config", "config.json")));
             CollectionAssert.AreEqual(
-                new byte[] { 7, 8, 9, 10 },
+                iconBytes,
                 File.ReadAllBytes(Path.Combine(importedRoot, ".svl-instance-icon-smapi.png")));
-            Assert.IsTrue(File.Exists(Path.Combine(importedRoot, "Mods", "ActualMod", "svl-source.json")));
+            Assert.IsTrue(File.Exists(Path.Combine(importedRoot, "Mods", "Content Patcher", "svl-source.json")));
             StringAssert.Contains(
-                File.ReadAllText(Path.Combine(importedRoot, "Mods", "ActualMod", "svl-source.json")),
+                File.ReadAllText(Path.Combine(importedRoot, "Mods", "Content Patcher", "svl-source.json")),
                 fileId.ToString());
             StringAssert.Contains(
-                File.ReadAllText(Path.Combine(importedRoot, "Mods", "ActualMod", "svl-source.json")),
-                "File 123456789_");
+                File.ReadAllText(Path.Combine(importedRoot, "Mods", "Content Patcher", "svl-source.json")),
+                "Curseforge");
+            StringAssert.Contains(
+                File.ReadAllText(Path.Combine(importedRoot, "Mods", "Content Patcher", "svl-source.json")),
+                "Content Patcher 2.9.0 2.9.0.zip");
+            StringAssert.Contains(
+                File.ReadAllText(Path.Combine(importedRoot, "Mods", "Content Patcher", "svl-source.json")),
+                "https://edge.forgecdn.net/files/7448/774/");
+            CollectionAssert.AreEqual(
+                iconBytes,
+                File.ReadAllBytes(Path.Combine(importedRoot, ".svl-instance-icon-smapi.png")),
+                "回导后应保留有效的实际 PNG 图标，而不只是复制任意字节");
 
-            // 第二次导入使用同一 Nexus ModID/FileID。它必须直接复用稳定缓存，
-            // 不重新打开文件页或等待浏览器回调；同时仍要保留整合包的失败项报告。
+            // 第二次导入使用同一 CurseForge ProjectID/FileID，必须直接复用稳定缓存，
+            // 不重新解析/下载；同时仍要保留整合包的失败项报告。
             var secondResult = await installService.InstallSvlModpackAsync(
                 outputPath,
                 "Imported Round Trip Again",
@@ -4713,7 +5356,7 @@ public sealed class AvaloniaMigrationHardeningTests
                 "versions",
                 "Imported Round Trip Again",
                 "Mods",
-                "ActualMod",
+                "Content Patcher",
                 "manifest.json")));
         }
         finally
@@ -5047,34 +5690,26 @@ public sealed class AvaloniaMigrationHardeningTests
         Directory.CreateDirectory(root);
         try
         {
+            // 真实公开 curse.tools 快照：文件版本号 1.2.0/1.0.0 与游戏版本 1.6.8 不同。
+            var searchJson = await ReadCurseforgeFixtureAsync("blissful-valley-search.json");
+            var detailJson = await ReadCurseforgeFixtureAsync("blissful-valley-detail.json");
+            var filesJson = await ReadCurseforgeFixtureAsync("blissful-valley-files.json");
             var handler = new FixtureHttpMessageHandler(request =>
             {
                 var path = request.RequestUri?.AbsolutePath ?? string.Empty;
                 if (path.EndsWith("/mods/search", StringComparison.OrdinalIgnoreCase))
                 {
-                    return JsonResponse(
-                        "{\"data\":[{" +
-                        "\"id\":1012878,\"name\":\"Blissful Valley\",\"summary\":\"Cozy pack 1.2.0\"," +
-                        "\"downloadCount\":10,\"dateModified\":\"2024-05-16T00:00:00Z\"," +
-                        "\"classId\":6771,\"latestFilesIndexes\":[{\"gameVersion\":\"1.6.8\"}]" +
-                        "}]}" );
+                    return JsonResponse(searchJson);
                 }
 
                 if (path.EndsWith("/mods/1012878", StringComparison.OrdinalIgnoreCase))
                 {
-                    return JsonResponse(
-                        "{\"data\":{\"id\":1012878,\"name\":\"Blissful Valley\",\"summary\":\"Cozy pack\"}}" );
+                    return JsonResponse(detailJson);
                 }
 
                 if (path.EndsWith("/mods/1012878/files", StringComparison.OrdinalIgnoreCase))
                 {
-                    return JsonResponse(
-                        "{\"data\":[{" +
-                        "\"id\":5346378,\"displayName\":\"Blissful Valley 1.2.0\"," +
-                        "\"fileName\":\"Blissful-Valley-1.2.0.cfmodpack\"," +
-                        "\"downloadUrl\":\"https://edge.example/blissful.cfmodpack\"," +
-                        "\"gameVersions\":[\"1.6.8\"]" +
-                        "}]}" );
+                    return JsonResponse(filesJson);
                 }
 
                 return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
@@ -5084,6 +5719,7 @@ public sealed class AvaloniaMigrationHardeningTests
 
             var search = await service.SearchModpacksAsync("Blissful", "Curseforge");
             Assert.AreEqual(1, search.Count);
+            Assert.AreEqual(1012878, search[0].Identity.ResourceId);
             Assert.AreEqual("1.6.8", search[0].GameVersionTag);
 
             var details = await service.GetResourceDetailsAsync(
@@ -5093,6 +5729,16 @@ public sealed class AvaloniaMigrationHardeningTests
                 .Where(item => item.StartsWith("兼容游戏版本：", StringComparison.Ordinal))
                 .ToList();
             CollectionAssert.AreEqual(new[] { "兼容游戏版本：1.6.8" }, compatibilityHeaders);
+            Assert.IsFalse(compatibilityHeaders.Any(item => item.Contains("1.2.0", StringComparison.Ordinal)));
+            Assert.IsFalse(compatibilityHeaders.Any(item => item.Contains("1.0.0", StringComparison.Ordinal)));
+            Assert.IsTrue(details.VersionOptions.Any(item => item.Contains("Blissful Valley 1.2.0", StringComparison.Ordinal)),
+                "整合包文件版本仍应显示在文件列表中，但不能作为兼容游戏版本");
+
+            var searchRequest = handler.Requests.Single(request => request.AbsolutePath.EndsWith("/mods/search", StringComparison.OrdinalIgnoreCase));
+            StringAssert.Contains(searchRequest.Query, "classId=6771");
+            CollectionAssert.Contains(
+                handler.Requests.Select(request => request.AbsolutePath).ToList(),
+                "/v1/mods/1012878/files");
         }
         finally
         {
@@ -5175,34 +5821,26 @@ public sealed class AvaloniaMigrationHardeningTests
         Directory.CreateDirectory(root);
         try
         {
+            // Compact snapshots of real public curse.tools responses captured on 2026-09-15.
+            var searchJson = await ReadCurseforgeFixtureAsync("content-patcher-search.json");
+            var detailJson = await ReadCurseforgeFixtureAsync("content-patcher-detail.json");
+            var filesJson = await ReadCurseforgeFixtureAsync("content-patcher-files.json");
             var handler = new FixtureHttpMessageHandler(request =>
             {
                 var path = request.RequestUri?.AbsolutePath ?? string.Empty;
                 if (path.EndsWith("/search", StringComparison.OrdinalIgnoreCase))
                 {
-                    return JsonResponse("{\"data\":[{" +
-                        "\"id\":101,\"name\":\"Content Patcher\",\"summary\":\"A mod\"," +
-                        "\"downloadCount\":123,\"dateModified\":\"2024-01-01T00:00:00Z\"," +
-                        "\"logo\":{\"url\":\"https://cdn.example/content.png\",\"thumbnailUrl\":\"https://cdn.example/content-small.png\"}" +
-                        "}]}");
+                    return JsonResponse(searchJson);
                 }
 
-                if (path.EndsWith("/mods/101/files", StringComparison.OrdinalIgnoreCase))
+                if (path.EndsWith("/mods/309243/files", StringComparison.OrdinalIgnoreCase))
                 {
-                    return JsonResponse("{\"data\":[{" +
-                        "\"id\":7448774,\"displayName\":\"Content Patcher 2.9.0\"," +
-                        "\"fileName\":\"File 7448774_ Content Patcher 2.9.0.zip\"," +
-                        "\"downloadUrl\":\"https://edge.example/files/content-patcher.zip\"," +
-                        "\"fileLength\":1234,\"downloadCount\":12," +
-                        "\"fileDate\":\"2024-01-01T00:00:00Z\",\"releaseType\":1," +
-                        "\"gameVersions\":[\"1.6.15\"]" +
-                        "}]}");
+                    return JsonResponse(filesJson);
                 }
 
-                if (path.EndsWith("/mods/101", StringComparison.OrdinalIgnoreCase))
+                if (path.EndsWith("/mods/309243", StringComparison.OrdinalIgnoreCase))
                 {
-                    return JsonResponse("{\"data\":{\"id\":101,\"name\":\"Content Patcher\"," +
-                        "\"summary\":\"A mod\",\"logo\":{\"url\":\"https://cdn.example/content.png\"}}}");
+                    return JsonResponse(detailJson);
                 }
 
                 return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
@@ -5215,25 +5853,35 @@ public sealed class AvaloniaMigrationHardeningTests
                 "Curseforge",
                 useCommunityLocalization: false,
                 page: 1,
-                pageSize: 10);
+                pageSize: 1);
 
             Assert.AreEqual(1, search.Items.Count);
-            Assert.AreEqual(101, search.Items[0].Identity.ResourceId);
+            Assert.AreEqual(309243, search.Items[0].Identity.ResourceId);
             Assert.AreEqual(CatalogSource.Curseforge, search.Items[0].Identity.Source);
-            Assert.IsFalse(search.HasMore);
+            Assert.AreEqual("Content Patcher", search.Items[0].Name);
+            Assert.IsTrue(search.HasMore, "应按真实搜索结果数量保留下一页状态");
 
             var details = await service.GetResourceDetailsAsync(
-                new CatalogResourceIdentity(101, "Content Patcher", CatalogSource.Curseforge, false, string.Empty));
+                new CatalogResourceIdentity(309243, "Content Patcher", CatalogSource.Curseforge, false, string.Empty));
             Assert.AreEqual("Content Patcher", details.Name);
-            Assert.AreEqual(1, details.DownloadOptions.Count);
-            StringAssert.Contains(details.DownloadOptions[0], "7448774");
-            StringAssert.Contains(details.DownloadOptions[0], "https://edge.example/files/content-patcher.zip");
-            StringAssert.Contains(details.VersionOptions[0], "1.6.15");
+            Assert.IsTrue(details.Summary.StartsWith(
+                "Load content packs that change the game's data, maps, and images without replacing XNB files.",
+                StringComparison.Ordinal),
+                "详情简介应保留 API 中的原始简介文本");
+            Assert.AreEqual(5, details.DownloadOptions.Count);
+            var historicalFile = details.DownloadOptions.Single(option => option.Contains("7448774", StringComparison.Ordinal));
+            StringAssert.Contains(historicalFile, "Content%20Patcher%202.9.0%202.9.0.zip");
+            Assert.IsTrue(details.VersionOptions.Any(option => option.Contains("1.6.15", StringComparison.Ordinal)));
+            Assert.IsFalse(details.VersionOptions.Any(option => option.Contains("1.0.0", StringComparison.Ordinal)),
+                "普通 Mod 文件或整合包自身的版本号不得伪装成 Stardew Valley 版本");
 
+            var searchRequest = handler.Requests.Single(request => request.AbsolutePath.EndsWith("/mods/search", StringComparison.OrdinalIgnoreCase));
+            StringAssert.Contains(searchRequest.Query, "gameId=669");
+            StringAssert.Contains(searchRequest.Query, "pageSize=2");
             var requests = handler.Requests.Select(request => request.AbsolutePath).ToList();
             CollectionAssert.Contains(requests, "/v1/mods/search");
-            CollectionAssert.Contains(requests, "/v1/mods/101");
-            CollectionAssert.Contains(requests, "/v1/mods/101/files");
+            CollectionAssert.Contains(requests, "/v1/mods/309243");
+            CollectionAssert.Contains(requests, "/v1/mods/309243/files");
         }
         finally
         {
@@ -5315,6 +5963,113 @@ public sealed class AvaloniaMigrationHardeningTests
             Assert.AreEqual("Content Patcher", result.Items[0].Name);
             Assert.IsFalse(result.HasMore);
             CollectionAssert.Contains(handler.ApiKeys, "fixture-api-key");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RemoteCatalogService_ShouldPageNexusFallbackResultsWithoutRepeatingEarlierPages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-nexus-fallback-paging-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var matchingIndexes = new Dictionary<int, string>
+            {
+                [1] = "SearchTarget Alpha",
+                [30] = "SearchTarget Beta",
+                [70] = "SearchTarget Gamma",
+                [110] = "SearchTarget Delta",
+                [250] = "SearchTarget Epsilon",
+                [300] = "SearchTarget Zeta",
+                [350] = "SearchTarget Eta",
+                [390] = "SearchTarget Theta"
+            };
+            var handler = new FixtureHttpMessageHandler(request =>
+            {
+                using var requestDoc = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+                var filter = requestDoc.RootElement
+                    .GetProperty("variables")
+                    .GetProperty("filter");
+
+                // 模拟 Nexus 不支持/不返回关键词过滤结果，强制走客户端回退筛选。
+                if (filter.TryGetProperty("name", out _))
+                {
+                    return JsonResponse("{\"data\":{\"mods\":{\"nodes\":[]}}}");
+                }
+
+                var variables = requestDoc.RootElement.GetProperty("variables");
+                var offset = variables.GetProperty("offset").GetInt32();
+                var count = variables.GetProperty("count").GetInt32();
+                var nodes = Enumerable.Range(offset, Math.Min(count, 400 - offset))
+                    .Select(index => new
+                    {
+                        modId = 1000 + index,
+                        name = matchingIndexes.TryGetValue(index, out var matchingName)
+                            ? matchingName
+                            : $"Unrelated Mod {index}",
+                        summary = "No keyword in this description",
+                        description = "",
+                        pictureUrl = "",
+                        downloads = 120 - index,
+                        category = "utility",
+                        updatedAt = "2024-01-02T00:00:00Z"
+                    })
+                    .ToList();
+                return JsonResponse(JsonSerializer.Serialize(new { data = new { mods = new { nodes } } }));
+            });
+            using var client = new HttpClient(handler);
+            var store = new AppUserSettingsStore(root);
+            store.Save(new AppUserSettings { NexusApiKey = "fixture-api-key" });
+            var service = new RemoteCatalogService(store, client);
+
+            var firstPage = await service.SearchModsAdvancedPagedAsync(
+                "SearchTarget",
+                "NexusMods",
+                useCommunityLocalization: false,
+                page: 1,
+                pageSize: 2);
+            var secondPage = await service.SearchModsAdvancedPagedAsync(
+                "SearchTarget",
+                "NexusMods",
+                useCommunityLocalization: false,
+                page: 2,
+                pageSize: 2);
+            var thirdPage = await service.SearchModsAdvancedPagedAsync(
+                "SearchTarget",
+                "NexusMods",
+                useCommunityLocalization: false,
+                page: 3,
+                pageSize: 2);
+            var fourthPage = await service.SearchModsAdvancedPagedAsync(
+                "SearchTarget",
+                "NexusMods",
+                useCommunityLocalization: false,
+                page: 4,
+                pageSize: 2);
+
+            CollectionAssert.AreEqual(
+                new[] { "SearchTarget Alpha", "SearchTarget Beta" },
+                firstPage.Items.Select(item => item.Name).ToArray());
+            CollectionAssert.AreEqual(
+                new[] { "SearchTarget Gamma", "SearchTarget Delta" },
+                secondPage.Items.Select(item => item.Name).ToArray());
+            CollectionAssert.AreEqual(
+                new[] { "SearchTarget Epsilon", "SearchTarget Zeta" },
+                thirdPage.Items.Select(item => item.Name).ToArray());
+            CollectionAssert.AreEqual(
+                new[] { "SearchTarget Eta", "SearchTarget Theta" },
+                fourthPage.Items.Select(item => item.Name).ToArray());
+            Assert.IsTrue(firstPage.HasMore);
+            Assert.IsTrue(secondPage.HasMore);
+            Assert.IsTrue(thirdPage.HasMore);
+            Assert.IsFalse(fourthPage.HasMore);
         }
         finally
         {
@@ -5562,6 +6317,12 @@ public sealed class AvaloniaMigrationHardeningTests
         {
             Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
         };
+    }
+
+    private static Task<string> ReadCurseforgeFixtureAsync(string fileName)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "CurseForge", fileName);
+        return File.ReadAllTextAsync(path);
     }
 
     private sealed class FixtureHttpMessageHandler(

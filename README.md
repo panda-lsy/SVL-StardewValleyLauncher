@@ -91,7 +91,7 @@
 
 ### 系统要求
 
-- **操作系统**: Windows 10/11 或 macOS 12+
+- **操作系统**: Windows 10/11、Linux x64（建议 XDG 桌面环境）或 macOS 14+
 - **运行时**: .NET 10 SDK（从源码构建时需要）
 - **游戏**: Stardew Valley（Steam 或 GOG 版本）
 
@@ -100,28 +100,31 @@
 从 [Releases](../../releases) 页面下载最新版本：
 
 - **Windows**: 下载 `.zip`，解压后运行 `SVL.Avalonia.exe`
+- **Linux x64**: 下载 ZIP，解压后运行 `sh run-svl.sh`
 - **macOS**: 下载 `.dmg`，拖入 Applications 文件夹后运行
 
 ### 从源码构建
 
 ```bash
 # 克隆仓库
-git clone https://github.com/panda-lsy/SVL.git
-cd SVL
+git clone --branch Dev-Avalonia --single-branch https://github.com/panda-lsy/SVL-StardewValleyLauncher.git
+cd SVL-StardewValleyLauncher
 
 # Debug 构建
-dotnet build SVL.sln --configuration Debug
+dotnet build SVL.Avalonia/SVL.Avalonia.csproj --configuration Debug
 
 # Release 构建
-dotnet build SVL.sln --configuration Release
+dotnet build SVL.Avalonia/SVL.Avalonia.csproj --configuration Release
 
 # 运行
-dotnet run --project SVL.Avalonia
+dotnet run --project SVL.Avalonia/SVL.Avalonia.csproj
 ```
+
+`SVL.sln` 还包含旧 WPF 工程；日常构建 Avalonia 迁移版请直接指定上述 Avalonia 项目。
 
 ### 打包发布
 
-使用根目录的统一打包脚本，支持 Windows/macOS 的 Debug/Release 配置：
+使用根目录的统一打包脚本，支持 Windows/Linux/macOS 的 Debug/Release 配置：
 
 ```powershell
 # Windows x64 Debug 单文件
@@ -130,14 +133,19 @@ dotnet run --project SVL.Avalonia
 # Windows x64 Release
 .\build.ps1 -Config Release -Targets windows
 
-# 全部目标（Windows + macOS）双配置
+# 全部目标（Windows + Linux + macOS）双配置
 .\build.ps1 -Config all -Targets all
+
+# Linux x64
+.\build.ps1 -Config Release -Targets linux
 
 # 仅 macOS（需在 macOS 上运行以生成 .dmg）
 .\build.ps1 -Config Release -Targets macos
 ```
 
 产物输出到 `artifacts/` 目录，命名格式：`SVL_v1.2.0.0_{config}_{platform}_{arch}.{ext}`
+
+Linux x64 ZIP 解压后可运行 `sh run-svl.sh`；脚本会设置 apphost 执行权限并转发参数。
 
 ## 项目结构
 
@@ -162,7 +170,7 @@ SVL/
 │   │   ├── Mod/              #     Mod 管理与依赖解析
 │   │   └── ResourceProject/  #     NexusMods / Modpack 集成
 │   └── Utils/                #   工具类
-├── SVL.Core.Platform/        # 平台抽象层（Windows/macOS 实现）
+├── SVL.Core.Platform/        # 平台抽象层（Windows/Linux/macOS 实现）
 ├── SVL.Desktop/              # 旧 WPF 架构（参考保留）
 ├── SVL.Migration.Tests/      # 迁移测试
 ├── build.ps1                 # 统一打包脚本
@@ -178,7 +186,7 @@ SVL/
 | UI 框架  | Avalonia UI 11.2 + Fluent 主题 |
 | MVVM     | CommunityToolkit.Mvvm 8.4      |
 | 配置     | System.Text.Json               |
-| 跨平台   | Windows / macOS                |
+| 跨平台   | Windows / Linux / macOS        |
 | 测试     | xUnit                          |
 
 ## 配置文件

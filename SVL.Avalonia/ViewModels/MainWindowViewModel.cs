@@ -315,7 +315,6 @@ public partial class MainWindowViewModel : ObservableObject
         DownloadPage.NavigateToModSearchRequested += HandleNavigateToModSearch;
         DownloadPage.NavigateToModpackSearchRequested += HandleNavigateToModpackSearch;
         DownloadPage.NavigateToSettingsRequested += HandleNavigateToSettingsForNexusLogin;
-        DownloadPage.OpenDetailsRequested += HandleOpenDetails;
         DownloadPage.OpenStructuredDetailsRequested += HandleOpenDetailsFromSearch;
         // SMAPI/Modpack/Collection 安装成功后刷新 LaunchPage/InstancesPage 实例图标
         DownloadPage.InstanceContextChanged += HandleInstanceContextChanged;
@@ -780,30 +779,21 @@ public partial class MainWindowViewModel : ObservableObject
         _ = ModpackSearchPage.InitializeAsync();
     }
 
-    private void HandleOpenDetails(string details)
-    {
-        ModDetailsPage.SetResource(details, "由下载页搜索结果触发的详情上下文");
-        // 立即导航到详情页，详情数据在后台异步加载并在页面上显示 loading 动画。
-        NavigateToPage("资源详情", ModDetailsPage, pushCurrentToBackStack: true);
-        _ = ModDetailsPage.LoadDetailsAsync(details);
-    }
-
     /// <summary>搜索页（ModSearch/ModpackSearch）结构化身份触发的详情跳转。</summary>
     private void HandleOpenDetailsFromSearch(Models.CatalogResourceIdentity identity)
     {
-        // SetResource 仍接字符串以填充 header 显示，用 Identity.Name 作为显示名。
-        ModDetailsPage.SetResource(identity.Name, "由搜索页触发的详情上下文");
+        ModDetailsPage.SetResource(identity, "由搜索页触发的详情上下文");
         // 立即导航到详情页，详情数据在后台异步加载并在页面上显示 loading 动画。
         NavigateToPage("资源详情", ModDetailsPage, pushCurrentToBackStack: true);
         _ = ModDetailsPage.LoadDetailsAsync(identity);
     }
 
-    private void HandleOpenDetailsFromModManage(string details)
+    private void HandleOpenDetailsFromModManage(Models.CatalogResourceIdentity identity)
     {
-        ModDetailsPage.SetResource(details, "由 Mod 列表触发的详情上下文");
+        ModDetailsPage.SetResource(identity, "由 Mod 列表触发的详情上下文");
         // 立即导航到详情页，详情数据在后台异步加载并在页面上显示 loading 动画。
         NavigateToPage("资源详情", ModDetailsPage, pushCurrentToBackStack: true);
-        _ = ModDetailsPage.LoadDetailsAsync(details);
+        _ = ModDetailsPage.LoadDetailsAsync(identity);
     }
 
     private async void HandleQueueDownload(Models.ExternalDownloadRequest request)

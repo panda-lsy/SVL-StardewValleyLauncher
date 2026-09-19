@@ -30,6 +30,15 @@ public sealed class ModSearchResultItem
     /// <summary>摘要（已应用社区本地化）。</summary>
     public string Summary { get; init; } = string.Empty;
 
+    /// <summary>来源站点原始摘要。</summary>
+    public string SourceSummary { get; init; } = string.Empty;
+
+    /// <summary>社区提供的本地化名称；为空时使用 Identity.Name。</summary>
+    public string LocalizedName { get; init; } = string.Empty;
+
+    /// <summary>社区提供的本地化摘要；为空时使用 SourceSummary。</summary>
+    public string LocalizedSummary { get; init; } = string.Empty;
+
     /// <summary>统计信息（下载量/星标等，已格式化为字符串）。</summary>
     public string Stat { get; init; } = string.Empty;
 

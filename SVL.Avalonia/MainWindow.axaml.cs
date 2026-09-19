@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
@@ -15,12 +17,26 @@ namespace SVL.Avalonia;
 
 public partial class MainWindow : Window
 {
+    private bool _hasBeenOpened;
+
+    private static readonly (string Key, byte TransparentAlpha)[] MainWindowSurfaceBrushes =
+    [
+        ("WindowBackgroundBrush", 0x80),
+        ("HeaderBackgroundBrush", 0xB3),
+        ("PanelBackgroundBrush", 0x66),
+        ("SurfaceBrush", 0xCC),
+        ("CardBrush", 0xBF)
+    ];
+
     /// <summary>本窗口关联的浮窗通知服务实例。静态门面 NotificationService.Show 委托到此实例。</summary>
     public NotificationService Notifications { get; }
 
     public MainWindow()
     {
         InitializeComponent();
+        RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
+        ThemeService.ThemeChanged += OnThemeChanged;
+        Closed += OnWindowClosed;
 
         if (OperatingSystem.IsWindows())
         {
@@ -55,6 +71,53 @@ public partial class MainWindow : Window
 
         // DataContext 由 App 的对象初始化器在构造函数后设置，故用事件订阅置顶请求。
         DataContextChanged += OnDataContextChanged;
+        Opened += OnWindowOpened;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == TopLevel.ActualTransparencyLevelProperty)
+        {
+            if (_hasBeenOpened)
+            {
+                RefreshMainWindowThemeResources(
+                    ThemeService.TransparencyEnabled && ActualTransparencyLevel != WindowTransparencyLevel.None);
+            }
+
+            LogWindowTransparencyState("平台透明级别已更新");
+        }
+    }
+
+    private void OnWindowOpened(object? sender, System.EventArgs e)
+    {
+        _hasBeenOpened = true;
+        RefreshMainWindowThemeResources(
+            ThemeService.TransparencyEnabled && ActualTransparencyLevel != WindowTransparencyLevel.None);
+        LogWindowTransparencyState("主窗口已打开");
+    }
+
+    private void OnThemeChanged()
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            var transparencyAvailable = !_hasBeenOpened || ActualTransparencyLevel != WindowTransparencyLevel.None;
+            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled && transparencyAvailable);
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            var transparencyAvailable = !_hasBeenOpened || ActualTransparencyLevel != WindowTransparencyLevel.None;
+            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled && transparencyAvailable);
+        });
+    }
+
+    private void OnWindowClosed(object? sender, System.EventArgs e)
+    {
+        ThemeService.ThemeChanged -= OnThemeChanged;
+        Closed -= OnWindowClosed;
     }
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
@@ -81,8 +144,51 @@ public partial class MainWindow : Window
     private void ApplyWindowTransparency(bool enabled)
     {
         TransparencyLevelHint = enabled
-            ? new[] { WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent }
+            ? new[] { WindowTransparencyLevel.Transparent, WindowTransparencyLevel.AcrylicBlur }
             : new[] { WindowTransparencyLevel.None };
+
+        var transparencyAvailable = !_hasBeenOpened || ActualTransparencyLevel != WindowTransparencyLevel.None;
+        RefreshMainWindowThemeResources(enabled && transparencyAvailable);
+
+        LogWindowTransparencyState(enabled ? "设置已开启" : "设置已关闭");
+    }
+
+    private void RefreshMainWindowThemeResources(bool enabled)
+    {
+        var appResources = Application.Current?.Resources;
+        if (appResources is null)
+        {
+            return;
+        }
+
+        foreach (var (key, transparentAlpha) in MainWindowSurfaceBrushes)
+        {
+            if (appResources.TryGetValue(key, out var value) && value is ISolidColorBrush source)
+            {
+                var color = source.Color;
+                Resources[key] = new SolidColorBrush(Color.FromArgb(
+                    enabled ? transparentAlpha : (byte)0xFF,
+                    color.R,
+                    color.G,
+                    color.B));
+            }
+        }
+
+        if (appResources.TryGetValue("WindowTransparencyFallbackBrush", out var fallbackValue) &&
+            fallbackValue is ISolidColorBrush fallback)
+        {
+            var color = fallback.Color;
+            Resources["WindowTransparencyFallbackBrush"] = new SolidColorBrush(
+                Color.FromArgb(0xFF, color.R, color.G, color.B));
+        }
+    }
+
+    private void LogWindowTransparencyState(string reason)
+    {
+        var requested = string.Join(", ", TransparencyLevelHint.Select(level => level.ToString()));
+        DebugConsoleService.Instance.Append(
+            $"[WindowTransparency] {reason}: requested=[{requested}], actual={ActualTransparencyLevel}",
+            DebugLogLevel.Debug);
     }
 
     private void OnGameStartedRequested(LauncherVisibilityBehavior behavior)

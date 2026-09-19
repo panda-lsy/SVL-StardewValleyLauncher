@@ -351,20 +351,36 @@ public static class ThemeService
     private static void ApplyWindowBackgroundTransparency()
     {
         var resources = Application.Current?.Resources;
-        if (resources == null || resources["WindowBackgroundBrush"] is not SolidColorBrush brush)
+        if (resources == null)
+        {
+            return;
+        }
+
+        // 主窗口根背景保持 Transparent，主题色单独绘制；保存不透明的后端回退色，
+        // 避免不支持透明的窗口后端将透明区域显示成白色或黑色。
+        if (resources["WindowBackgroundBrush"] is SolidColorBrush windowBrush)
+        {
+            var color = windowBrush.Color;
+            resources["WindowTransparencyFallbackBrush"] = new SolidColorBrush(
+                Color.FromArgb(0xFF, color.R, color.G, color.B));
+        }
+
+        // 主界面优先请求不模糊的 Transparent，确实不支持时再回退 AcrylicBlur。
+        // 主题铺层 Alpha=99 让桌面可辨认地透出，卡片表面仍保持不透明以保证可读性。
+        ApplyBrushAlpha(resources, "WindowBackgroundBrush", _transparencyEnabled ? (byte)0x99 : (byte)0xFF);
+        ApplyBrushAlpha(resources, "HeaderBackgroundBrush", _transparencyEnabled ? (byte)0x99 : (byte)0xFF);
+        ApplyBrushAlpha(resources, "PanelBackgroundBrush", _transparencyEnabled ? (byte)0x00 : (byte)0xFF);
+    }
+
+    private static void ApplyBrushAlpha(global::Avalonia.Controls.IResourceDictionary resources, string key, byte alpha)
+    {
+        if (resources[key] is not SolidColorBrush brush || brush.Color.A == alpha)
         {
             return;
         }
 
         var color = brush.Color;
-        var alpha = _transparencyEnabled ? (byte)0xE8 : (byte)0xFF;
-        if (color.A == alpha)
-        {
-            return;
-        }
-
-        resources["WindowBackgroundBrush"] = new SolidColorBrush(
-            Color.FromArgb(alpha, color.R, color.G, color.B));
+        resources[key] = new SolidColorBrush(Color.FromArgb(alpha, color.R, color.G, color.B));
     }
 
     /// <summary>

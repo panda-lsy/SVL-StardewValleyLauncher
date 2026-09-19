@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": 1012878,
+      "gameId": 669,
+      "name": "Blissful Valley",
+      "summary": "✨ Cozy modpack focused on expanding the game with content suitable for everyone!",
+      "downloadCount": 58020,
+      "dateModified": "2024-05-16T06:42:35.627Z",
+      "primaryCategoryId": 6773,
+      "categories": [
+        { "id": 6772, "name": "QoL", "slug": "qol", "classId": 6771 },
+        { "id": 6773, "name": "Expansion", "slug": "expansion", "classId": 6771 }
+      ],
+      "classId": 6771,
+      "logo": {
+        "thumbnailUrl": "https://media.forgecdn.net/avatars/thumbnails/990/337/256/256/638503569872808104.png",
+        "url": "https://media.forgecdn.net/avatars/990/337/638503569872808104.png"
+      },
+      "mainFileId": 5346378,
+      "latestFilesIndexes": [
+        {
+          "gameVersion": "1.6.8",
+          "fileId": 5346378,
+          "filename": "Blissful Valley-1.2.0.cfmodpack",
+          "releaseType": 1,
+          "gameVersionTypeId": 587
+        }
+      ]
+    }
+  ],
+  "pagination": { "index": 0, "pageSize": 2, "resultCount": 1, "totalCount": 1 }
+}

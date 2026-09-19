@@ -10,15 +10,29 @@ public sealed class NxmProtocolRegistrationService : INxmProtocolRegistrationSer
 
     public NxmProtocolRegistrationResult GetStatus()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                return LinuxNxmProtocolRegistration.GetStatusForDesktops(
+                    LinuxNxmProtocolRegistration.GetDataHome(),
+                    LinuxNxmProtocolRegistration.GetConfigHome(),
+                    LinuxNxmProtocolRegistration.GetDesktopEnvironmentNames());
+            }
+            catch (Exception ex)
+            {
+                return PlatformFailureResult("读取 NXM 协议状态失败", ex);
+            }
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return MacOSNxmProtocolRegistration.GetStatus(Environment.ProcessPath);
+        }
+
         if (!OperatingSystem.IsWindows())
         {
-            return new NxmProtocolRegistrationResult
-            {
-                IsSuccess = true,
-                IsSupported = false,
-                IsRegistered = false,
-                Message = "当前平台不支持自动注册 NXM 协议"
-            };
+            return UnsupportedPlatformResult();
         }
 
         try
@@ -49,15 +63,30 @@ public sealed class NxmProtocolRegistrationService : INxmProtocolRegistrationSer
 
     public NxmProtocolRegistrationResult TryRegister(string launcherExecutablePath)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                return LinuxNxmProtocolRegistration.TryRegisterForDesktops(
+                    launcherExecutablePath,
+                    LinuxNxmProtocolRegistration.GetDataHome(),
+                    LinuxNxmProtocolRegistration.GetConfigHome(),
+                    LinuxNxmProtocolRegistration.GetDesktopEnvironmentNames());
+            }
+            catch (Exception ex)
+            {
+                return PlatformFailureResult("NXM 协议注册失败", ex);
+            }
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return MacOSNxmProtocolRegistration.TryRegister(launcherExecutablePath);
+        }
+
         if (!OperatingSystem.IsWindows())
         {
-            return new NxmProtocolRegistrationResult
-            {
-                IsSuccess = true,
-                IsSupported = false,
-                IsRegistered = false,
-                Message = "当前平台不支持自动注册 NXM 协议"
-            };
+            return UnsupportedPlatformResult();
         }
 
         if (string.IsNullOrWhiteSpace(launcherExecutablePath) || !File.Exists(launcherExecutablePath))
@@ -108,4 +137,22 @@ public sealed class NxmProtocolRegistrationService : INxmProtocolRegistrationSer
             };
         }
     }
+
+    private static NxmProtocolRegistrationResult UnsupportedPlatformResult()
+        => new()
+        {
+            IsSuccess = true,
+            IsSupported = false,
+            IsRegistered = false,
+            Message = "当前平台不支持自动注册 NXM 协议"
+        };
+
+    private static NxmProtocolRegistrationResult PlatformFailureResult(string action, Exception ex)
+        => new()
+        {
+            IsSuccess = false,
+            IsSupported = true,
+            IsRegistered = false,
+            Message = $"{action}: {ex.Message}"
+        };
 }

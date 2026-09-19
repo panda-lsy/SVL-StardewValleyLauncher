@@ -1,0 +1,117 @@
+{
+  "data": [
+    {
+      "id": 7759981,
+      "gameId": 669,
+      "modId": 309243,
+      "isAvailable": true,
+      "displayName": "Content Patcher 2.9.1 2.9.1.zip",
+      "fileName": "Content Patcher 2.9.1 2.9.1.zip",
+      "releaseType": 1,
+      "fileDate": "2026-03-15T05:11:42.74Z",
+      "fileLength": 389967,
+      "downloadCount": 6292,
+      "downloadUrl": "https://edge.forgecdn.net/files/7759/981/Content%20Patcher%202.9.1%202.9.1.zip",
+      "gameVersions": [],
+      "dependencies": [],
+      "modules": [
+        {
+          "name": "ContentPatcher",
+          "fingerprint": 75950217
+        }
+      ]
+    },
+    {
+      "id": 7448774,
+      "gameId": 669,
+      "modId": 309243,
+      "isAvailable": true,
+      "displayName": "Content Patcher 2.9.0 2.9.0.zip",
+      "fileName": "Content Patcher 2.9.0 2.9.0.zip",
+      "releaseType": 1,
+      "fileDate": "2026-01-12T00:57:43.983Z",
+      "fileLength": 343207,
+      "downloadCount": 132653,
+      "downloadUrl": "https://edge.forgecdn.net/files/7448/774/Content%20Patcher%202.9.0%202.9.0.zip",
+      "gameVersions": [
+        "1.6.15"
+      ],
+      "dependencies": [],
+      "modules": [
+        {
+          "name": "ContentPatcher",
+          "fingerprint": 704483242
+        }
+      ]
+    },
+    {
+      "id": 7153624,
+      "gameId": 669,
+      "modId": 309243,
+      "isAvailable": true,
+      "displayName": "Content Patcher 2.8.1 2.8.1.zip",
+      "fileName": "Content Patcher 2.8.1 2.8.1.zip",
+      "releaseType": 1,
+      "fileDate": "2025-10-26T20:02:48.477Z",
+      "fileLength": 341264,
+      "downloadCount": 121506,
+      "downloadUrl": "https://edge.forgecdn.net/files/7153/624/Content%20Patcher%202.8.1%202.8.1.zip",
+      "gameVersions": [
+        "1.6.15"
+      ],
+      "dependencies": [],
+      "modules": [
+        {
+          "name": "ContentPatcher",
+          "fingerprint": 2694645579
+        }
+      ]
+    },
+    {
+      "id": 6961788,
+      "gameId": 669,
+      "modId": 309243,
+      "isAvailable": true,
+      "displayName": "Content Patcher 2.8.0 2.8.0.zip",
+      "fileName": "Content Patcher 2.8.0 2.8.0.zip",
+      "releaseType": 1,
+      "fileDate": "2025-09-04T05:04:26.217Z",
+      "fileLength": 333687,
+      "downloadCount": 84848,
+      "downloadUrl": "https://edge.forgecdn.net/files/6961/788/Content%20Patcher%202.8.0%202.8.0.zip",
+      "gameVersions": [
+        "1.6.15"
+      ],
+      "dependencies": [],
+      "modules": [
+        {
+          "name": "ContentPatcher",
+          "fingerprint": 2287760687
+        }
+      ]
+    },
+    {
+      "id": 6819324,
+      "gameId": 669,
+      "modId": 309243,
+      "isAvailable": true,
+      "displayName": "Content Patcher 2.7.5 2.7.5.zip",
+      "fileName": "Content Patcher 2.7.5 2.7.5.zip",
+      "releaseType": 1,
+      "fileDate": "2025-07-27T23:20:34.037Z",
+      "fileLength": 332390,
+      "downloadCount": 65571,
+      "downloadUrl": "https://edge.forgecdn.net/files/6819/324/Content%20Patcher%202.7.5%202.7.5.zip",
+      "gameVersions": [
+        "1.6.15"
+      ],
+      "dependencies": [],
+      "modules": [
+        {
+          "name": "ContentPatcher",
+          "fingerprint": 325363523
+        }
+      ]
+    }
+  ]
+}

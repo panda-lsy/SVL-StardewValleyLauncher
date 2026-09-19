@@ -22,4 +22,8 @@
     <ProjectReference Include="..\SVL.Core.Platform\SVL.Core.Platform.csproj" />
     <ProjectReference Include="..\SVL.Avalonia\SVL.Avalonia.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Fixtures\CurseForge\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
