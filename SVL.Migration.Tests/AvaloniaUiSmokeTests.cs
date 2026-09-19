@@ -417,6 +417,43 @@ public sealed class AvaloniaUiSmokeTests
     }
 
     [TestMethod]
+    public void RestoreTransaction_ShouldRecreateOriginalFromSnapshotWhenTargetWasRemoved()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"SVL_RestoreTransaction_{Guid.NewGuid():N}");
+        var snapshot = System.IO.Path.Combine(root, "ModsBackup", "old-mod");
+        var target = System.IO.Path.Combine(root, "Mods", "old-mod");
+        Directory.CreateDirectory(snapshot);
+        File.WriteAllText(System.IO.Path.Combine(snapshot, "manifest.json"), "{\"Name\":\"Old Mod\"}");
+        File.WriteAllText(System.IO.Path.Combine(snapshot, "content.txt"), "original");
+
+        try
+        {
+            var method = typeof(SVL.Avalonia.ViewModels.VersionSettingsPageViewModel)
+                .GetMethod(
+                    "TryRollbackRestoreTransaction",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            Assert.IsNotNull(method, "恢复事务回滚方法必须存在");
+
+            var arguments = new object[] { target, snapshot, null! };
+            var result = (bool)method!.Invoke(null, arguments)!;
+
+            Assert.IsTrue(result, arguments[2]?.ToString());
+            Assert.IsTrue(File.Exists(System.IO.Path.Combine(target, "manifest.json")));
+            Assert.AreEqual(
+                "original",
+                File.ReadAllText(System.IO.Path.Combine(target, "content.txt")),
+                "原有 Mod 快照应在目标目录被移走后恢复");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void ConflictResolutionDialog_ShouldLoadWithComparisonAndSafeReplaceActions()
     {
         var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);

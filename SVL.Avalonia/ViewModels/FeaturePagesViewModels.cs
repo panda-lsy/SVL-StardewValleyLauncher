@@ -6785,6 +6785,17 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
     private static bool TryBackupMod(ModManageItem mod, string backupRoot)
     {
+        return TryBackupMod(mod, backupRoot, out _);
+    }
+
+    /// <summary>
+    /// 创建 Mod 快照，并返回快照目录。
+    /// 返回目录是恢复事务回滚的唯一可靠来源；不能通过“备份目录中最新的项”
+    /// 反推，因为用户可能同时触发多个备份操作。
+    /// </summary>
+    private static bool TryBackupMod(ModManageItem mod, string backupRoot, out string snapshotDir)
+    {
+        snapshotDir = string.Empty;
         if (string.IsNullOrWhiteSpace(mod.FullPath) || !Directory.Exists(mod.FullPath))
         {
             return false;
@@ -6797,7 +6808,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
 
         var snapshotName = $"{DateTime.Now:yyyyMMdd_HHmmss}_{SanitizeFileName(originalFolderName)}_{Guid.NewGuid().ToString("N")[..6]}";
-        var snapshotDir = Path.Combine(backupRoot, snapshotName);
+        snapshotDir = Path.Combine(backupRoot, snapshotName);
 
         try
         {
@@ -6822,6 +6833,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
         catch
         {
+            snapshotDir = string.Empty;
             return false;
         }
     }
@@ -6880,16 +6892,23 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 return false;
             }
 
-            if (!TryBackupExistingMod(targetPath, backupRoot))
-            {
-                await _dialogService.ShowMessageAsync(
-                    "无法替换 Mod",
-                    $"原有 Mod“{targetName}”备份失败，已取消替换。请检查目录权限后重试。");
-                return false;
-            }
         }
 
         var stagingPath = string.Empty;
+        var existingBackupPath = string.Empty;
+        var targetStateChanged = false;
+
+        // 记录原目录快照路径。后续任意一步失败时，不能只返回 false：
+        // 原目录可能已经进了回收站，而新目录尚未发布成功。
+        if (Directory.Exists(targetPath) &&
+            !TryBackupExistingMod(targetPath, backupRoot, out existingBackupPath))
+        {
+            await _dialogService.ShowMessageAsync(
+                "无法替换 Mod",
+                $"原有 Mod“{targetName}”备份失败，已取消替换。请检查目录权限后重试。");
+            return false;
+        }
+
         try
         {
             // 先复制到临时目录，成功后再替换目标，避免恢复过程中途失败留下半套 Mod。
@@ -6903,13 +6922,20 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 File.Delete(copiedMetaPath);
             }
 
-            if (Directory.Exists(targetPath) &&
-                !RecycleBinService.TryMoveToRecycleBin(targetPath, out var recycleError))
+            if (Directory.Exists(targetPath))
             {
-                throw new IOException($"无法将原有 Mod 移入回收站：{recycleError}");
+                if (!RecycleBinService.TryMoveToRecycleBin(targetPath, out var recycleError))
+                {
+                    throw new IOException($"无法将原有 Mod 移入回收站：{recycleError}");
+                }
+
+                // 以实际文件系统操作为准，而不是以备份快照是否成功为准；
+                // 这样即使目录在前置检查后被重新创建，仍会触发事务回滚。
+                targetStateChanged = true;
             }
 
             Directory.Move(stagingPath, targetPath);
+            targetStateChanged = true;
 
             // 更新时发布者可能把旧目录 A 改名为 BCD。更新链记录了本次归档
             // 的目标名；恢复旧版本后把已经安装的新目录移入回收站，避免 A/BCD
@@ -6937,6 +6963,22 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
         catch
         {
+            if (targetStateChanged)
+            {
+                var rolledBack = TryRollbackRestoreTransaction(
+                    targetPath,
+                    existingBackupPath,
+                    out var rollbackError);
+                if (!rolledBack)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[VersionSettings] 恢复备份事务回滚失败: {rollbackError}");
+                    Status = string.IsNullOrWhiteSpace(existingBackupPath)
+                        ? $"恢复失败，已保留现场目录：{targetName}"
+                        : $"恢复失败，原有 Mod 快照仍保留在备份目录：{targetName}";
+                }
+            }
+
             return false;
         }
         finally
@@ -6953,6 +6995,82 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     // 暂存目录清理失败不覆盖真正的恢复结果；后续刷新时会忽略 .svl-restore-*。
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 恢复事务失败时回到操作前状态。
+    /// 新目录也只能进入回收站，不能为回滚而物理删除；原目录快照保留在
+    /// ModsBackup 中，即使回滚再次失败，用户仍可从备份栏手动恢复。
+    /// </summary>
+    private static bool TryRollbackRestoreTransaction(
+        string targetPath,
+        string existingBackupPath,
+        out string error)
+    {
+        error = string.Empty;
+        try
+        {
+            if (Directory.Exists(targetPath) &&
+                !RecycleBinService.TryMoveToRecycleBin(targetPath, out var recycleError))
+            {
+                error = $"无法将已发布目录移入回收站：{recycleError}";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(existingBackupPath))
+            {
+                // 操作前目标不存在，移走新目录后已经恢复到原状态。
+                return true;
+            }
+
+            if (!Directory.Exists(existingBackupPath))
+            {
+                error = "原有 Mod 快照不存在";
+                return false;
+            }
+
+            var parent = Path.GetDirectoryName(targetPath);
+            if (string.IsNullOrWhiteSpace(parent))
+            {
+                error = "恢复目标父目录为空";
+                return false;
+            }
+
+            var rollbackStagingPath = Path.Combine(
+                parent,
+                $".svl-restore-rollback-{Guid.NewGuid():N}");
+            try
+            {
+                CopyDirectory(existingBackupPath, rollbackStagingPath);
+                var copiedMetaPath = Path.Combine(rollbackStagingPath, BackupMetaFileName);
+                if (File.Exists(copiedMetaPath))
+                {
+                    File.Delete(copiedMetaPath);
+                }
+
+                Directory.Move(rollbackStagingPath, targetPath);
+                return true;
+            }
+            finally
+            {
+                if (Directory.Exists(rollbackStagingPath))
+                {
+                    try
+                    {
+                        Directory.Delete(rollbackStagingPath, true);
+                    }
+                    catch
+                    {
+                        // 保留快照供备份栏恢复，不覆盖原始回滚错误。
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
         }
     }
 
@@ -10311,6 +10429,15 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
     private bool TryBackupExistingMod(string targetPath, string backupRoot)
     {
+        return TryBackupExistingMod(targetPath, backupRoot, out _);
+    }
+
+    private bool TryBackupExistingMod(
+        string targetPath,
+        string backupRoot,
+        out string snapshotPath)
+    {
+        snapshotPath = string.Empty;
         var existing = Mods.FirstOrDefault(item =>
             !item.IsBackupItem &&
             !string.IsNullOrWhiteSpace(item.FullPath) &&
@@ -10324,7 +10451,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             FullPath = targetPath
         };
 
-        return TryBackupMod(item, backupRoot);
+        return TryBackupMod(item, backupRoot, out snapshotPath);
     }
 
     private sealed record BackupDirectoryComparison(
