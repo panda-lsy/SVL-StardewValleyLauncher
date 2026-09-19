@@ -1216,11 +1216,16 @@ public class NexusCollectionWizardTask : DownloadTask
                     Log.Info($"[CollectionWizard] 版本目录存在但为空，清理后继续: {gameFilesPath}");
                     try
                     {
-                        Directory.Delete(gameFilesPath, recursive: true);
+                        if (!ModBackupService.MovePathToRecycleBin(gameFilesPath))
+                        {
+                            // 目录为空时即使回收站不可用也可以继续复用它；不能
+                            // 回退为物理删除，保持统一的用户数据恢复语义。
+                            Log.Warn($"[CollectionWizard] 空版本目录移入回收站失败，保留原路径: {gameFilesPath}");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Log.Warn($"[CollectionWizard] 清理空目录失败: {ex.Message}");
+                        Log.Warn($"[CollectionWizard] 清理空目录失败，已保留原路径: {ex.Message}");
                     }
                 }
                 else

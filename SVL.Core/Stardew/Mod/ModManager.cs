@@ -1675,14 +1675,18 @@ public class ModManager : IModManager
                     dir.MoveTo(destPath);
                 }
 
-                // 内容已移动完毕，删除空的结构性嵌套文件夹；这里不涉及用户文件。
+                // 内容已移动完毕，空的结构性嵌套文件夹也遵循回收站语义；
+                // 即使未来目录中残留隐藏内容，也不能用物理删除绕过恢复能力。
                 try
                 {
-                    Directory.Delete(issue.NestedFolderPath, false);
+                    if (!MovePathToRecycleBin(issue.NestedFolderPath))
+                    {
+                        Log.Warn($"[NestedFolder] 空结构目录移入回收站失败，已保留: {issue.NestedFolderPath}");
+                    }
                 }
                 catch
                 {
-                    // 忽略删除错误
+                    // 忽略清理错误，但不物理删除用户目录。
                 }
 
                 Log.Info($"[NestedFolder] ✓ 修复成功: {issue.ParentFolderName}");

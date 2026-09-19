@@ -81,7 +81,7 @@ Windows/Linux/macOS 测试矩阵、Linux ZIP、Windows 包、macOS 双架构 `.a
 | 本地 Mod 冲突检测 | Mod 管理页可按需检测启用 Mod 的重复 UniqueID、缺失/禁用/版本不满足的必需前置，以及真实相对文件路径冲突；检测结果会在启用状态或列表刷新后失效，避免显示过期结论 | `Services/ModConflictAnalyzer`、`FeaturePagesViewModels`、`Views/VersionSettingsPageView.axaml` |
 | 旧版依赖/冲突解析 | 修复旧 WPF/Core 分支的最低版本判断反向、短版本比较越界、循环依赖未返回、重复 ID 误报及绝对路径文件冲突漏报；Avalonia 主流程不直接引用该项目，但兼容代码已同步收紧 | `SVL.Core/Stardew/Mod/Dependency/ModDependencyResolver.cs`、`ModConflictDetector.cs` |
 | 本地 Mod 安装 | 版本设置页本地安装同时支持 ZIP/CFModpack/7z，按文件签名选择解压器，并按实际 `manifest.json` 目录去除发行包外层目录 | `FeaturePagesViewModels.ImportModsFromLocalSource`、`ArchiveExtractor`、`ZipExtractor` |
-| 删除/覆盖安全性 | 用户主动卸载、Base SMAPI 卸载、版本删除、普通 Mod 覆盖、旧 WPF 下载任务覆盖、嵌套 Mod 修复中的同名目标及 Collection 覆盖/回滚中的用户目录优先移入统一回收站服务；Avalonia SMAPI 更新先在同卷暂存旧运行时条目，再整体送入回收站，失败则恢复原文件并中止更新；旧 WPF 实例删除先安全移除 junction，再回收完整版本目录；临时解压、缓存、失败时新建的版本目录及已搬空的事务暂存目录仍按生命周期清理 | `SVL.Core.Platform.Services.RecycleBinService`、`SmapiInstallService`、`SettingsService`、`ModManager`、`ModDownloadTask`、`FeaturePagesViewModels`、`InstancesPageViewModel`、`DownloadInstallService` |
+| 删除/覆盖安全性 | 用户主动卸载、Base SMAPI 卸载、版本删除、普通 Mod 覆盖、旧 WPF 下载任务覆盖、嵌套 Mod 修复中的同名目标及 Collection 覆盖/回滚中的用户目录优先移入统一回收站服务；Avalonia SMAPI 更新先在同卷暂存旧运行时条目，再整体送入回收站，失败则恢复原文件并中止更新；旧 WPF 实例删除先安全移除 junction，再回收完整版本目录；失败时新建的版本目录也移入回收站，临时解压、缓存及已搬空的事务暂存目录仍按生命周期清理 | `SVL.Core.Platform.Services.RecycleBinService`、`SmapiInstallService`、`SettingsService`、`ModManager`、`ModDownloadTask`、`FeaturePagesViewModels`、`InstancesPageViewModel`、`DownloadInstallService` |
 | 导入/导出闭环 | 标准 `modpack.json`、`sources.json`、平台 ID/FileID、直链来源、配置、关系信息和动态 Icon；导出补全 FileID 时 Nexus 凭据与公开 CurseForge 查询分开处理；旧本地文件名/目录名及有效 Nexus 缓存中的 Nexus/CurseForge FileID 也会回填；CurseForge CDN 的 `/files/5312/529/` 路径会合并为完整 FileID `5312529`，不会截断为前段数字；来源清单还兼容常见 key→source 对象映射和 key→URL 简写；整合包独立 Mod 按条目写入 `sourceKind=modpack-entry`，嵌套子 Mod 强制写入 `parent-inherited`，旧目录名失效时按 manifest 的 UniqueID/Name 回退匹配；同一项目但不同 FileID 的独立条目不会被旧 `childMods`/`parentMod` 关系覆盖，同归档的父子条目仍继承父来源 | `VersionSettingsPageViewModel`、`ModpackInstallService`、`DownloadInstallService` |
 | 子 Mod 分组 | 管理页选择联动、折叠显示，导出保留父子关系；真实父 Mod 已携带压缩包和 `childMods` 时，嵌套子 Mod 不再重复导出为独立来源，避免回导时覆盖父级凭证 | `FeaturePagesViewModels`、`ModpackInstallService` |
 | Mod 汉化管理 | 批量检测之外补齐选中 Mod 强制刷新汉化；列表保留 manifest 原文与汉化文本，可逐项切换中英文 | `FeaturePagesViewModels`、`VersionSettingsPageView.axaml` |
@@ -98,7 +98,7 @@ Windows/Linux/macOS 测试矩阵、Linux ZIP、Windows 包、macOS 双架构 `.a
 | 夜间主题与窗口控制区 | 主要弹窗使用动态主题资源；右键菜单显式走 Popup 主题并在应用级覆盖 `ContextMenu/MenuFlyoutPresenter`，避免独立 Popup 回落到浅色；控制按钮使用固定等宽列、统一 40×48 单元格、24×24 内容画布和布局取整；最小化横线使用显式居中矩形，避免细长 `StreamGeometry` 的 Uniform 拉伸贴到画布上沿；版本删除会清理只读属性，遇到短暂文件锁时先移出 `versions` 再后台重试；“跟随系统”现在读取 Avalonia 系统主题并监听后续切换 | `Controls/*.axaml`、`InstancesPageView.axaml`、`MainWindow.axaml`、`Resources/Theme.axaml`、`Services/ThemeService.cs`、`FeaturePagesViewModels` |
 
 下文零散出现的 293/294/296/308/313 等测试数字均为各轮历史快照；当前验证结果以本段为准。
-当前回归结果（2026-09-19 复验）：Avalonia Debug 构建通过，0 警告、0 错误；迁移测试 **349 总计，其中 345 通过、4 跳过**。上述整合包来源树、缓存、更新状态、备份回滚与透明布局回归均包含在本次测试集中。Windows 透明后端已确认接受 AcrylicBlur，最终无遮挡桌面截图及真实 Nexus/CurseForge 账号端到端流程仍属于发布前实机验收项。
+当前回归结果（2026-09-19 复验）：Avalonia Debug 构建通过，0 警告、0 错误；迁移测试 **356 总计，其中 352 通过、4 跳过**。上述整合包来源树、缓存、更新状态、备份回滚与透明布局回归均包含在本次测试集中。Windows 透明后端已确认接受 AcrylicBlur，最终无遮挡桌面截图及真实 Nexus/CurseForge 账号端到端流程仍属于发布前实机验收项。
 
 本轮给 `build.ps1` 与 `scripts/package-avalonia.ps1` 增加可选 `-OutputDirectory`；未指定时仍输出到仓库 `artifacts`，指定后可安全地隔离构建。Windows x64 Debug 包装脚本已分别在 PowerShell 7 与 Windows PowerShell 5.1 中通过临时目录实跑，ZIP 包含主 EXE 和 PDB；根目录/仓库根目录会在发布前被拒绝，仓库现有调试 ZIP 的大小和时间戳保持不变。
 上一轮测试统计（含 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim/旧缓存路径、API 限额快照、失效 Token 资料保留及限额事件订阅异常隔离回归）：迁移测试 **308 总计，其中 306 通过、2 跳过**。
@@ -427,3 +427,10 @@ Avalonia Debug 构建 0 警告/错误。提交 `28cc881` 已推送到上游 `Ava
 不再回退为不可恢复的物理删除。下载缓存、临时解压根目录及其它不属于用户内容的
 临时路径仍按生命周期物理清理。`SVL.Core` net48 Debug 构建通过；该旧 WPF/Core
 入口不属于 Avalonia 测试项目，行为验证以兼容性构建和现有安装/更新回归覆盖为准。
+
+2026-09-19 继续收口删除语义：Avalonia `SmapiInstallService` 新装 SMAPI 失败/取消时，
+版本目录改为移入统一回收站服务；回收站失败会保留半成品目录。旧 WPF Collection
+向导清理空版本目录、旧 Core ModManager 整理空嵌套目录，以及 Avalonia 在线更新备份
+异常路径也不再直接物理删除用户目录。新增 SMAPI 版本目录“移入回收站/回收失败保留
+现场”回归；当前迁移测试 **356 总计、352 通过、4 跳过**，Avalonia、旧 WPF Debug
+构建均为 0 警告/错误。

@@ -130,6 +130,62 @@ public sealed class SmapiUpdateRecycleBinTests
         }
     }
 
+    [TestMethod]
+    public void CleanupVersionDirectory_RecyclesNewVersionInsteadOfDeletingIt()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var version = Path.Combine(root, "versions", "SMAPI 4.5.2");
+            var recycled = Path.Combine(root, "recycled-version");
+            Directory.CreateDirectory(version);
+            File.WriteAllText(Path.Combine(version, "partial-install.dll"), "keep me recoverable");
+
+            var cleaned = SmapiInstallService.CleanupVersionDirectory(
+                version,
+                logger: null,
+                moveToRecycleBin: path =>
+                {
+                    Directory.Move(path, recycled);
+                    return (true, string.Empty);
+                });
+
+            Assert.IsTrue(cleaned);
+            Assert.IsFalse(Directory.Exists(version));
+            Assert.AreEqual("keep me recoverable", File.ReadAllText(Path.Combine(recycled, "partial-install.dll")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void CleanupVersionDirectory_PreservesNewVersionWhenRecycleBinFails()
+    {
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var version = Path.Combine(root, "versions", "SMAPI 4.5.2");
+            Directory.CreateDirectory(version);
+            var marker = Path.Combine(version, "partial-install.dll");
+            File.WriteAllText(marker, "do not lose");
+
+            var cleaned = SmapiInstallService.CleanupVersionDirectory(
+                version,
+                logger: null,
+                moveToRecycleBin: _ => (false, "simulated recycle-bin failure"));
+
+            Assert.IsFalse(cleaned);
+            Assert.IsTrue(File.Exists(marker));
+            Assert.AreEqual("do not lose", File.ReadAllText(marker));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateRuntimeFixture(string root)
     {
         var runtime = Path.Combine(root, "runtime");

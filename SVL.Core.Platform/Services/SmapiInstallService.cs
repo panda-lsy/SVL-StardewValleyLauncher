@@ -135,7 +135,7 @@ public sealed class SmapiInstallService : ISmapiInstallService
                 // 更新模式下不回滚删除（目录中仍有基础游戏文件与用户 Mods），仅新装时清理避免残留"实例已存在"
                 if (!isUpdate)
                 {
-                    CleanupVersionDirectory(versionRoot);
+                    CleanupVersionDirectory(versionRoot, logger);
                 }
                 return SmapiInstallResult.Failed("未找到 install.dat，请确认下载的是 SMAPI 官方安装包");
             }
@@ -193,7 +193,7 @@ public sealed class SmapiInstallService : ISmapiInstallService
                 logger?.Invoke("步 8/8: 验证失败 - 未检测到 SMAPI 标记文件");
                 if (!isUpdate)
                 {
-                    CleanupVersionDirectory(versionRoot);
+                    CleanupVersionDirectory(versionRoot, logger);
                 }
                 return SmapiInstallResult.Failed("安装后未检测到 SMAPI 可执行文件，请确认安装包与系统平台匹配");
             }
@@ -211,7 +211,7 @@ public sealed class SmapiInstallService : ISmapiInstallService
             }
 
             logger?.Invoke("SMAPI 安装已取消，清理实例目录");
-            CleanupVersionDirectory(versionRoot);
+            CleanupVersionDirectory(versionRoot, logger);
             return SmapiInstallResult.Cancelled("SMAPI 安装已取消");
         }
         catch (Exception ex)
@@ -223,7 +223,7 @@ public sealed class SmapiInstallService : ISmapiInstallService
             }
 
             logger?.Invoke($"SMAPI 安装异常: {ex.Message}");
-            CleanupVersionDirectory(versionRoot);
+            CleanupVersionDirectory(versionRoot, logger);
             return SmapiInstallResult.Failed($"SMAPI 安装失败: {ex.Message}");
         }
         finally
@@ -545,11 +545,14 @@ public sealed class SmapiInstallService : ISmapiInstallService
     /// 参考旧架构 SmapiDownloadTask.CleanupVersionDirectory：
     /// 先处理 Content 目录连接（junction），避免 Directory.Delete 跟随连接误删源目录。
     /// </summary>
-    private static void CleanupVersionDirectory(string versionRoot)
+    internal static bool CleanupVersionDirectory(
+        string versionRoot,
+        Action<string>? logger = null,
+        Func<string, (bool Success, string Message)>? moveToRecycleBin = null)
     {
         if (string.IsNullOrWhiteSpace(versionRoot) || !Directory.Exists(versionRoot))
         {
-            return;
+            return true;
         }
 
         try
@@ -567,11 +570,26 @@ public sealed class SmapiInstallService : ISmapiInstallService
                 }
             }
 
-            Directory.Delete(versionRoot, true);
+            moveToRecycleBin ??= TryMoveToRecycleBinWithMessage;
+            var recycleResult = moveToRecycleBin(versionRoot);
+            var stillExists = Directory.Exists(versionRoot) || File.Exists(versionRoot);
+            if (recycleResult.Success && !stillExists)
+            {
+                logger?.Invoke($"已将失败/取消的 SMAPI 版本目录移入回收站: {versionRoot}");
+                return true;
+            }
+
+            // 回收站失败时保留目录，不能回退为 Directory.Delete；这样重试时虽然
+            // 仍会看到实例已存在，但用户可以从原目录手动处理，避免失败清理丢数据。
+            logger?.Invoke(
+                $"无法将失败/取消的 SMAPI 版本目录移入回收站，已保留原路径: {versionRoot}。原因：{recycleResult.Message}");
+            return false;
         }
-        catch
+        catch (Exception ex)
         {
-            // 清理失败不抛异常，避免影响错误传播
+            // 清理失败不抛异常，避免覆盖原始安装错误；但必须保留目录。
+            logger?.Invoke($"清理失败/取消的 SMAPI 版本目录失败，已保留原路径: {versionRoot}。原因：{ex.Message}");
+            return false;
         }
     }
 

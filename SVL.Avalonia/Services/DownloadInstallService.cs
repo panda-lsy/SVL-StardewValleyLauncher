@@ -136,6 +136,7 @@ public sealed class DownloadInstallService
         }
         catch
         {
+            var preservedBackupPath = string.Empty;
             // Directory.Move 已成功但后续元数据落盘失败时，调用方会中止安装。
             // 此时必须把原目录还原到 Mods，否则一次“备份失败”会让用户的
             // 当前实例暂时缺少原有 Mod。还原失败则保留带更新链的备份，
@@ -168,18 +169,27 @@ public sealed class DownloadInstallService
                 try
                 {
                     // 移动成功后保留备份，避免元数据写入失败反而丢失用户的
-                    // 原版本；下次刷新/手动恢复仍可找回它。
+                    // 原版本；下次刷新/手动恢复仍可找回它。这里不能用
+                    // Directory.Delete：backupPath 可能就是唯一的原 Mod 快照。
                     if (!File.Exists(Path.Combine(backupPath, ".svl-update-chain.json")))
                     {
-                        Directory.Delete(backupPath, true);
+                        // 无法判断该目录是半成品还是已移动的用户原版时，保留它
+                        // 供备份页/用户人工处理，不做不可恢复的物理删除。
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[DownloadInstallService] 保留缺少更新链的备份目录: {backupPath}");
                     }
+
+                    preservedBackupPath = backupPath;
                 }
                 catch
                 {
-                    // 部分复制失败时，尽量清理不可恢复的半成品备份。
+                    // 备份路径本身可能已经不可读；不能为了清理而物理删除，
+                    // 保持现场交给后续刷新/人工处理。
                 }
             }
-            backupPath = string.Empty;
+            // 还原成功时为空；还原失败或复制半成品仍存在时，把路径交给调用方，
+            // 让任务日志/备份页能够指出可恢复现场的位置。
+            backupPath = preservedBackupPath;
             return false;
         }
     }
