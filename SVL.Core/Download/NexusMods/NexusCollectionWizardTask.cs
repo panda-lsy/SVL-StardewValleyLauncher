@@ -1618,7 +1618,18 @@ public class NexusCollectionWizardTask : DownloadTask
                 // 解压文件（如果文件已存在则覆盖）
                 if (File.Exists(destinationPath))
                 {
-                    File.Delete(destinationPath);
+                    if (isMultiRoot)
+                    {
+                        // 多根归并阶段仍在临时解压目录中，重复条目属于临时数据，
+                        // 不会触及用户 Mods 内容，可以按临时目录生命周期清理。
+                        File.Delete(destinationPath);
+                    }
+                    // 单根/无根目录模式直接写入用户 Mods；即使只是单个文件覆盖，
+                    // 也必须先移入回收站，回收失败则中止本次解压。
+                    else if (!ModBackupService.MovePathToRecycleBin(destinationPath))
+                    {
+                        throw new IOException($"无法将原有 Mod 文件移入回收站，已停止覆盖: {destinationPath}");
+                    }
                 }
 
                 // 解压文件
@@ -1705,8 +1716,16 @@ public class NexusCollectionWizardTask : DownloadTask
             {
                 if (File.Exists(zipFilePath))
                 {
-                    File.Delete(zipFilePath);
-                    Log.Info($"[CollectionWizard] 已删除 ZIP 文件: {Path.GetFileName(zipFilePath)}");
+                    // ZIP 位于用户选择/Mods 目录，仍属于用户可恢复内容；
+                    // 安装完成后的清理也遵守统一回收站语义。
+                    if (ModBackupService.MovePathToRecycleBin(zipFilePath))
+                    {
+                        Log.Info($"[CollectionWizard] 已将 ZIP 文件移入回收站: {Path.GetFileName(zipFilePath)}");
+                    }
+                    else
+                    {
+                        Log.Warn($"[CollectionWizard] ZIP 文件未能移入回收站，已保留: {zipFilePath}");
+                    }
                 }
             }
             catch (Exception ex)
