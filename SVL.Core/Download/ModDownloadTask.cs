@@ -1674,7 +1674,12 @@ public class ModDownloadTask : DownloadTask
     }
 
     /// <summary>
-    /// 清理创建的目标目录（取消时删除所有内容，不论是否为空）
+    /// 清理创建的路径。
+    ///
+    /// 解压过程中已经写入用户 Mods 目录的内容属于用户数据，取消/失败时
+    /// 也必须进入回收站，不能因为它是“本次任务创建的”就直接物理删除。
+    /// 不在 Mods 目录下的临时解压目录仍按生命周期直接清理，避免临时文件
+    /// 大量堆积到用户回收站。
     /// </summary>
     private void CleanupCreatedTargetDirectory()
     {
@@ -1685,8 +1690,7 @@ public class ModDownloadTask : DownloadTask
             {
                 if (Directory.Exists(rootDir))
                 {
-                    Directory.Delete(rootDir, recursive: true);
-                    Log.Info($"[ModDownloadTask] 已删除解压根目录: {rootDir}");
+                    CleanupCreatedPath(rootDir, recursive: true, "解压根目录");
                 }
             }
             catch (Exception ex)
@@ -1704,9 +1708,7 @@ public class ModDownloadTask : DownloadTask
         {
             if (Directory.Exists(_createdTargetPath))
             {
-                // 取消任务时，删除整个目录及其内容（无论是否为空）
-                Directory.Delete(_createdTargetPath, true);
-                Log.Info($"[ModDownloadTask] 已删除目标目录: {_createdTargetPath}");
+                CleanupCreatedPath(_createdTargetPath, recursive: true, "目标目录");
             }
         }
         catch (Exception ex)
@@ -1716,6 +1718,59 @@ public class ModDownloadTask : DownloadTask
         finally
         {
             _createdTargetPath = null;  // 清除引用，避免重复处理
+        }
+    }
+
+    private void CleanupCreatedPath(string path, bool recursive, string label)
+    {
+        if (IsUserContentPath(path))
+        {
+            if (!ModBackupService.MovePathToRecycleBin(path))
+            {
+                // 回收站失败时保留原目录，不能回退为物理删除；用户仍可手动
+                // 处理未完成的内容，且不会因为取消任务而丢失文件。
+                Log.Warn($"[ModDownloadTask] 无法将{label}移入回收站，已保留原路径: {path}");
+                return;
+            }
+
+            Log.Info($"[ModDownloadTask] 已将{label}移入回收站: {path}");
+            return;
+        }
+
+        Directory.Delete(path, recursive);
+        Log.Info($"[ModDownloadTask] 已清理临时{label}: {path}");
+    }
+
+    private bool IsUserContentPath(string path)
+    {
+        return IsSameOrUnderDirectory(path, _targetModsPath) ||
+               IsSameOrUnderDirectory(path, _updateTargetModPath);
+    }
+
+    private static bool IsSameOrUnderDirectory(string? path, string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        try
+        {
+            var normalizedPath = Path.GetFullPath(path)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var normalizedDirectory = Path.GetFullPath(directory)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            // ModDownloadTask 属于旧 WPF/Core 目标（.NET Framework），不能使用
+            // Avalonia/.NET 运行时才提供的 OperatingSystem.IsWindows API；旧入口
+            // 运行在 Windows，采用不区分大小写的路径比较与其它 Core 代码一致。
+            const StringComparison comparison = StringComparison.OrdinalIgnoreCase;
+            return string.Equals(normalizedPath, normalizedDirectory, comparison) ||
+                   normalizedPath.StartsWith(normalizedDirectory + Path.DirectorySeparatorChar, comparison) ||
+                   normalizedPath.StartsWith(normalizedDirectory + Path.AltDirectorySeparatorChar, comparison);
+        }
+        catch
+        {
+            return false;
         }
     }
 }

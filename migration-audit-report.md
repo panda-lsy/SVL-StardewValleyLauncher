@@ -421,3 +421,9 @@ FileID 时，即使新包的 `manifest.json` 仍保留旧版本，只要远端�
 Avalonia Debug 构建 0 警告/错误。提交 `28cc881` 已推送到上游 `Avalonia-Dev` 和
 `codex/avalonia-dev-20260919`，Actions `35446022450` 的 Windows、Linux、macOS
 构建测试及三平台打包全部成功。
+
+2026-09-19 收口旧 Core `ModDownloadTask` 的取消/失败清理：解压过程中已经写入用户
+`Mods` 目录的目标路径现在统一移入系统回收站；如果回收站调用失败则保留原路径，
+不再回退为不可恢复的物理删除。下载缓存、临时解压根目录及其它不属于用户内容的
+临时路径仍按生命周期物理清理。`SVL.Core` net48 Debug 构建通过；该旧 WPF/Core
+入口不属于 Avalonia 测试项目，行为验证以兼容性构建和现有安装/更新回归覆盖为准。
