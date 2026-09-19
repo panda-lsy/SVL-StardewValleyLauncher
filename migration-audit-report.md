@@ -1,6 +1,6 @@
 # SVL Avalonia 迁移审计
 
-更新时间：2026-09-16
+更新时间：2026-09-19
 
 本报告以当前工作树为准，重点覆盖 Avalonia 主流程与 WPF 旧配置兼容，不把
 `SVL.sln` 中与 Avalonia 无关的旧 WPF/SMAPI 编译问题误计入迁移结果。
@@ -25,7 +25,8 @@
 本轮将已验证工作树提交为 `9a09871`、`358401d`，推送到上游仓库的安全分支
 `codex/avalonia-dev-20260919`，并手动触发运行 `35434301865`。该运行的
 Windows/Linux/macOS 测试矩阵、Linux ZIP、Windows 包、macOS 双架构 `.app` 与 DMG
-均成功完成，且 macOS 的 NXM scheme 与最低系统版本校验通过。`origin/Avalonia-Dev`
+均成功完成，且 macOS 的 NXM scheme 与最低系统版本校验通过；结果已由
+`2e7c391` 记录。`origin/Avalonia-Dev`
 历史与当前分支不相容，因此没有强推覆盖原远端分支。
 
 旧 WPF 页面和 Avalonia 页面已经按功能合并迁移。WPF 的本地 Modpack 管理页在
@@ -53,7 +54,7 @@ Windows/Linux/macOS 测试矩阵、Linux ZIP、Windows 包、macOS 双架构 `.a
 | NXM 浏览器协议注册 | WPF/Core 仅实现 Windows 注册表注册，Avalonia 原先在 Linux/macOS 也统一报告不支持 | 已保留 Windows 注册表路径；Linux 按 `XDG_CURRENT_DESKTOP` 有序列表维护/检查桌面专属 `mimeapps.list`，会跳过不存在或未声明 NXM 的处理器再按优先级回退；macOS `.app` 声明 `CFBundleURLTypes` 并通过 Launch Services 设置默认处理器。Linux/macOS 实机默认应用行为仍需在对应桌面环境验收 |
 | WPF 专属实现细节 | WPF 的 `ImageCacheService`、`SearchCacheService`、下载任务类、NXM 注册、实例/启动服务等已由 Avalonia 服务或 `SVL.Core.Platform` 重构承接，类名不同不代表缺失 | 以行为验收和回归测试为准，不按一一同名复制 |
 | 完整线上/可见 UI 验收 | 不是分支迁移代码缺口；Windows 核心窗口/菜单已实机复验，主窗口后端曾报告 `AcrylicBlur`，但透明表面调整后仍需无遮挡截图确认最终观感 | 发布前仍需真实 Nexus/CurseForge 账号验收、Linux/macOS NXM 跳转实测及不同实体 DPI/窗口状态验收 |
-| 跨平台发布包完整性 | GitHub Actions 之前对 Linux/macOS 直接执行 `dotnet publish` 并上传目录：Linux 下载后可能丢失 apphost 执行位，macOS 也没有带 `nxm` 声明的 `.app` 包 | 工作流改为复用根目录打包脚本：Linux 上传含 `run-svl.sh` 的 ZIP；macOS 生成 ARM64/x64 `.app` 和 DMG，并在 CI 校验两个 Info.plist 声明 `nxm`。当前未推送，待 Actions 实跑确认 |
+| 跨平台发布包完整性 | GitHub Actions 之前对 Linux/macOS 直接执行 `dotnet publish` 并上传目录：Linux 下载后可能丢失 apphost 执行位，macOS 也没有带 `nxm` 声明的 `.app` 包 | 工作流改为复用根目录打包脚本：Linux 上传含 `run-svl.sh` 的 ZIP；macOS 生成 ARM64/x64 `.app` 和 DMG，并在 CI 校验两个 Info.plist 声明 `nxm`。运行 `35434301865` 已实跑通过 |
 | 旧 WPF .NET Framework 4.8 编译 | 已通过 `Microsoft.NETFramework.ReferenceAssemblies 1.0.3` 补齐 SDK 构建所需引用程序集，并修复 `SharpCompress` 升级后的旧 API/`Math.Clamp` 兼容问题；但干净检出仍缺少被 `.gitignore` 排除的外部 `SVL.Core.Stardew.Mod.SMAPI` 适配源，本机工作树若存在该源才能完成旧 WPF 构建 | 不擅自把外部 SMAPI 源纳入 Avalonia 迁移；旧 WPF 继续作为独立历史工程处理，不阻塞 Avalonia |
 
 ## 已完成并已验证
@@ -97,7 +98,7 @@ Windows/Linux/macOS 测试矩阵、Linux ZIP、Windows 包、macOS 双架构 `.a
 | 夜间主题与窗口控制区 | 主要弹窗使用动态主题资源；右键菜单显式走 Popup 主题并在应用级覆盖 `ContextMenu/MenuFlyoutPresenter`，避免独立 Popup 回落到浅色；控制按钮使用固定等宽列、统一 40×48 单元格、24×24 内容画布和布局取整；最小化横线使用显式居中矩形，避免细长 `StreamGeometry` 的 Uniform 拉伸贴到画布上沿；版本删除会清理只读属性，遇到短暂文件锁时先移出 `versions` 再后台重试；“跟随系统”现在读取 Avalonia 系统主题并监听后续切换 | `Controls/*.axaml`、`InstancesPageView.axaml`、`MainWindow.axaml`、`Resources/Theme.axaml`、`Services/ThemeService.cs`、`FeaturePagesViewModels` |
 
 下文零散出现的 293/294/296/308/313 等测试数字均为各轮历史快照；当前验证结果以本段为准。
-当前回归结果（2026-09-15 复验）：Avalonia Debug 构建通过，0 警告、0 错误；迁移测试 **336 总计，其中 334 通过、2 跳过**。整合包来源回归覆盖父 Mod 与真实嵌套 ContentPack、缺少子目录 `svl-source.json` 时按 manifest 命名空间写入继承来源，以及内置 Mod 归属、多子 Mod、已有独立来源保护。本轮新增：父条目中残留的 `childMods` 不能覆盖具有不同稳定来源身份的逐 Mod 条目；已存在的 `parentMod` 仅在来源身份确实不同且父来源可解析时才允许独立来源解除继承；来源修复按平台、项目和 FileID 精确分组，并只对缺少来源凭证的旧子目录使用 manifest 命名空间补救。同归档子 Mod 仍会继承父来源；当稳定 ID 完全一致时，即使备用 URL 或仓库别名不同，也不会误判为独立来源。新增回归覆盖同项目不同 FileID、旧父子关系与独立来源并存、稳定 ID 一致但辅助字段不同，以及同归档子 Mod 仍继承等情形。此前还新增了第三方嵌套 `source.childMods/parentMod` 和以 Mod 名为 key 的来源映射格式兼容：旧目录名失效时按 manifest UniqueID 找回子 Mod；纯归属条目不会被误当成下载来源，也不会被映射解析提前丢弃或进入逐项下载队列。此前还新增了旧 WPF 自定义强调色迁移、主题重应用、深色模式提亮、无效输入保护和清除恢复默认的 Headless 回归；将 Avalonia 传递引入的 `Tmds.DBus.Protocol` 固定到维护中的 `0.95.1`，新增 Avalonia Headless 主窗口布局与冲突处理弹窗结构冒烟测试，并覆盖更新备份在元数据写入失败时自动还原原 Mod 目录的事务回滚路径。旧 WPF 工程已补齐 net48 引用程序集、升级 `SharpCompress` 到安全版本并修复旧解压路径/API；但干净检出仍因缺少被忽略的外部 SMAPI 适配源而无法完成旧工程构建，不能把本机工作树结果当作 WPF 迁移验收。旧 Core 的 ZIP/7z 解压同时拒绝越界路径，五个项目当前均无 NuGet 漏洞项。本轮新增真实公开 CurseForge 响应快照回归：Content Patcher（ProjectID 309243、FileID 7448774）校验详情与直链；Blissful Valley（ProjectID 1012878）校验整合包文件版本 1.2.0/1.0.0 不会误作游戏版本，API 兼容版本仍解析为 1.6.8。真实 CurseForge 夹具测试、Modpack 导出回环测试和任务状态回归均通过，全量 336 项测试执行完成（334 通过、2 跳过）；新增部分失败整合包任务经状态落盘、恢复与重试准备后仍保留归档和实例目标的闭环回归。本轮还将两个 Modpack 安装完成分支统一使用 `ApplyModpackInstallOutcomeToTask`，失败项固定为 99%、Failed、可重试并保留明细；全成功后才到 100% 并清空旧失败，新增状态回归验证。为改善主窗口透明效果可见度，本轮将窗口底色 Alpha 调整为 99、标题栏调整为 CC，内容面板铺底为 00，卡片表面保持不透明；Headless 断言已通过，但最终 Acrylic 透底观感仍需无遮挡的实机截图确认。
+当前回归结果（2026-09-19 复验）：Avalonia Debug 构建通过，0 警告、0 错误；迁移测试 **349 总计，其中 345 通过、4 跳过**。上述整合包来源树、缓存、更新状态、备份回滚与透明布局回归均包含在本次测试集中。Windows 透明后端已确认接受 AcrylicBlur，最终无遮挡桌面截图及真实 Nexus/CurseForge 账号端到端流程仍属于发布前实机验收项。
 
 本轮给 `build.ps1` 与 `scripts/package-avalonia.ps1` 增加可选 `-OutputDirectory`；未指定时仍输出到仓库 `artifacts`，指定后可安全地隔离构建。Windows x64 Debug 包装脚本已分别在 PowerShell 7 与 Windows PowerShell 5.1 中通过临时目录实跑，ZIP 包含主 EXE 和 PDB；根目录/仓库根目录会在发布前被拒绝，仓库现有调试 ZIP 的大小和时间戳保持不变。
 上一轮测试统计（含 manual 来源、Modpack 游戏版本、半包下载重试、兄弟目录子 Mod 来源树、普通 Mod 安装来源树、加载期旧来源修复、CurseForge 整合包游戏版本详情、共享图片缓存兼容、Collection 子项进度刷新及详情分页回归、Nexus OAuth 头像 claim/旧缓存路径、API 限额快照、失效 Token 资料保留及限额事件订阅异常隔离回归）：迁移测试 **308 总计，其中 306 通过、2 跳过**。
