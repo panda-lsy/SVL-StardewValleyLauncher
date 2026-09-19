@@ -146,7 +146,7 @@ jobs:
             if ($LASTEXITCODE -ne 0 -or $scheme.Trim() -ne 'nxm') { throw "NXM URL scheme is missing: $plist" }
             $minimumSystemVersion = & /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' $plist
             if ($LASTEXITCODE -ne 0 -or $minimumSystemVersion.Trim() -ne '14.0') {
-              throw "Unexpected macOS minimum system version in $plist: $minimumSystemVersion"
+              throw "Unexpected macOS minimum system version in ${plist}: $minimumSystemVersion"
             }
           }
           $images = @(Get-ChildItem artifacts -File -Filter '*.dmg')
