@@ -22,6 +22,11 @@
 工作流于 2026-09-15 成功完成，Build and test 通过，4 个平台打包产物均生成
 （Windows x64、Linux x64、macOS x64/ARM64；该 CI 运行不包含当前尚未提交的工作树改动）。这验证 CI 构建/打包，不替代真实 Nexus/CurseForge
 账号流程或 Windows Acrylic 视觉验收。
+本轮将已验证工作树提交为 `9a09871`、`358401d`，推送到上游仓库的安全分支
+`codex/avalonia-dev-20260919`，并手动触发运行 `35434301865`。该运行的
+Windows/Linux/macOS 测试矩阵、Linux ZIP、Windows 包、macOS 双架构 `.app` 与 DMG
+均成功完成，且 macOS 的 NXM scheme 与最低系统版本校验通过。`origin/Avalonia-Dev`
+历史与当前分支不相容，因此没有强推覆盖原远端分支。
 
 旧 WPF 页面和 Avalonia 页面已经按功能合并迁移。WPF 的本地 Modpack 管理页在
 `upstream/main` 中本身仍是“功能开发中”占位页；Avalonia 已将可用的导入入口放在
