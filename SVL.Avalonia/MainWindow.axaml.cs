@@ -82,8 +82,10 @@ public partial class MainWindow : Window
         {
             if (_hasBeenOpened)
             {
-                RefreshMainWindowThemeResources(
-                    ThemeService.TransparencyEnabled && ActualTransparencyLevel != WindowTransparencyLevel.None);
+                // ActualTransparencyLevel 可能在窗口打开后的首个属性变更中暂时为 None，
+                // 不应因此把用户已经开启的半透明画刷切回不透明；后端不支持透明时，
+                // TransparencyBackgroundFallback 会负责提供不透明回退色。
+                RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
             }
 
             LogWindowTransparencyState("平台透明级别已更新");
@@ -93,8 +95,9 @@ public partial class MainWindow : Window
     private void OnWindowOpened(object? sender, System.EventArgs e)
     {
         _hasBeenOpened = true;
-        RefreshMainWindowThemeResources(
-            ThemeService.TransparencyEnabled && ActualTransparencyLevel != WindowTransparencyLevel.None);
+        // 不以 ActualTransparencyLevel 作为画刷开关。部分平台/窗口后端在 Opened
+        // 事件时尚未报告最终透明级别，提前切回不透明会让主页面看起来没有透明效果。
+        RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
         LogWindowTransparencyState("主窗口已打开");
     }
 
@@ -102,15 +105,13 @@ public partial class MainWindow : Window
     {
         if (Dispatcher.UIThread.CheckAccess())
         {
-            var transparencyAvailable = !_hasBeenOpened || ActualTransparencyLevel != WindowTransparencyLevel.None;
-            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled && transparencyAvailable);
+            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
             return;
         }
 
         Dispatcher.UIThread.Post(() =>
         {
-            var transparencyAvailable = !_hasBeenOpened || ActualTransparencyLevel != WindowTransparencyLevel.None;
-            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled && transparencyAvailable);
+            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
         });
     }
 
@@ -147,8 +148,9 @@ public partial class MainWindow : Window
             ? new[] { WindowTransparencyLevel.Transparent, WindowTransparencyLevel.AcrylicBlur }
             : new[] { WindowTransparencyLevel.None };
 
-        var transparencyAvailable = !_hasBeenOpened || ActualTransparencyLevel != WindowTransparencyLevel.None;
-        RefreshMainWindowThemeResources(enabled && transparencyAvailable);
+        // 透明设置决定主题画刷是否半透明；平台能力只决定窗口最终是否能透出桌面，
+        // 不应让瞬时的 ActualTransparencyLevel 覆盖用户设置。
+        RefreshMainWindowThemeResources(enabled);
 
         LogWindowTransparencyState(enabled ? "设置已开启" : "设置已关闭");
     }

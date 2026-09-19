@@ -360,3 +360,9 @@ junction 仍只执行结构性断开，下载缓存和临时目录继续按生�
 2026-09-16 继续处理“Debug 可透底、主页面不明显”：定位到主窗口的大部分内容使用不透明 `CardBrush`/`SurfaceBrush`，且页面 `UserControl` 再叠加一层背景，遮住了 Acrylic。现将主窗口背景、标题栏、面板、卡片和表面画刷改为主窗口级资源，页面根 `UserControl` 保持透明；半透明后端不支持时恢复不透明，其他窗口继续使用原全局画刷。Headless 回归已挂载实际页面与卡片，确认页面根控件透明、卡片解析到局部半透明画刷，并验证主题颜色变更仍保留 Alpha、全局弹窗画刷不变。Windows 全量迁移测试 349 项（345 通过、4 跳过），Ubuntu WSL 349 项（348 通过、1 跳过），Avalonia Debug 构建 0 警告/错误。尝试可见窗口复核时 Computer Use 运行时初始化连续两次失败，故真实桌面透底观感仍需后续截图验收。
 
 2026-09-19 重新抓取上游 refs：`upstream/main=19ef4ef` 在共同祖先之后仍只有 README 说明提交；`upstream/Dev-Avalonia` 与 `upstream/Avalonia-Dev=a5f9669`，没有发现当前 Avalonia 工作树遗漏的上游业务提交。通过已配置的 CurseForge MCP 及只读文件列表接口复核实际安装来源：Distant Lands 项目 `1010281` 的最新 FileID 为 `7942677`，Market Town `994458` 为 `8390242`，More Accessories `1012214` 为 `5380939`，Content Patcher `309243` 为 `7759981`；均与本地 `svl-source.json` 一致。整合包父 Mod 与嵌套子 Mod 的来源关系未发现错绑。
+
+2026-09-19 继续修复主窗口透明时序：`MainWindow` 不再在 `Opened` 或
+`ActualTransparencyLevel` 暂时报告 `None` 时把用户已开启的半透明画刷恢复为不透明；
+平台不支持透明时仍由 `TransparencyBackgroundFallback` 提供不透明回退。新增已打开窗口
+模拟该时序的回归断言。当前 Avalonia Debug 构建 0 警告/错误，迁移测试 349 总计、345
+通过、4 跳过；最终无遮挡桌面透底观感仍需真实窗口截图验收。

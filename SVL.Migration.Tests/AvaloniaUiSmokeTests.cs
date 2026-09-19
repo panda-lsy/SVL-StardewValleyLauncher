@@ -308,6 +308,19 @@ public sealed class AvaloniaUiSmokeTests
                 Assert.AreEqual((byte)0xCC,
                     ((SolidColorBrush)windowResources["SurfaceBrush"]!).Color.A,
                     "主页面输入框与表面容器应使用半透明画刷");
+
+                // 某些窗口后端在 Opened/透明级别变更时会短暂回报 None；
+                // 这不应把已开启的主页面半透明画刷错误切回不透明。
+                var openedField = typeof(MainWindow).GetField(
+                    "_hasBeenOpened",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Assert.IsNotNull(openedField);
+                openedField!.SetValue(window, true);
+                applyTransparency.Invoke(window, [true]);
+                Assert.AreEqual((byte)0x80,
+                    ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
+                    "已打开窗口即使暂时报告透明级别 None，也必须保留主页面半透明画刷");
+
                 Assert.AreEqual((byte)0xFF,
                     ((SolidColorBrush)resources["CardBrush"]!).Color.A,
                     "主窗口透明效果不得让 Debug/确认弹窗等其它窗口的卡片意外透明");
