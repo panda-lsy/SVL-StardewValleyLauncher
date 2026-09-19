@@ -427,6 +427,10 @@ public sealed class AvaloniaUiSmokeTests
                     "浅色模式通知错误色必须使用主题资源，而不是固定 XAML 颜色");
                 Assert.AreEqual((byte)0x28, lightNotificationError.G);
 
+                var lightModStatus = ((SolidColorBrush)resources["ModStatusEnabledBackground"]!).Color;
+                Assert.AreEqual(Color.Parse("#D2A679"), lightModStatus,
+                    "浅色模式的本地 Mod 状态标签应使用主题资源");
+
                 ThemeService.SetDarkMode(true);
                 var darkAccent = ((SolidColorBrush)resources["AccentBrush"]!).Color;
                 Assert.IsTrue(darkAccent.R > 0x12 || darkAccent.G > 0x34 || darkAccent.B > 0x56,
@@ -436,6 +440,10 @@ public sealed class AvaloniaUiSmokeTests
                 Assert.AreEqual((byte)0xB7, darkNotificationError.R,
                     "深色模式通知错误色必须切换为深色可读配色");
                 Assert.AreEqual((byte)0x1C, darkNotificationError.G);
+
+                var darkModStatus = ((SolidColorBrush)resources["ModStatusEnabledBackground"]!).Color;
+                Assert.AreEqual(Color.Parse("#8A5A36"), darkModStatus,
+                    "深色模式的本地 Mod 状态标签应切换为深色主题资源");
 
                 Assert.IsFalse(ThemeService.TrySetCustomPrimaryColor("not-a-color", out _));
                 Assert.AreEqual("#123456", ThemeService.CustomPrimaryColorHex,

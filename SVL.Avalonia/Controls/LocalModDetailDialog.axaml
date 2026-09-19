@@ -63,8 +63,11 @@
 					</Grid>
 
 					<StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
-						<Border Background="{Binding IsEnabledBackground, ElementName=Root}" CornerRadius="4" Padding="8,3">
-							<TextBlock Text="{Binding IsEnabledText, ElementName=Root}" FontSize="11" Foreground="White" />
+						<Border Background="{DynamicResource ModStatusEnabledBackground}" CornerRadius="4" Padding="8,3" IsVisible="{Binding IsModEnabled, ElementName=Root}">
+							<TextBlock Text="{Binding IsEnabledText, ElementName=Root}" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" />
+						</Border>
+						<Border Background="{DynamicResource ModStatusDisabledBackground}" CornerRadius="4" Padding="8,3" IsVisible="{Binding IsModDisabled, ElementName=Root}">
+							<TextBlock Text="{Binding IsEnabledText, ElementName=Root}" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" />
 						</Border>
 						<Border Background="{DynamicResource AccentBrush}" CornerRadius="4" Padding="8,3" IsVisible="{Binding HasUpdate, ElementName=Root}">
 							<TextBlock Text="可更新" FontSize="11" Foreground="{DynamicResource TextOnAccentBrush}" />

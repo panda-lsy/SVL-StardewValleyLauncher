@@ -34,8 +34,11 @@ public partial class LocalModDetailDialog : UserControl
     public static readonly StyledProperty<bool> HasUpdateProperty =
         AvaloniaProperty.Register<LocalModDetailDialog, bool>(nameof(HasUpdate), false);
 
-    public static readonly StyledProperty<string> IsEnabledBackgroundProperty =
-        AvaloniaProperty.Register<LocalModDetailDialog, string>(nameof(IsEnabledBackground), "#D2A679");
+    public static readonly StyledProperty<bool> IsModEnabledProperty =
+        AvaloniaProperty.Register<LocalModDetailDialog, bool>(nameof(IsModEnabled), true);
+
+    public static readonly StyledProperty<bool> IsModDisabledProperty =
+        AvaloniaProperty.Register<LocalModDetailDialog, bool>(nameof(IsModDisabled), false);
 
     public static readonly StyledProperty<string> IsEnabledTextProperty =
         AvaloniaProperty.Register<LocalModDetailDialog, string>(nameof(IsEnabledText), "已启用");
@@ -118,10 +121,16 @@ public partial class LocalModDetailDialog : UserControl
         set => SetValue(HasUpdateProperty, value);
     }
 
-    public string IsEnabledBackground
+    public bool IsModEnabled
     {
-        get => GetValue(IsEnabledBackgroundProperty);
-        set => SetValue(IsEnabledBackgroundProperty, value);
+        get => GetValue(IsModEnabledProperty);
+        set => SetValue(IsModEnabledProperty, value);
+    }
+
+    public bool IsModDisabled
+    {
+        get => GetValue(IsModDisabledProperty);
+        set => SetValue(IsModDisabledProperty, value);
     }
 
     public string IsEnabledText

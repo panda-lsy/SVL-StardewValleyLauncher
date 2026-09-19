@@ -66,6 +66,9 @@
       <SolidColorBrush x:Key="CardHighlightBg" Color="#0CF7D38A" />
       <SolidColorBrush x:Key="CardHighlightBorder" Color="#44D2A679" />
       <SolidColorBrush x:Key="PillBg" Color="#33D47748" />
+      <!-- 本地 Mod 详情状态标签：由 ThemeService 在深浅色切换时同步更新。 -->
+      <SolidColorBrush x:Key="ModStatusEnabledBackground" Color="#D2A679" />
+      <SolidColorBrush x:Key="ModStatusDisabledBackground" Color="#9E9E9E" />
       <!-- 浮窗通知语义色：由 ThemeService 在深浅色切换时同步更新。 -->
       <SolidColorBrush x:Key="NotificationSuccessBackground" Color="#2E7D32" />
       <SolidColorBrush x:Key="NotificationErrorBackground" Color="#C62828" />

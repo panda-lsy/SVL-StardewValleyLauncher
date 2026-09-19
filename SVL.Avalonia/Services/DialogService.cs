@@ -914,8 +914,9 @@ public sealed class DialogService
             ModPath = folderPath ?? string.Empty,
             SourceFileName = string.IsNullOrWhiteSpace(sourceFileName) ? "无" : sourceFileName,
             HasUpdate = hasUpdate,
+            IsModEnabled = isEnabled,
+            IsModDisabled = !isEnabled,
             IsEnabledText = isEnabled ? "已启用" : "已禁用",
-            IsEnabledBackground = isEnabled ? "#D2A679" : "#9E9E9E",
             Dependencies = dependencies,
             HasDependencies = dependencies?.Any() == true,
             CanOpenFolder = !string.IsNullOrWhiteSpace(folderPath)
