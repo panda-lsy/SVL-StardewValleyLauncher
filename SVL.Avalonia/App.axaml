@@ -66,6 +66,13 @@
       <SolidColorBrush x:Key="CardHighlightBg" Color="#0CF7D38A" />
       <SolidColorBrush x:Key="CardHighlightBorder" Color="#44D2A679" />
       <SolidColorBrush x:Key="PillBg" Color="#33D47748" />
+      <!-- 浮窗通知语义色：由 ThemeService 在深浅色切换时同步更新。 -->
+      <SolidColorBrush x:Key="NotificationSuccessBackground" Color="#2E7D32" />
+      <SolidColorBrush x:Key="NotificationErrorBackground" Color="#C62828" />
+      <SolidColorBrush x:Key="NotificationWarningBackground" Color="#EF6C00" />
+      <SolidColorBrush x:Key="NotificationInfoBackground" Color="#1565C0" />
+      <SolidColorBrush x:Key="NotificationIconBackground" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="NotificationForeground" Color="#FFFFFFFF" />
       <!-- 导航栏文字始终白色（深色背景头栏） -->
       <SolidColorBrush x:Key="NavTextBrush" Color="#FFFFFFFF" />
       <!-- 选中态按钮文字（在强调色/选中背景上始终为白色，两种主题通用） -->

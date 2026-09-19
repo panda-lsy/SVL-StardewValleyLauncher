@@ -14,7 +14,7 @@
 
       <!-- 错误态 -->
       <StackPanel IsVisible="{Binding HasError, ElementName=Root}" Spacing="8" Margin="0,8,0,0">
-        <TextBlock Text="检测失败" FontWeight="SemiBold" Foreground="#D32F2F" />
+        <TextBlock Text="检测失败" FontWeight="SemiBold" Foreground="{DynamicResource ColorBrushError}" />
         <TextBlock Text="{Binding ErrorMessage, ElementName=Root}" TextWrapping="Wrap" Opacity="0.7" />
         <Button Content="关闭" Command="{Binding CancelCommand, ElementName=Root}" HorizontalAlignment="Right" Margin="0,8,0,0" />
       </StackPanel>

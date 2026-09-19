@@ -9,7 +9,7 @@
 			<TextBox Text="{Binding InstanceName, ElementName=Root, Mode=TwoWay}" Watermark="输入实例名称" />
 			<TextBlock Text="{Binding ErrorMessage, ElementName=Root}"
 						IsVisible="{Binding HasError, ElementName=Root}"
-						Foreground="#D32F2F"
+						Foreground="{DynamicResource ColorBrushError}"
 						FontSize="12"
 						TextWrapping="Wrap" />
 			<StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">

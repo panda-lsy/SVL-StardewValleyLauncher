@@ -23,7 +23,7 @@
 
 		<Border Width="20"
 					Height="20"
-					Background="#E53935"
+					Background="{DynamicResource NotificationErrorBackground}"
 					CornerRadius="10"
 					HorizontalAlignment="Right"
 					VerticalAlignment="Top"
@@ -32,7 +32,7 @@
 			<TextBlock Text="{Binding PendingTaskCount, ElementName=Root}"
 						 FontSize="11"
 						 FontWeight="SemiBold"
-						 Foreground="White"
+						 Foreground="{DynamicResource NotificationForeground}"
 						 HorizontalAlignment="Center"
 						 VerticalAlignment="Center" />
 		</Border>

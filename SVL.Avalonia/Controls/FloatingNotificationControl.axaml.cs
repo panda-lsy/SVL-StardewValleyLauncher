@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using SVL.Avalonia.Models;
 using SVL.Avalonia.Services;
 
@@ -24,6 +25,8 @@ public partial class FloatingNotificationControl : UserControl
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
+        AttachedToVisualTree += OnAttachedToVisualTree;
+        DetachedFromVisualTree += OnDetachedFromVisualTree;
     }
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
@@ -77,6 +80,39 @@ public partial class FloatingNotificationControl : UserControl
         });
     }
 
+    private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        ThemeService.ThemeChanged += OnThemeChanged;
+    }
+
+    private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        ThemeService.ThemeChanged -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged()
+    {
+        if (_item is null)
+        {
+            return;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            ApplyStyle(_item.Type);
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_item is not null)
+                {
+                    ApplyStyle(_item.Type);
+                }
+            });
+        }
+    }
+
     private void TriggerHide()
     {
         // 退场：仅 Opacity 过渡到 0（Y 轴无 Transition，瞬移会突兀故保留原位淡出）。完成后由服务端从集合移除。
@@ -92,25 +128,36 @@ public partial class FloatingNotificationControl : UserControl
         switch (type)
         {
             case NotificationType.Success:
-                Card.Background = new SolidColorBrush(Color.Parse("#2E7D32"));
+                Card.Background = ResolveThemeBrush("NotificationSuccessBackground", "#2E7D32");
                 IconText.Text = "✓";
-                IconText.Foreground = new SolidColorBrush(Color.Parse("#2E7D32"));
+                IconText.Foreground = Card.Background;
                 break;
             case NotificationType.Error:
-                Card.Background = new SolidColorBrush(Color.Parse("#D32F2F"));
+                Card.Background = ResolveThemeBrush("NotificationErrorBackground", "#C62828");
                 IconText.Text = "✗";
-                IconText.Foreground = new SolidColorBrush(Color.Parse("#D32F2F"));
+                IconText.Foreground = Card.Background;
                 break;
             case NotificationType.Warning:
-                Card.Background = new SolidColorBrush(Color.Parse("#F57C00"));
+                Card.Background = ResolveThemeBrush("NotificationWarningBackground", "#EF6C00");
                 IconText.Text = "ⓘ";
-                IconText.Foreground = new SolidColorBrush(Color.Parse("#F57C00"));
+                IconText.Foreground = Card.Background;
                 break;
             case NotificationType.Info:
-                Card.Background = new SolidColorBrush(Color.Parse("#1976D2"));
+                Card.Background = ResolveThemeBrush("NotificationInfoBackground", "#1565C0");
                 IconText.Text = "i";
-                IconText.Foreground = new SolidColorBrush(Color.Parse("#1976D2"));
+                IconText.Foreground = Card.Background;
                 break;
         }
+    }
+
+    private static IBrush ResolveThemeBrush(string key, string fallback)
+    {
+        if (Application.Current?.Resources.TryGetValue(key, out var value) == true &&
+            value is IBrush brush)
+        {
+            return brush;
+        }
+
+        return new SolidColorBrush(Color.Parse(fallback));
     }
 }

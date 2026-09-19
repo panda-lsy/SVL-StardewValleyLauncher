@@ -569,6 +569,12 @@ public static class ThemeService
             ["ColorBrushInfoDark"] = "#E0E0E0",
             ["ColorBrushInfo"] = "#4A4A3A",
             ["ColorBrushDebug"] = "#909090",
+            ["NotificationSuccessBackground"] = "#1B5E20",
+            ["NotificationErrorBackground"] = "#B71C1C",
+            ["NotificationWarningBackground"] = "#E65100",
+            ["NotificationInfoBackground"] = "#0D47A1",
+            ["NotificationIconBackground"] = "#F5F5F5",
+            ["NotificationForeground"] = "#FFFFFFFF",
         };
 
     // FluentTheme 内置控件暗色覆盖（TextBox/ComboBox/ListBox/Button 等）
@@ -764,6 +770,12 @@ public static class ThemeService
         ["ColorBrushInfoDark"] = "#663021",
         ["ColorBrushInfo"] = "#E7E0B1",
         ["ColorBrushDebug"] = "#A0826D",
+        ["NotificationSuccessBackground"] = "#2E7D32",
+        ["NotificationErrorBackground"] = "#C62828",
+        ["NotificationWarningBackground"] = "#EF6C00",
+        ["NotificationInfoBackground"] = "#1565C0",
+        ["NotificationIconBackground"] = "#FFFFFFFF",
+        ["NotificationForeground"] = "#FFFFFFFF",
     };
 
     /// <summary>

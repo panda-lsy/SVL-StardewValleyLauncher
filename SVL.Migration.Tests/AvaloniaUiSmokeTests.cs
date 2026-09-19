@@ -9,6 +9,7 @@ using Avalonia.VisualTree;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SVL.Avalonia;
 using SVL.Avalonia.Controls;
+using SVL.Avalonia.Models;
 using SVL.Avalonia.Services;
 
 [assembly: AvaloniaTestApplication(typeof(App))]
@@ -421,10 +422,20 @@ public sealed class AvaloniaUiSmokeTests
                 Assert.AreEqual((byte)0x34, lightAccent.G);
                 Assert.AreEqual((byte)0x56, lightAccent.B);
 
+                var lightNotificationError = ((SolidColorBrush)resources["NotificationErrorBackground"]!).Color;
+                Assert.AreEqual((byte)0xC6, lightNotificationError.R,
+                    "浅色模式通知错误色必须使用主题资源，而不是固定 XAML 颜色");
+                Assert.AreEqual((byte)0x28, lightNotificationError.G);
+
                 ThemeService.SetDarkMode(true);
                 var darkAccent = ((SolidColorBrush)resources["AccentBrush"]!).Color;
                 Assert.IsTrue(darkAccent.R > 0x12 || darkAccent.G > 0x34 || darkAccent.B > 0x56,
                     "深色模式应提高自定义强调色的可读性");
+
+                var darkNotificationError = ((SolidColorBrush)resources["NotificationErrorBackground"]!).Color;
+                Assert.AreEqual((byte)0xB7, darkNotificationError.R,
+                    "深色模式通知错误色必须切换为深色可读配色");
+                Assert.AreEqual((byte)0x1C, darkNotificationError.G);
 
                 Assert.IsFalse(ThemeService.TrySetCustomPrimaryColor("not-a-color", out _));
                 Assert.AreEqual("#123456", ThemeService.CustomPrimaryColorHex,
@@ -437,6 +448,55 @@ public sealed class AvaloniaUiSmokeTests
             {
                 ThemeService.TrySetCustomPrimaryColor(previousPrimaryColor, out _);
                 ThemeService.SetThemeMode(previousDarkMode, previousFollowSystem);
+            }
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void FloatingNotification_ShouldRecolorWhenThemeChanges()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+
+        session.Dispatch(() =>
+        {
+            var previousDarkMode = ThemeService.IsDarkMode;
+            var previousFollowSystem = ThemeService.FollowSystemTheme;
+            var previousPrimaryColor = ThemeService.CustomPrimaryColorHex;
+            var notification = new FloatingNotificationControl
+            {
+                DataContext = new NotificationItem
+                {
+                    Type = NotificationType.Error,
+                    Title = "错误",
+                    Message = "测试通知"
+                }
+            };
+            var host = new Window { Content = notification };
+
+            try
+            {
+                host.Show();
+                host.UpdateLayout();
+
+                ThemeService.SetThemeMode(false, false);
+                var card = notification.GetVisualDescendants()
+                    .OfType<Border>()
+                    .Single(border => border.Name == "Card");
+                var lightColor = ((SolidColorBrush)card.Background!).Color;
+                Assert.AreEqual((byte)0xC6, lightColor.R);
+                Assert.AreEqual((byte)0x28, lightColor.G);
+
+                ThemeService.SetDarkMode(true);
+                var darkColor = ((SolidColorBrush)card.Background!).Color;
+                Assert.AreEqual((byte)0xB7, darkColor.R,
+                    "已显示的通知也必须响应主题切换，不能保留旧的固定背景色");
+                Assert.AreEqual((byte)0x1C, darkColor.G);
+            }
+            finally
+            {
+                ThemeService.TrySetCustomPrimaryColor(previousPrimaryColor, out _);
+                ThemeService.SetThemeMode(previousDarkMode, previousFollowSystem);
+                host.Close();
             }
         }, CancellationToken.None).GetAwaiter().GetResult();
     }

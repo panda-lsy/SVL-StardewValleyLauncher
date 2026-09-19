@@ -24,7 +24,7 @@
               Height="40"
               CornerRadius="20"
               Margin="0,0,16,0"
-              Background="White">
+              Background="{DynamicResource NotificationIconBackground}">
         <TextBlock x:Name="IconText"
                    FontSize="24"
                    FontWeight="Bold"
@@ -37,11 +37,11 @@
         <TextBlock Text="{Binding Title}"
                    FontSize="16"
                    FontWeight="SemiBold"
-                   Foreground="White"
+                   Foreground="{DynamicResource NotificationForeground}"
                    Margin="0,0,0,4" />
         <TextBlock Text="{Binding Message}"
                    FontSize="13"
-                   Foreground="White"
+                   Foreground="{DynamicResource NotificationForeground}"
                    Opacity="0.9"
                    TextWrapping="Wrap" />
       </StackPanel>
@@ -51,7 +51,7 @@
               Content="×"
               FontSize="18"
               FontWeight="SemiBold"
-              Foreground="White"
+              Foreground="{DynamicResource NotificationForeground}"
               Background="Transparent"
               BorderThickness="0"
               Padding="6,2"

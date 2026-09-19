@@ -78,7 +78,7 @@
             Background="{DynamicResource WindowBackgroundBrush}"
             IsHitTestVisible="False" />
 
-    <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" BorderBrush="#335D2C1F" BorderThickness="0,0,0,1" PointerPressed="TitleBar_PointerPressed">
+    <Border Grid.Row="0" Background="{DynamicResource HeaderBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" PointerPressed="TitleBar_PointerPressed">
       <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <Button Classes="nav back" IsVisible="{Binding ShowBackButton}" Command="{Binding NavigateBackCommand}">
