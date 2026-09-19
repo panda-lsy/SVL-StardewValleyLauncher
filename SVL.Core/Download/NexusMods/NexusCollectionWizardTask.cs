@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -767,12 +768,21 @@ public class NexusCollectionWizardTask : DownloadTask
                 {
                     try
                     {
-                        Directory.Delete(versionPath, recursive: true);
-                        Log.Info($"[CollectionWizard] 已删除版本目录: {versionPath}");
+                        // 版本目录可能包含指向 Base 游戏的 junction；先断开链接，
+                        // 再将整个用户可见版本目录移入回收站，避免取消安装时不可恢复地删除。
+                        RemoveVersionJunctionsBeforeRecycle(versionPath);
+                        if (ModBackupService.MovePathToRecycleBin(versionPath))
+                        {
+                            Log.Info($"[CollectionWizard] 已将取消安装产生的版本目录移入回收站: {versionPath}");
+                        }
+                        else
+                        {
+                            Log.Warn($"[CollectionWizard] 版本目录未能移入回收站，已保留: {versionPath}");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Log.Warn($"[CollectionWizard] 删除版本目录失败: {ex.Message}");
+                        Log.Warn($"[CollectionWizard] 移入回收站失败，版本目录已保留: {ex.Message}");
                     }
                 }
 
@@ -826,6 +836,55 @@ public class NexusCollectionWizardTask : DownloadTask
         catch (Exception ex)
         {
             Log.Error("[CollectionWizard] 清理过程出错", ex);
+        }
+    }
+
+    /// <summary>
+    /// 回收版本目录前只断开该版本拥有的 junction/symlink，避免 Shell 回收站操作
+    /// 将链接目标（通常是 Base 游戏目录）误当成版本内容递归处理。
+    /// </summary>
+    private static void RemoveVersionJunctionsBeforeRecycle(string versionPath)
+    {
+        foreach (var linkName in new[] { "Content", "game" })
+        {
+            var linkPath = Path.Combine(versionPath, linkName);
+            if (!Directory.Exists(linkPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var attributes = File.GetAttributes(linkPath);
+                if ((attributes & FileAttributes.ReparsePoint) == 0)
+                {
+                    continue;
+                }
+
+                using var process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c rmdir \"{linkPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                });
+                process?.WaitForExit();
+
+                if (Directory.Exists(linkPath))
+                {
+                    Log.Warn($"[CollectionWizard] 版本链接仍存在，保留版本目录避免误删目标: {linkPath}");
+                }
+                else
+                {
+                    Log.Info($"[CollectionWizard] 已断开版本链接: {linkPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[CollectionWizard] 断开版本链接失败，将保留版本目录: {linkPath}, {ex.Message}");
+            }
         }
     }
 

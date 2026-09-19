@@ -366,3 +366,8 @@ junction 仍只执行结构性断开，下载缓存和临时目录继续按生�
 平台不支持透明时仍由 `TransparencyBackgroundFallback` 提供不透明回退。新增已打开窗口
 模拟该时序的回归断言。当前 Avalonia Debug 构建 0 警告/错误，迁移测试 349 总计、345
 通过、4 跳过；最终无遮挡桌面透底观感仍需真实窗口截图验收。
+
+2026-09-19 删除语义审计又发现旧 Nexus Collection 向导的取消安装分支仍会物理删除
+新建版本目录。现改为先断开版本内的 `Content`/`game` junction，再将版本目录移入
+系统回收站；回收失败时保留目录并记录警告。Collection 解压目录和临时 SMAPI 包仍
+按临时生命周期清理。`SVL.Core` 与 `SVL.Desktop` Debug 构建均通过，0 警告、0 错误。
