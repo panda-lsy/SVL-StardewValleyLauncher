@@ -18,6 +18,7 @@ namespace SVL.Avalonia;
 public partial class MainWindow : Window
 {
     private bool _hasBeenOpened;
+    private bool _allowClose;
 
     private static readonly (string Key, byte TransparentAlpha)[] MainWindowSurfaceBrushes =
     [
@@ -30,6 +31,11 @@ public partial class MainWindow : Window
 
     /// <summary>本窗口关联的浮窗通知服务实例。静态门面 NotificationService.Show 委托到此实例。</summary>
     public NotificationService Notifications { get; }
+
+    /// <summary>
+    /// 关闭窗口时是否改为隐藏到系统托盘。由 App 注入托盘可用性和用户设置判断。
+    /// </summary>
+    public Func<bool>? ShouldMinimizeToTrayOnClose { get; set; }
 
     public MainWindow()
     {
@@ -72,6 +78,7 @@ public partial class MainWindow : Window
         // DataContext 由 App 的对象初始化器在构造函数后设置，故用事件订阅置顶请求。
         DataContextChanged += OnDataContextChanged;
         Opened += OnWindowOpened;
+        Closing += OnWindowClosing;
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -119,6 +126,33 @@ public partial class MainWindow : Window
     {
         ThemeService.ThemeChanged -= OnThemeChanged;
         Closed -= OnWindowClosed;
+        Closing -= OnWindowClosing;
+    }
+
+    private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        // 程序主动退出、系统关机和应用 Shutdown 不应被“最小化到托盘”拦截。
+        if (_allowClose ||
+            e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown)
+        {
+            return;
+        }
+
+        if (ShouldMinimizeToTrayOnClose?.Invoke() != true)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        Hide();
+        DebugConsoleService.Instance.Append("主窗口已隐藏到系统托盘。", DebugLogLevel.Debug);
+    }
+
+    /// <summary>绕过托盘设置关闭主窗口，供“退出”、启动游戏和生命周期收尾使用。</summary>
+    public void CloseForExit()
+    {
+        _allowClose = true;
+        Close();
     }
 
     private void OnDataContextChanged(object? sender, System.EventArgs e)
@@ -204,7 +238,7 @@ public partial class MainWindow : Window
         switch (behavior)
         {
             case LauncherVisibilityBehavior.CloseImmediately:
-                Close();
+                CloseForExit();
                 break;
             case LauncherVisibilityBehavior.HideAndCloseOnExit:
             case LauncherVisibilityBehavior.HideAndRestoreOnExit:
@@ -233,7 +267,7 @@ public partial class MainWindow : Window
         switch (behavior)
         {
             case LauncherVisibilityBehavior.HideAndCloseOnExit:
-                Close();
+                CloseForExit();
                 break;
             case LauncherVisibilityBehavior.HideAndRestoreOnExit:
                 Show();
@@ -245,6 +279,11 @@ public partial class MainWindow : Window
     private void OnBringToFrontRequested()
     {
         // 收到外部 NXM 链接时激活窗口：恢复最小化并置顶。
+        if (!IsVisible)
+        {
+            Show();
+        }
+
         if (WindowState == WindowState.Minimized)
         {
             WindowState = WindowState.Normal;

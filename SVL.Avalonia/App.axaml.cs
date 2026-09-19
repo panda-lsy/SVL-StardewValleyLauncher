@@ -15,6 +15,8 @@ public partial class App : Application
 {
     private static DebugConsoleWindow? s_debugConsoleWindow;
     private static MainWindowViewModel? s_mainVm;
+    private static TrayIconService? s_trayIconService;
+    private static bool s_isExiting;
     private static readonly List<string> s_pendingPipeNxmUrls = new();
 
     public override void Initialize()
@@ -105,6 +107,14 @@ public partial class App : Application
                 DataContext = mainVm
             };
 
+            s_trayIconService = new TrayIconService(
+                () => ShowMainWindow(mainWindow),
+                () => ExitApplication(desktop, mainWindow));
+            s_trayIconService.TryInitialize();
+            mainWindow.ShouldMinimizeToTrayOnClose = () =>
+                s_trayIconService?.IsAvailable == true && mainVm.SettingsPage.MinimizeToTrayOnClose;
+            mainWindow.Closed += (_, _) => OnMainWindowClosed(desktop);
+
             desktop.MainWindow = mainWindow;
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -193,8 +203,19 @@ public partial class App : Application
         }
 
         desktop.MainWindow = mainWindow;
-        desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
-        await Dispatcher.UIThread.InvokeAsync(mainWindow.Show);
+        desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            mainWindow.Show();
+
+            // 先 Show 再 Hide，确保平台窗口句柄已创建；无托盘支持时保持正常显示。
+            if (s_mainVm?.SettingsPage.MinimizeToTrayOnStartup == true &&
+                s_trayIconService?.IsAvailable == true)
+            {
+                mainWindow.Hide();
+                DebugConsoleService.Instance.Append("已按设置启动到系统托盘。", DebugLogLevel.Debug);
+            }
+        });
         s_mainVm?.ResumePendingDownloadTasks();
 
         if (autoOpenDebugConsole)
@@ -249,5 +270,62 @@ public partial class App : Application
         window.Closed += (_, _) => s_debugConsoleWindow = null;
         window.Show();
         DebugConsoleService.Instance.Append("Debug console auto-opened at startup.", DebugLogLevel.Info);
+    }
+
+    private static void ShowMainWindow(MainWindow mainWindow)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => ShowMainWindow(mainWindow));
+            return;
+        }
+
+        if (!mainWindow.IsVisible)
+        {
+            mainWindow.Show();
+        }
+
+        if (mainWindow.WindowState == WindowState.Minimized)
+        {
+            mainWindow.WindowState = WindowState.Normal;
+        }
+
+        mainWindow.Activate();
+    }
+
+    private static void ExitApplication(
+        IClassicDesktopStyleApplicationLifetime desktop,
+        MainWindow mainWindow)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => ExitApplication(desktop, mainWindow));
+            return;
+        }
+
+        if (s_isExiting)
+        {
+            return;
+        }
+
+        s_isExiting = true;
+        s_trayIconService?.Dispose();
+        s_trayIconService = null;
+        mainWindow.CloseForExit();
+        desktop.Shutdown();
+    }
+
+    private static void OnMainWindowClosed(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        if (!s_isExiting)
+        {
+            s_isExiting = true;
+            s_trayIconService?.Dispose();
+            s_trayIconService = null;
+        }
+
+        // ShutdownMode 保持 Explicit，避免隐藏到托盘时因 MainWindow 状态变化误退出；
+        // 真正关闭主窗口后由这里完成应用进程收尾。
+        desktop.Shutdown();
     }
 }

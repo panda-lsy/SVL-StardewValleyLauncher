@@ -207,6 +207,31 @@ public sealed class AvaloniaUiSmokeTests
         }, CancellationToken.None).GetAwaiter().GetResult();
     }
 
+    [TestMethod]
+    public void MainWindow_ShouldHideToTrayOnUserCloseButAllowExplicitExit()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+
+        session.Dispatch(() =>
+        {
+            var window = new MainWindow
+            {
+                ShouldMinimizeToTrayOnClose = () => true
+            };
+
+            window.Show();
+            window.Close();
+
+            Assert.IsFalse(window.IsVisible,
+                "启用最小化到托盘时，用户关闭窗口应隐藏窗口而不是销毁窗口");
+
+            window.Show();
+            window.CloseForExit();
+            Assert.IsFalse(window.IsVisible,
+                "托盘退出/程序主动退出必须绕过最小化到托盘拦截");
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     private static void SetHeadlessRenderScale(Window window, double scale)
     {
         // Avalonia.Headless 11.2.8 未暴露 DPI 参数；在测试窗口的 headless 实现上
