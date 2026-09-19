@@ -411,3 +411,13 @@ Avalonia Debug 构建 0 警告/错误。
 和 `Cape Stardew`（项目 995972）的来源身份；这次核对不改变应用缓存或远端数据。
 Nexus MCP 已配置但当前开发环境尚未提供 API Key/Cookie，真实 Nexus 账号验收仍
 保持为发布前检查项。
+
+2026-09-19 继续修复远端 Mod 更新判定：CurseForge 文件列表现在兼容 `data`、
+`result/files` 等嵌套响应，并按发布时间优先、FileID 同时间兜底选择最新发布文件，
+不再简单取最大 FileID。Nexus/CurseForge 均改为“稳定 FileID 优先”：本地已记录
+FileID 时，即使新包的 `manifest.json` 仍保留旧版本，只要远端发布文件身份变化就提示
+一次更新；安装完成后 FileID 相同不会再次恢复更新状态；历史来源没有 FileID 时仍要求
+版本文本明确变新。新增 2 条回归测试；当前迁移测试 **354 总计、350 通过、4 跳过**，
+Avalonia Debug 构建 0 警告/错误。提交 `28cc881` 已推送到上游 `Avalonia-Dev` 和
+`codex/avalonia-dev-20260919`，Actions `35446022450` 的 Windows、Linux、macOS
+构建测试及三平台打包全部成功。
