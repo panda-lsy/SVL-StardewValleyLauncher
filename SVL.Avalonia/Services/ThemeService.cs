@@ -366,7 +366,8 @@ public static class ThemeService
         }
 
         // 主界面优先请求不模糊的 Transparent，确实不支持时再回退 AcrylicBlur。
-        // 主题铺层 Alpha=99 让桌面可辨认地透出，卡片表面仍保持不透明以保证可读性。
+        // 应用级资源保留可读的基础透明度；主窗口会在自己的资源作用域进一步
+        // 调低页面卡片/表面 Alpha，让主页面也能明显透出 Acrylic，弹窗不受影响。
         ApplyBrushAlpha(resources, "WindowBackgroundBrush", _transparencyEnabled ? (byte)0x99 : (byte)0xFF);
         ApplyBrushAlpha(resources, "HeaderBackgroundBrush", _transparencyEnabled ? (byte)0x99 : (byte)0xFF);
         ApplyBrushAlpha(resources, "PanelBackgroundBrush", _transparencyEnabled ? (byte)0x00 : (byte)0xFF);

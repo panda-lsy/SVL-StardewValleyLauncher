@@ -22,11 +22,13 @@ public partial class MainWindow : Window
 
     private static readonly (string Key, byte TransparentAlpha)[] MainWindowSurfaceBrushes =
     [
-        ("WindowBackgroundBrush", 0x80),
-        ("HeaderBackgroundBrush", 0xB3),
-        ("PanelBackgroundBrush", 0x66),
-        ("SurfaceBrush", 0xCC),
-        ("CardBrush", 0xBF)
+        // 主窗口页面需要能明显透出 Acrylic/桌面；弹窗窗口不读取这组局部资源，
+        // 因此降低主页面 Alpha 不会让 Debug/确认弹窗变成半透明。
+        ("WindowBackgroundBrush", 0x66),
+        ("HeaderBackgroundBrush", 0x99),
+        ("PanelBackgroundBrush", 0x33),
+        ("SurfaceBrush", 0xA6),
+        ("CardBrush", 0xA6)
     ];
 
     /// <summary>本窗口关联的浮窗通知服务实例。静态门面 NotificationService.Show 委托到此实例。</summary>

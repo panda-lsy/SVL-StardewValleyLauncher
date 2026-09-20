@@ -316,22 +316,22 @@ public sealed class AvaloniaUiSmokeTests
 
                 ThemeService.SetTransparencyEnabled(true);
                 applyTransparency.Invoke(window, [true]);
-                Assert.AreEqual((byte)0x80,
+                Assert.AreEqual((byte)0x66,
                     ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
                     "主窗口底色必须足够透明，让 Acrylic 材质可见");
-                Assert.AreEqual((byte)0x80,
+                Assert.AreEqual((byte)0x66,
                     ((ISolidColorBrush)windowBackdrop.Background!).Color.A,
                     "窗口铺层应实际解析到主窗口作用域的半透明画刷");
-                Assert.AreEqual((byte)0xB3,
+                Assert.AreEqual((byte)0x99,
                     ((SolidColorBrush)windowResources["HeaderBackgroundBrush"]!).Color.A,
                     "主窗口标题栏应透出 Acrylic 材质");
-                Assert.AreEqual((byte)0x66,
+                Assert.AreEqual((byte)0x33,
                     ((SolidColorBrush)windowResources["PanelBackgroundBrush"]!).Color.A,
                     "主页面面板应使用独立半透明画刷");
-                Assert.AreEqual((byte)0xBF,
+                Assert.AreEqual((byte)0xA6,
                     ((SolidColorBrush)windowResources["CardBrush"]!).Color.A,
                     "主页面卡片也必须半透明，避免不透明卡片遮住整个窗口的 Acrylic 材质");
-                Assert.AreEqual((byte)0xCC,
+                Assert.AreEqual((byte)0xA6,
                     ((SolidColorBrush)windowResources["SurfaceBrush"]!).Color.A,
                     "主页面输入框与表面容器应使用半透明画刷");
 
@@ -343,7 +343,7 @@ public sealed class AvaloniaUiSmokeTests
                 Assert.IsNotNull(openedField);
                 openedField!.SetValue(window, true);
                 applyTransparency.Invoke(window, [true]);
-                Assert.AreEqual((byte)0x80,
+                Assert.AreEqual((byte)0x66,
                     ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
                     "已打开窗口即使暂时报告透明级别 None，也必须保留主页面半透明画刷");
 
@@ -364,7 +364,7 @@ public sealed class AvaloniaUiSmokeTests
                 window.UpdateLayout();
                 Assert.IsTrue(samplePage.Background is ISolidColorBrush pageBackground && pageBackground.Color.A == 0,
                     "实际嵌入的主页面根控件应透明");
-                Assert.AreEqual((byte)0xBF,
+                Assert.AreEqual((byte)0xA6,
                     ((ISolidColorBrush)sampleCard.Background!).Color.A,
                     "实际主页面卡片必须解析到局部半透明画刷");
                 CollectionAssert.AreEqual(
@@ -385,7 +385,7 @@ public sealed class AvaloniaUiSmokeTests
                     "主题强调色变化后，主窗口局部标题栏画刷应同步主题颜色");
                 Assert.AreEqual(themedHeader.Color.G, windowHeader.Color.G);
                 Assert.AreEqual(themedHeader.Color.B, windowHeader.Color.B);
-                Assert.AreEqual((byte)0xB3, windowHeader.Color.A,
+                Assert.AreEqual((byte)0x99, windowHeader.Color.A,
                     "主题变更同步颜色时仍须保留主窗口标题栏透明度");
             }
             finally
