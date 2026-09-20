@@ -444,3 +444,8 @@ Avalonia Debug 构建 0 警告/错误。提交 `28cc881` 已推送到上游 `Ava
 （Window 0x66、Header 0x99、Panel 0x33、Card/Surface 0xA6），而 Debug/确认等独立
 窗口仍使用应用级不透明卡片资源；透明度回归测试同步更新，避免把主窗口作用域的
 透明画刷泄漏到其它窗口。最终桌面无遮挡观感仍需 Windows 实机截图验收。
+
+本轮补齐旧 WPF Nexus Collection 向导的 manual 条目处理：带明确归档直链的条目进入
+直链下载与安装队列；没有归档直链的必需条目记为失败、可选条目记为跳过并保留原因，
+不再静默完成。即使 Collection 没有 Nexus 自动下载项，也会继续执行 bundled、patches
+和实例配置阶段；旧 WPF Debug 构建通过。

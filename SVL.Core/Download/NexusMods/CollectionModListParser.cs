@@ -86,12 +86,17 @@ public class CollectionModDownloadItem
     /// 是否支持直链下载（有 DirectDownloadUrl 的 browse/direct/manual 类型）
     /// </summary>
     public bool SupportsDirectDownload => !string.IsNullOrEmpty(DirectDownloadUrl) &&
-        (SourceType == "browse" || SourceType == "direct" || SourceType == "manual");
+        (string.Equals(SourceType, "browse", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(SourceType, "direct", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(SourceType, "manual", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// 是否需要浏览器下载（非 nexus 类型且没有直链）
     /// </summary>
-    public bool RequiresBrowserDownload => SourceType != "nexus" && SourceType != "bundle" && !SupportsDirectDownload;
+    public bool RequiresBrowserDownload =>
+        !string.Equals(SourceType, "nexus", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(SourceType, "bundle", StringComparison.OrdinalIgnoreCase) &&
+        !SupportsDirectDownload;
 
     /// <summary>
     /// 下载状态

@@ -176,25 +176,33 @@ public class NexusCollectionWizardTask : DownloadTask
                 }
             }
 
-            // 步骤3: 检查是否有需要下载的其他 Mod
-            if (_modListResult.NexusMods.Count == 0)
-            {
-                Status = DownloadTaskStatus.Completed;
-                StatusMessage = "Collection 安装完成";
-                Progress = 100;
-                FileDownloadProgress = 0; // 任务完成，重置文件下载进度
-                CompletedTime = DateTime.Now;
-                return;
-            }
+            // 步骤3: 整理需要下载的 Mod。
+            // manual 条目如果带有明确归档直链，可以和 browse/direct 一样自动安装；
+            // 没有归档直链的 manual 条目不能伪装成成功，必须出现在失败/跳过列表中。
+            var directManualMods = _modListResult.ManualMods
+                .Where(mod => mod.SupportsDirectDownload)
+                .ToList();
+            var unresolvedManualMods = _modListResult.ManualMods
+                .Where(mod => !mod.SupportsDirectDownload)
+                .ToList();
+            var downloadableMods = _modListResult.NexusMods
+                .Concat(directManualMods)
+                .Distinct()
+                .OrderBy(mod => mod.Phase > 0 ? mod.Phase : 1)
+                .ThenBy(mod => mod.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
-            // 步骤4: 进入下载循环（按 Phase 分阶段处理）
-            var totalMods = _modListResult.NexusMods.Count;
+            var manualFailureCount = RecordManualModsRequiringUserAction(unresolvedManualMods);
+
+            // 不再因没有 Nexus 自动下载项而提前返回；后续仍需处理 bundled、patches
+            // 和实例配置。至少将未解析的 manual 项计入进度统计，避免进度分母为 0。
+            var totalMods = Math.Max(1, downloadableMods.Count + unresolvedManualMods.Count);
             var completedMods = 0;
-            var failedMods = 0;
-            var bundledMods = new List<CollectionModDownloadItem>();  // 收集 bundle 类型的 Mod
+            var processedMods = unresolvedManualMods.Count;
+            var failedMods = manualFailureCount;
 
             // 按 Phase 分组（参考 Vortex 的处理逻辑）
-            var groupedByPhase = _modListResult.NexusMods
+            var groupedByPhase = downloadableMods
                 .Where(m => !(_modListResult.HasSMAPI && _modListResult.SmapiMod != null && m.ModId == _modListResult.SmapiMod.ModId)) // 排除已安装的SMAPI
                 .Where(m => m.SourceType != "bundle")  // 排除 bundle 类型，稍后统一处理
                 .GroupBy(m => m.Phase > 0 ? m.Phase : 1)
@@ -219,7 +227,7 @@ public class NexusCollectionWizardTask : DownloadTask
                     // 跳过已完成的 mod（来自缓存），但需要将缓存文件复制到目标目录并安装
                     if (mod.Status == CollectionModDownloadStatus.Completed)
                     {
-                        completedMods++;
+                        processedMods++;
                         Log.Info($"[CollectionWizard] [阶段{phaseNumber}] 跳过已缓存的 Mod: {mod.Name}");
 
                         // 将缓存的 ZIP 文件复制到目标目录，然后安装
@@ -244,18 +252,30 @@ public class NexusCollectionWizardTask : DownloadTask
                             // 安装 Mod（解压、处理嵌套文件、写入源文件记录）
                             var (installSuccess, failedZipPath) = await InstallModAsync(mod);
 
-                            if (!installSuccess)
+                            if (installSuccess)
+                            {
+                                completedMods++;
+                            }
+                            else
                             {
                                 // 安装失败处理（继续安装，不终止）
                                 HandleDownloadFailure(mod, phaseNumber, ref failedMods, failedZipPath);
                             }
+                        }
+                        else
+                        {
+                            HandleDownloadFailure(
+                                mod,
+                                phaseNumber,
+                                ref failedMods,
+                                error: "缓存文件不存在或已失效");
                         }
 
                         continue;
                     }
 
                     _currentMod = mod;
-                    var currentProgress = 15 + (completedMods * 80 / totalMods);
+                    var currentProgress = 15 + (processedMods * 80 / totalMods);
                     Progress = currentProgress;
                     StatusMessage = $"[阶段{phaseNumber}] 等待下载 {_currentMod.Name}";
 
@@ -294,6 +314,8 @@ public class NexusCollectionWizardTask : DownloadTask
                             // 下载失败处理（继续安装，不终止）
                             HandleDownloadFailure(mod, phaseNumber, ref failedMods);
                         }
+
+                        processedMods++;
                     }
                     else
                     {
@@ -323,6 +345,8 @@ public class NexusCollectionWizardTask : DownloadTask
                             // 下载失败处理（继续安装，不终止）
                             HandleDownloadFailure(mod, phaseNumber, ref failedMods);
                         }
+
+                        processedMods++;
                     }
                 }
 
@@ -564,9 +588,34 @@ public class NexusCollectionWizardTask : DownloadTask
     }
 
     /// <summary>
+    /// 记录 Collection 中没有归档直链、必须由用户处理的 manual 条目。
+    /// 不把它们静默当作成功，也不伪造一个可下载的 Nexus 地址。
+    /// </summary>
+    private int RecordManualModsRequiringUserAction(
+        IEnumerable<CollectionModDownloadItem> manualMods)
+    {
+        var failedMods = 0;
+        foreach (var mod in manualMods)
+        {
+            HandleDownloadFailure(
+                mod,
+                mod.Phase > 0 ? mod.Phase : 1,
+                ref failedMods,
+                error: "需要手动下载，Collection 未提供归档直链");
+        }
+
+        return failedMods;
+    }
+
+    /// <summary>
     /// 处理下载失败
     /// </summary>
-    private void HandleDownloadFailure(CollectionModDownloadItem mod, int phaseNumber, ref int failedMods, string? zipFilePath = null)
+    private void HandleDownloadFailure(
+        CollectionModDownloadItem mod,
+        int phaseNumber,
+        ref int failedMods,
+        string? zipFilePath = null,
+        string? error = null)
     {
         if (mod.IsOptional)
         {
@@ -580,7 +629,7 @@ public class NexusCollectionWizardTask : DownloadTask
                 ModName = mod.Name,
                 ProjectId = mod.ModId,
                 FileId = mod.FileId,
-                Error = "用户跳过",
+                Error = string.IsNullOrWhiteSpace(error) ? "用户跳过" : error,
                 GameDomain = mod.GameDomain,
                 ZipFilePath = zipFilePath
             });
@@ -598,7 +647,7 @@ public class NexusCollectionWizardTask : DownloadTask
                 ModName = mod.Name,
                 ProjectId = mod.ModId,
                 FileId = mod.FileId,
-                Error = "安装失败",
+                Error = string.IsNullOrWhiteSpace(error) ? "安装失败" : error,
                 GameDomain = mod.GameDomain,
                 ZipFilePath = zipFilePath
             });
