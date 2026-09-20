@@ -258,13 +258,15 @@ public class NexusCollectionInstallTask : DownloadTask
     {
         if (mod.Source == null)
         {
-            Log.Warn($"[CollectionInstall] Mod {mod.Name} 没有源信息，跳过");
+            HandleUninstallableCollectionMod(mod, "Collection 未提供源信息");
             return;
         }
 
         Log.Info($"[CollectionInstall] 安装 Mod: {mod.Name}, 类型: {mod.Source.Type}");
 
-        switch (mod.Source.Type)
+        // 外部 Collection 生成器的 source.type 可能带首尾空格或使用不同大小写。
+        // 归一化后再分支，避免合法条目落入 default 并被静默跳过。
+        switch ((mod.Source.Type ?? string.Empty).Trim().ToLowerInvariant())
         {
             case "nexus":
                 await InstallNexusModAsync(mod);
@@ -275,12 +277,13 @@ public class NexusCollectionInstallTask : DownloadTask
                 break;
 
             case "manual":
-                Log.Warn($"[CollectionInstall] Mod {mod.Name} 需要手动下载，跳过");
-                // TODO: 显示手动下载提示
+                // manual 的 Url 通常是文件页而不是可验证的归档直链；旧任务没有
+                // 浏览器/NXM 回调入口，不能把网页误当压缩包，也不能伪造成功。
+                HandleUninstallableCollectionMod(mod, "需要手动下载，旧 Collection 任务未提供可验证的归档直链");
                 break;
 
             default:
-                Log.Warn($"[CollectionInstall] Mod {mod.Name} 源类型不支持: {mod.Source.Type}");
+                HandleUninstallableCollectionMod(mod, $"不支持的源类型: {mod.Source.Type}");
                 break;
         }
 
@@ -294,6 +297,24 @@ public class NexusCollectionInstallTask : DownloadTask
                 CollectionPatchService.ApplyPatches(extractDir, modInstallPath, mod.Name, mod.Patches);
             }
         }
+    }
+
+    /// <summary>
+    /// 处理旧任务无法自动安装的 Collection 条目。
+    /// 必需 Mod 必须让整个任务失败；可选 Mod 明确记录为跳过，不能静默显示安装成功。
+    /// </summary>
+    private void HandleUninstallableCollectionMod(NexusCollectionJsonMod mod, string reason)
+    {
+        var message = $"Mod {mod.Name ?? "(未命名)"}: {reason}";
+        if (mod.Optional)
+        {
+            Log.Warn($"[CollectionInstall] 可选 Mod 已跳过: {message}");
+            StatusMessage = $"已跳过可选 Mod：{mod.Name ?? "(未命名)"}（{reason}）";
+            return;
+        }
+
+        Log.Error($"[CollectionInstall] 必需 Mod 无法自动安装: {message}");
+        throw new InvalidOperationException(message);
     }
 
     /// <summary>

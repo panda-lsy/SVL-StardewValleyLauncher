@@ -458,3 +458,8 @@ Avalonia Debug 构建 0 警告/错误。提交 `28cc881` 已推送到上游 `Ava
 同日收紧旧 Nexus Collection 来源类型解析：对外部 `source.type` 先执行 Trim 和
 `ToLowerInvariant`，兼容生成器产生的大小写差异和首尾空格，避免合法的 browse、bundle、
 manual、direct 条目被归入未知来源而静默跳过。
+
+同日补齐旧 `NexusCollectionInstallTask` 的不可自动安装条目处理：缺少来源、manual
+（没有可验证归档直链）或未知来源的必需 Mod 现在会让任务明确失败，可选 Mod 会记录为
+跳过并写入状态原因，不再把未安装的 Mod 静默计入成功；来源类型同样先做大小写与空白
+归一化。旧 WPF/Core Debug 构建通过。
