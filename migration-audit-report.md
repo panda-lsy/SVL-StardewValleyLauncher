@@ -1,6 +1,6 @@
 # SVL Avalonia 迁移审计
 
-更新时间：2026-09-19
+更新时间：2026-09-20
 
 本报告以当前工作树为准，重点覆盖 Avalonia 主流程与 WPF 旧配置兼容，不把
 `SVL.sln` 中与 Avalonia 无关的旧 WPF/SMAPI 编译问题误计入迁移结果。
