@@ -468,3 +468,7 @@ manual、direct 条目被归入未知来源而静默跳过。
 test，以及 Windows x64、Linux x64、macOS x64/ARM64 打包全部成功，运行编号为
 `35507894534`。该结果只证明构建、测试和打包链路通过，不替代真实 Nexus/CurseForge
 账号下载及 Windows 无遮挡透明效果验收。
+
+同日安全性复核发现旧 Core `ModDownloadTask` 在安装模式下会直接删除位于用户 Mods
+路径中的临时 ZIP。现在该路径会先移入回收站，回收失败则保留文件；仅非用户临时路径
+继续物理清理。旧 Core Debug 构建和迁移测试均通过。

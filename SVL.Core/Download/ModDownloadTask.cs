@@ -333,13 +333,29 @@ public class ModDownloadTask : DownloadTask
 
                     StatusMessage = $"✓ {_modName} 已保存并解压完成！";
 
-                    // 安装成功后默认删除 ZIP 文件（后续可在设置中配置）
+                    // 安装成功后清理 ZIP 文件。若 ZIP 位于用户 Mods/实例路径，
+                    // 也必须遵守删除安全策略进入回收站；只有临时路径才允许物理删除。
                     try
                     {
                         if (File.Exists(targetPath))
                         {
-                            File.Delete(targetPath);
-                            Log.Info($"[ModDownloadTask] 已删除 ZIP 文件: {targetPath}");
+                            if (IsUserContentPath(targetPath))
+                            {
+                                if (ModBackupService.MovePathToRecycleBin(targetPath))
+                                {
+                                    Log.Info($"[ModDownloadTask] 已将安装后的 ZIP 移入回收站: {targetPath}");
+                                }
+                                else
+                                {
+                                    // 回收站失败时保留原文件，不能退回不可恢复的物理删除。
+                                    Log.Warn($"[ModDownloadTask] 无法将安装后的 ZIP 移入回收站，已保留文件: {targetPath}");
+                                }
+                            }
+                            else
+                            {
+                                File.Delete(targetPath);
+                                Log.Info($"[ModDownloadTask] 已清理临时 ZIP 文件: {targetPath}");
+                            }
                         }
                     }
                     catch (Exception ex)
