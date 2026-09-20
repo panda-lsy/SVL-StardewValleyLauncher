@@ -181,7 +181,10 @@ public partial class MainWindow : Window
     private void ApplyWindowTransparency(bool enabled)
     {
         TransparencyLevelHint = enabled
-            ? new[] { WindowTransparencyLevel.Transparent, WindowTransparencyLevel.AcrylicBlur }
+            // AcrylicBlur 必须优先于 Transparent：Windows 会按顺序选择第一个可用级别，
+            // 否则 Transparent 一旦可用，后面的 AcrylicBlur 永远不会生效，主页面看起来
+            // 只有普通半透明铺层而没有 Debug 页面那样明显的桌面材质效果。
+            ? new[] { WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent }
             : new[] { WindowTransparencyLevel.None };
 
         // 透明设置决定主题画刷是否半透明；平台能力只决定窗口最终是否能透出桌面，

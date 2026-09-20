@@ -368,14 +368,14 @@ public sealed class AvaloniaUiSmokeTests
                     ((ISolidColorBrush)sampleCard.Background!).Color.A,
                     "实际主页面卡片必须解析到局部半透明画刷");
                 CollectionAssert.AreEqual(
-                    new[] { WindowTransparencyLevel.Transparent, WindowTransparencyLevel.AcrylicBlur },
+                    new[] { WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent },
                     window.TransparencyLevelHint.ToArray());
                 var enabledDiagnostic = DebugConsoleService.Instance.Snapshot()
                     .LastOrDefault(entry => entry.Text.Contains(
                         "[WindowTransparency] 设置已开启",
                         StringComparison.Ordinal));
                 Assert.IsNotNull(enabledDiagnostic, "启用透明效果时应记录平台实际透明级别");
-                StringAssert.Contains(enabledDiagnostic!.Text, "requested=[Transparent, AcrylicBlur]");
+                StringAssert.Contains(enabledDiagnostic!.Text, "requested=[AcrylicBlur, Transparent]");
                 StringAssert.Contains(enabledDiagnostic.Text, $"actual={window.ActualTransparencyLevel}");
 
                 Assert.IsTrue(ThemeService.TrySetCustomPrimaryColor("#123456", out var themeError), themeError);
