@@ -472,3 +472,8 @@ test，以及 Windows x64、Linux x64、macOS x64/ARM64 打包全部成功，运
 同日安全性复核发现旧 Core `ModDownloadTask` 在安装模式下会直接删除位于用户 Mods
 路径中的临时 ZIP。现在该路径会先移入回收站，回收失败则保留文件；仅非用户临时路径
 继续物理清理。旧 Core Debug 构建和迁移测试均通过。
+
+2026-09-20 再次读取上游实时 refs：`upstream/main=19ef4ef` 相对当前提交只有一条
+README 说明性提交，`upstream/Dev-Avalonia=a5f9669` 没有领先提交；上游
+`Avalonia-Dev` 与 `codex/avalonia-dev-20260919` 均指向当前 `9e884f0`。因此本次
+没有发现新的 main/Dev-Avalonia 业务功能需要迁移。
