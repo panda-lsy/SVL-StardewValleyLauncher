@@ -463,3 +463,8 @@ manual、direct 条目被归入未知来源而静默跳过。
 （没有可验证归档直链）或未知来源的必需 Mod 现在会让任务明确失败，可选 Mod 会记录为
 跳过并写入状态原因，不再把未安装的 Mod 静默计入成功；来源类型同样先做大小写与空白
 归一化。旧 WPF/Core Debug 构建通过。
+
+2026-09-20 对提交 `c752878` 重新执行上游 Actions：Windows、Linux、macOS 的 Build and
+test，以及 Windows x64、Linux x64、macOS x64/ARM64 打包全部成功，运行编号为
+`35507894534`。该结果只证明构建、测试和打包链路通过，不替代真实 Nexus/CurseForge
+账号下载及 Windows 无遮挡透明效果验收。
