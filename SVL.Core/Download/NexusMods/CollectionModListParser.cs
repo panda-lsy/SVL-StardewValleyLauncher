@@ -318,7 +318,9 @@ public static class CollectionModListParser
             }
 
             // 根据源类型分类
-            switch (mod.Source.Type?.ToLower())
+            // Collection 来源类型来自外部 JSON，既可能大小写不同，也可能带有
+            // 生成器留下的首尾空格；先按不变区域归一化，避免合法条目落入未知来源。
+            switch ((mod.Source.Type ?? string.Empty).Trim().ToLowerInvariant())
             {
                 case "nexus":
                 case "browse":  // browse 类型也需要浏览器下载

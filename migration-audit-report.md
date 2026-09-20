@@ -449,3 +449,12 @@ Avalonia Debug 构建 0 警告/错误。提交 `28cc881` 已推送到上游 `Ava
 直链下载与安装队列；没有归档直链的必需条目记为失败、可选条目记为跳过并保留原因，
 不再静默完成。即使 Collection 没有 Nexus 自动下载项，也会继续执行 bundled、patches
 和实例配置阶段；旧 WPF Debug 构建通过。
+
+2026-09-20 继续修复主窗口透明级别选择：主窗口现在优先请求 `AcrylicBlur`，再回退到
+`Transparent`；此前 `Transparent` 排在前面时，Windows 会在它可用时直接选中纯透明级别，
+导致 Acrylic 材质不会生效、主页面视觉上不明显。透明回归测试同步更新；本地迁移测试
+356 总计、352 通过、4 跳过，Avalonia 与旧 Core Debug 构建均为 0 警告/错误。
+
+同日收紧旧 Nexus Collection 来源类型解析：对外部 `source.type` 先执行 Trim 和
+`ToLowerInvariant`，兼容生成器产生的大小写差异和首尾空格，避免合法的 browse、bundle、
+manual、direct 条目被归入未知来源而静默跳过。
