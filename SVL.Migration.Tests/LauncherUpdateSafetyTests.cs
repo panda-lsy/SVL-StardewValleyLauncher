@@ -13,6 +13,20 @@ namespace SVL.Migration.Tests;
 public sealed class LauncherUpdateSafetyTests
 {
     [TestMethod]
+    public void AutomaticUpdate_ShouldNeverSelectFrameworkDependentArchive()
+    {
+        var release = new LauncherReleaseInfo();
+        var lightweight = new LauncherReleaseAsset { Name = "SVL_v1.2.0.0_release_Windows_x64_requires_dotnet10.zip" };
+        var bundled = new LauncherReleaseAsset { Name = "SVL_v1.2.0.0_release_Windows_x64.zip" };
+        release.Assets.Add(lightweight);
+        release.Assets.Add(bundled);
+
+        Assert.AreSame(bundled, LauncherUpdateService.SelectPreferredAsset(release));
+        release.Assets.Remove(bundled);
+        Assert.IsNull(LauncherUpdateService.SelectPreferredAsset(release));
+    }
+
+    [TestMethod]
     public void Replacement_ShouldKeepBackupAndRestoreWhenNewVersionCannotStart()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-update-replace-" + Guid.NewGuid().ToString("N"));

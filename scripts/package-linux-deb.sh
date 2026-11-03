@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 
-# 将自包含 Linux ZIP 转成 Debian/Ubuntu 安装包，不需要安装 .NET SDK。
-if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-    echo "用法: sh scripts/package-linux-deb.sh <Linux ZIP> [输出目录] [版本]" >&2
+# 将单文件 Linux ZIP 转成 Debian/Ubuntu 安装包。
+if [ "$#" -lt 1 ] || [ "$#" -gt 4 ]; then
+    echo "用法: sh scripts/package-linux-deb.sh <Linux ZIP> [输出目录] [版本] [self-contained|framework-dependent]" >&2
     exit 2
 fi
 
@@ -11,6 +11,12 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 archive=$1
 output_dir=${2:-"$repo_root/artifacts"}
 version=${3:-1.2.0.0}
+mode=${4:-self-contained}
+case "$mode" in
+    self-contained) filename="svl-launcher_${version}_amd64.deb"; runtime_dependency="" ;;
+    framework-dependent) filename="svl-launcher_${version}_amd64_requires_dotnet10.deb"; runtime_dependency=", dotnet-runtime-10.0 (>= 10.0)" ;;
+    *) echo "未知的运行时模式: $mode" >&2; exit 2 ;;
+esac
 
 for command in dpkg dpkg-deb unzip install mktemp; do
     if ! command -v "$command" >/dev/null 2>&1; then
@@ -29,7 +35,7 @@ fi
 
 mkdir -p -- "$output_dir"
 output_dir=$(CDPATH= cd -- "$output_dir" && pwd)
-destination="$output_dir/svl-launcher_${version}_amd64.deb"
+destination="$output_dir/$filename"
 if [ -e "$destination" ]; then
     echo "目标文件已存在，请使用新的输出目录: $destination" >&2
     exit 1
@@ -62,7 +68,7 @@ Priority: optional
 Architecture: amd64
 Maintainer: panda-lsy <shengxia23@hainnu.edu.cn>
 Installed-Size: $installed_size
-Depends: ca-certificates, libc6 (>= 2.35), libgcc-s1, libgssapi-krb5-2, libicu78 | libicu76 | libicu74 | libicu72 | libicu70, libssl3t64 | libssl3, libstdc++6, tzdata, zlib1g, libx11-6, libice6, libsm6, libfontconfig1
+Depends: ca-certificates, libc6 (>= 2.35), libgcc-s1, libgssapi-krb5-2, libicu78 | libicu76 | libicu74 | libicu72 | libicu70, libssl3t64 | libssl3, libstdc++6, tzdata, zlib1g, libx11-6, libice6, libsm6, libfontconfig1${runtime_dependency}
 Homepage: https://github.com/panda-lsy/SVL-StardewValleyLauncher
 Description: Stardew Valley launcher and mod manager
  SVL manages Stardew Valley instances, SMAPI, mods and modpacks.

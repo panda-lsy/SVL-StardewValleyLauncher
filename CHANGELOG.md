@@ -13,6 +13,7 @@ All notable changes to SVL (Stardew Valley Launcher) will be documented in this 
 ### 预发布准备
 
 - 增加 Linux x64 ZIP、Ubuntu/Debian 安装包，以及 Intel/Apple Silicon macOS DMG。
+- 各平台提供自带运行环境版和需要 .NET 10 Runtime 的轻量版；保留旧版更新器所需的自包含 EXE。
 - 完善旧版配置和实例迁移、下载任务恢复、Mod 更新备份与嵌套来源记录。
 - 改进 SteamCMD 跨平台下载、Nexus 登录、Modpack 导入导出与实例图标。
 - 保留旧版匿名统计标识，避免架构迁移造成重复计数。

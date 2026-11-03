@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-SVL 跨平台打包脚本（Windows/macOS/Linux，Debug/Release 单文件发布）
+SVL 跨平台打包脚本（Windows/macOS/Linux，Debug/Release 发布）
 .PARAMETER Config
 Debug | Release | all（默认 all，同时构建 Debug + Release）
 .PARAMETER Targets
@@ -8,7 +8,7 @@ windows | linux | macos | all（默认 all）
 .PARAMETER OutputDirectory
 产物输出目录；可为绝对路径或相对于仓库根目录的路径，默认 <仓库根目录>/artifacts
 .PARAMETER FrameworkDependent
-仅用于 Windows：构建需要用户预装 .NET 10 Runtime 的较小程序包。
+构建需要用户预装对应架构 .NET 10 Runtime 的较小程序包。
 .EXAMPLE
 .\build.ps1 -Config Release -Targets windows
 .\build.ps1 -Config Debug -Targets windows -OutputDirectory $env:TEMP\SVL-Debug
@@ -102,11 +102,7 @@ function Resolve-TargetList {
 
 $configs = @(Resolve-ConfigList $Config)
 $targetList = @(Resolve-TargetList $Targets)
-if ($FrameworkDependent -and ($targetList.Count -ne 1 -or $targetList[0] -ne "windows")) {
-    throw "FrameworkDependent 轻量包目前只支持 -Targets windows，当前目标: $($targetList -join ',')"
-}
-
-Write-Host "[config] VERSION=$PackageVersion CONFIGS=$($configs -join ',') TARGETS=$($targetList -join ',') HOST=$HostOs"
+Write-Host "[config] VERSION=$PackageVersion CONFIGS=$($configs -join ',') TARGETS=$($targetList -join ',') HOST=$HostOs FRAMEWORK_DEPENDENT=$FrameworkDependent"
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     Write-Host "[error] dotnet 未安装"
@@ -131,8 +127,10 @@ function Publish-Windows {
 
 function Publish-MacOS {
     param([string]$Rid, [string]$PublishConfig, [string]$OutDir)
-    Write-Host "[publish] $Rid ($PublishConfig)"
-    dotnet publish $Project -c $PublishConfig -r $Rid --self-contained true -o $OutDir
+    $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
+    Write-Host "[publish] $Rid ($PublishConfig, self-contained=$selfContained)"
+    dotnet publish $Project -c $PublishConfig -r $Rid --self-contained $selfContained `
+        -p:PublishSelfContained=$selfContained -o $OutDir
     if ($LASTEXITCODE -ne 0) { Write-Host "[error] publish 失败: $Rid"; exit 1 }
 }
 
@@ -178,16 +176,20 @@ function Build-Linux {
     $configMarker = $PublishConfig.ToLower()
     $archName = $Rid.Substring(6)
     $artifactName = "${ArtifactPrefix}_v${PackageVersion}_${configMarker}_Linux_${archName}"
+    if ($FrameworkDependent) { $artifactName += "_requires_dotnet10" }
     $outBase = $ArtifactRoot
     $payloadDir = Join-Path $outBase $artifactName
     $publishDir = Join-Path $outBase "${artifactName}_publish"
     $zipPath = Join-Path $outBase "${artifactName}.zip"
 
-    Write-Host "[publish] $Rid ($PublishConfig single-file)"
-    dotnet publish $Project -c $PublishConfig -r $Rid --self-contained true `
+    $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
+    $compressBundle = if ($FrameworkDependent) { "false" } else { "true" }
+    Write-Host "[publish] $Rid ($PublishConfig single-file, self-contained=$selfContained)"
+    dotnet publish $Project -c $PublishConfig -r $Rid --self-contained $selfContained `
+        -p:PublishSelfContained=$selfContained `
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
-        -p:EnableCompressionInSingleFile=true `
+        -p:EnableCompressionInSingleFile=$compressBundle `
         -o $publishDir
     if ($LASTEXITCODE -ne 0) { Write-Host "[error] publish 失败: $Rid"; exit 1 }
 
@@ -227,7 +229,8 @@ exec "$script_dir/__APPHOST__" "$@"
     if ($HostOs -eq "linux" -and $Rid -eq "linux-x64") {
         if (Get-Command dpkg-deb -ErrorAction SilentlyContinue) {
             $debVersion = if ($PublishConfig -eq "Debug") { "${PackageVersion}~debug" } else { $PackageVersion }
-            & sh (Join-Path $RootDir "scripts/package-linux-deb.sh") $zipPath $outBase $debVersion
+            $debMode = if ($FrameworkDependent) { "framework-dependent" } else { "self-contained" }
+            & sh (Join-Path $RootDir "scripts/package-linux-deb.sh") $zipPath $outBase $debVersion $debMode
             if ($LASTEXITCODE -ne 0) { throw "Linux DEB 打包失败" }
         } else {
             Write-Host "[warn] 未找到 dpkg-deb，跳过 Ubuntu/Debian 安装包"
@@ -240,6 +243,7 @@ function Build-MacOS {
     $configMarker = $PublishConfig.ToLower()
     $archName = $Rid.Substring(4)
     $artifactName = "${ArtifactPrefix}_v${PackageVersion}_${configMarker}_macOS_${archName}"
+    if ($FrameworkDependent) { $artifactName += "_requires_dotnet10" }
     $outBase = $ArtifactRoot
     $publishDir = Join-Path $outBase "${artifactName}_publish"
     $zipPath = Join-Path $outBase "${artifactName}.zip"

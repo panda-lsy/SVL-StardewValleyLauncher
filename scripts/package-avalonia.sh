@@ -4,6 +4,13 @@ set -euo pipefail
 # Unix 入口；具体目标可通过 PACKAGE_TARGETS 环境变量或第二个参数指定。
 config="${1:-Release}"
 targets="${PACKAGE_TARGETS:-${2:-all}}"
+mode="${3:-self-contained}"
+extra_args=()
+case "$mode" in
+  self-contained) ;;
+  framework-dependent|--framework-dependent) extra_args=(-FrameworkDependent) ;;
+  *) echo "无效打包模式: $mode（可选: self-contained | framework-dependent）" >&2; exit 2 ;;
+esac
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_script="$root_dir/build.ps1"
 
@@ -17,4 +24,4 @@ if ! command -v pwsh >/dev/null 2>&1; then
   exit 1
 fi
 
-pwsh -NoProfile -File "$build_script" -Config "$config" -Targets "$targets"
+pwsh -NoProfile -File "$build_script" -Config "$config" -Targets "$targets" "${extra_args[@]}"

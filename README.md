@@ -101,6 +101,10 @@
 
 从 [Releases](../../releases) 页面下载最新版本：
 
+发布页提供自带 .NET 运行环境的版本和名称包含 `requires_dotnet10` 的轻量版本。
+轻量版需要先安装与系统架构一致的 [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；
+如果不确定是否已安装，请选择自带环境的版本。
+
 - **Windows**: 下载 `.zip`，解压后运行 `SVL.Avalonia.exe`
 - **Ubuntu/Debian x64**: 下载 `.deb`，使用软件安装器打开，或运行 `sudo apt install ./svl-launcher_1.2.0.0_amd64.deb`；安装后可从应用菜单启动
 - **Linux x64 免安装版**: 下载 ZIP，解压后运行 `sh run-svl.sh`
@@ -136,8 +140,10 @@ dotnet run --project SVL.Avalonia/SVL.Avalonia.csproj
 # Windows x64 Release
 .\build.ps1 -Config Release -Targets windows
 
-# Windows x64 轻量版（目标机器须预装 .NET 10 Runtime）
+# 轻量版（各目标均支持，目标机器须预装对应架构的 .NET 10 Runtime）
 .\build.ps1 -Config Release -Targets windows -FrameworkDependent
+.\build.ps1 -Config Release -Targets linux -FrameworkDependent
+.\build.ps1 -Config Release -Targets macos -FrameworkDependent
 
 # 全部目标（Windows + Linux + macOS）双配置
 .\build.ps1 -Config all -Targets all
@@ -159,7 +165,7 @@ Finder 布局使用 `packaging/macos/installer-layout.dsstore`，打包时无需
 SteamCMD 首次安装会按系统下载官方 Windows、macOS 或 Linux 安装包。Apple 芯片上的
 macOS SteamCMD 官方启动包是 Intel 架构，需要 Rosetta 2。
 
-Windows 默认包自带运行时，适合普通用户和从旧 WPF 版升级；轻量包名称带
+各平台默认包自带运行时；轻量包名称带
 `requires_dotnet10`，需要安装对应架构的 .NET 10 Runtime，不能作为旧版的直接更新文件。
 自包含构建还生成 `SVL.Desktop_v{版本号}_{Debug|Release}.exe`：旧版更新器要求发布资产
 是真正的单文件 EXE，不能将 ZIP 改名为 EXE。要让旧版在线更新找到该文件，仍须将对应
@@ -171,9 +177,10 @@ EXE 附加到发布页；Actions 工件不会自动成为 Release 资产。
 预发布验收步骤与各平台下载链接模板见 [发布准备](docs/release/发布准备.md)。
 
 Linux x64 ZIP 解压后可运行 `sh run-svl.sh`；脚本会设置 apphost 执行权限并转发参数。
-在安装了 `dpkg-deb` 的 Linux 上打包时，还会生成 Ubuntu/Debian x64 `.deb`；安装包自带
-.NET 运行时，会在应用菜单中添加 SVL。也可单独运行
-`sh scripts/package-linux-deb.sh <Linux ZIP> <输出目录> 1.2.0.0`，输出目录中不能已有同名安装包。
+在安装了 `dpkg-deb` 的 Linux 上打包时，还会生成 Ubuntu/Debian x64 `.deb` 并在应用菜单中添加 SVL。
+轻量 DEB 需要软件源提供 `dotnet-runtime-10.0`，它与自带环境的 DEB 使用相同的软件包名，安装其中之一即可。
+也可单独运行 `sh scripts/package-linux-deb.sh <Linux ZIP> <输出目录> 1.2.0.0`；
+轻量 ZIP 还需在末尾加上 `framework-dependent`，输出目录中不能已有同名安装包。
 
 ## 项目结构
 

@@ -53,20 +53,32 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore runtime
-        run: dotnet restore SVL.Avalonia/SVL.Avalonia.csproj --runtime win-x64
-
-      - name: Publish
-        run: dotnet publish SVL.Avalonia/SVL.Avalonia.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
-
-      - name: Prepare WPF upgrade executable
+      - name: Build bundled and framework-dependent Windows archives
         shell: pwsh
         run: |
-          [xml]$project = Get-Content SVL.Avalonia/SVL.Avalonia.csproj -Raw
-          $version = @($project.Project.PropertyGroup.Version | Where-Object { $_ })[0]
-          if (-not $version) { throw 'Project version is missing.' }
-          New-Item -ItemType Directory -Force artifacts/legacy-upgrade | Out-Null
-          Copy-Item -LiteralPath artifacts/win-x64/SVL.Avalonia.exe -Destination "artifacts/legacy-upgrade/SVL.Desktop_v${version}_Release.exe"
+          ./build.ps1 -Config Release -Targets windows -OutputDirectory artifacts/bundled
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled build failed.' }
+          ./build.ps1 -Config Release -Targets windows -OutputDirectory artifacts/lightweight -FrameworkDependent
+          if ($LASTEXITCODE -ne 0) { throw 'Framework-dependent build failed.' }
+          $legacy = @(Get-ChildItem artifacts/bundled -Filter 'SVL.Desktop_v*_Release.exe')
+          $lightLegacy = @(Get-ChildItem artifacts/lightweight -Filter 'SVL.Desktop_v*_Release.exe')
+          if ($legacy.Count -ne 1 -or $lightLegacy.Count -ne 0) { throw 'Unsafe WPF upgrade asset configuration.' }
+          $lite = @(Get-ChildItem artifacts/lightweight -Filter '*_requires_dotnet10.zip')
+          if ($lite.Count -ne 1) { throw 'Framework-dependent Windows ZIP is missing.' }
+
+      - name: Smoke-test framework-dependent Windows executable
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem artifacts/lightweight -File -Filter '*_requires_dotnet10.zip' | Select-Object -First 1
+          $extracted = Join-Path $env:RUNNER_TEMP 'svl-win-lite'
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $extracted
+          $exe = Join-Path $extracted 'SVL.Avalonia.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Framework-dependent executable is missing.' }
+          $env:DOTNET_HOST_TRACE = '1'
+          $env:DOTNET_HOST_TRACEFILE = Join-Path $env:RUNNER_TEMP 'svl-win-host-trace.log'
+          $process = Start-Process -FilePath $exe -ArgumentList '--svl-apply-update' -PassThru -Wait -WindowStyle Hidden
+          if ($process.ExitCode -ne 1) { throw "Unexpected Windows smoke test exit code: $($process.ExitCode)" }
+          if (-not (Select-String -Path $env:DOTNET_HOST_TRACEFILE -Pattern 'Microsoft.NETCore.App' -Quiet)) { throw 'Runtime was not resolved.' }
 
       - name: Verify Linux ZIP generated on Windows
         shell: pwsh
@@ -100,7 +112,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: SVL-Avalonia-win-x64
-          path: artifacts/win-x64
+          path: artifacts/bundled/SVL_v*_release_Windows_x64.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -108,7 +120,15 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: SVL-Avalonia-WPF-upgrade-win-x64
-          path: artifacts/legacy-upgrade/*.exe
+          path: artifacts/bundled/SVL.Desktop_v*_Release.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload framework-dependent package
+        uses: actions/upload-artifact@v7
+        with:
+          name: SVL-Avalonia-win-x64-requires-dotnet10
+          path: artifacts/lightweight/*_requires_dotnet10.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -127,7 +147,32 @@ jobs:
 
       - name: Build Linux archive with launcher
         shell: pwsh
-        run: ./build.ps1 -Config Release -Targets linux -OutputDirectory artifacts
+        run: |
+          ./build.ps1 -Config Release -Targets linux -OutputDirectory artifacts
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled build failed.' }
+          ./build.ps1 -Config Release -Targets linux -OutputDirectory artifacts/lightweight -FrameworkDependent
+          if ($LASTEXITCODE -ne 0) { throw 'Framework-dependent build failed.' }
+
+      - name: Verify and smoke-test framework-dependent Linux packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip=$(find artifacts/lightweight -maxdepth 1 -name '*_requires_dotnet10.zip' -print -quit)
+          deb=$(find artifacts/lightweight -maxdepth 1 -name '*_requires_dotnet10.deb' -print -quit)
+          test -n "$zip" && test -n "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = 'svl-launcher'
+          dpkg-deb -f "$deb" Depends | grep -qF 'dotnet-runtime-10.0'
+          mkdir -p "$RUNNER_TEMP/svl-lite" "$RUNNER_TEMP/svl-lite-deb"
+          unzip -q "$zip" -d "$RUNNER_TEMP/svl-lite"
+          dpkg-deb -x "$deb" "$RUNNER_TEMP/svl-lite-deb"
+          cmp "$RUNNER_TEMP/svl-lite/SVL.Avalonia" "$RUNNER_TEMP/svl-lite-deb/usr/lib/svl/SVL.Avalonia"
+          export DOTNET_HOST_TRACE=1 DOTNET_HOST_TRACEFILE="$RUNNER_TEMP/svl-linux-host-trace.log"
+          set +e
+          sh "$RUNNER_TEMP/svl-lite/run-svl.sh" --svl-apply-update
+          code=$?
+          set -e
+          test "$code" -eq 1
+          grep -qF 'Microsoft.NETCore.App' "$DOTNET_HOST_TRACEFILE"
 
       - name: Verify Linux archive entry points
         shell: pwsh
@@ -183,6 +228,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload framework-dependent packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: SVL-Avalonia-linux-x64-requires-dotnet10
+          path: |
+            artifacts/lightweight/*_requires_dotnet10.zip
+            artifacts/lightweight/*_requires_dotnet10.deb
+          if-no-files-found: error
+          retention-days: 14
+
   package-macos:
     name: Package macOS app bundles
     needs: test
@@ -198,18 +253,29 @@ jobs:
 
       - name: Build app bundles with NXM scheme and disk images
         shell: pwsh
-        run: ./build.ps1 -Config Release -Targets macos -OutputDirectory artifacts
+        run: |
+          ./build.ps1 -Config Release -Targets macos -OutputDirectory artifacts/bundled
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled build failed.' }
+          ./build.ps1 -Config Release -Targets macos -OutputDirectory artifacts/lightweight -FrameworkDependent
+          if ($LASTEXITCODE -ne 0) { throw 'Framework-dependent build failed.' }
 
       - name: Verify both app bundles declare the NXM scheme
         shell: pwsh
         run: |
-          $bundles = @(Get-ChildItem artifacts -Directory -Filter '*.app')
-          if ($bundles.Count -ne 2) { throw "Expected 2 macOS app bundles; found $($bundles.Count)." }
+          $bundles = @(Get-ChildItem artifacts/bundled,artifacts/lightweight -Directory -Filter '*.app')
+          if ($bundles.Count -ne 4) { throw "Expected 4 macOS app bundles; found $($bundles.Count)." }
           foreach ($bundle in $bundles) {
             $plist = Join-Path $bundle.FullName 'Contents/Info.plist'
             $apphost = Join-Path $bundle.FullName 'Contents/MacOS/SVL.Avalonia'
+            $coreclr = Join-Path $bundle.FullName 'Contents/MacOS/libcoreclr.dylib'
             if (-not (Test-Path -LiteralPath $plist -PathType Leaf)) { throw "Missing Info.plist: $plist" }
             if (-not (Test-Path -LiteralPath $apphost -PathType Leaf)) { throw "Missing macOS apphost: $apphost" }
+            if ($bundle.Name -like '*_requires_dotnet10.app') {
+              if (Test-Path -LiteralPath $coreclr) { throw "Framework-dependent app includes a runtime: $bundle" }
+              $runtimeconfig = Join-Path $bundle.FullName 'Contents/MacOS/SVL.Avalonia.runtimeconfig.json'
+              $framework = (Get-Content -Raw $runtimeconfig | ConvertFrom-Json).runtimeOptions.framework.name
+              if ($framework -ne 'Microsoft.NETCore.App') { throw "Incorrect runtime requirement in $bundle" }
+            } elseif (-not (Test-Path -LiteralPath $coreclr)) { throw "Bundled app is missing its runtime: $bundle" }
             & codesign --verify --deep --strict $bundle.FullName
             if ($LASTEXITCODE -ne 0) { throw "Invalid macOS app signature: $bundle" }
             & plutil -lint $plist
@@ -223,8 +289,8 @@ jobs:
               throw "Unexpected macOS minimum system version in ${plist}: $minimumSystemVersion"
             }
           }
-          $images = @(Get-ChildItem artifacts -File -Filter '*.dmg')
-          if ($images.Count -ne 2) { throw "Expected 2 macOS disk images; found $($images.Count)." }
+          $images = @(Get-ChildItem artifacts/bundled,artifacts/lightweight -File -Filter '*.dmg')
+          if ($images.Count -ne 4) { throw "Expected 4 macOS disk images; found $($images.Count)." }
           $expectedLayout = (Get-FileHash packaging/macos/installer-layout.dsstore -Algorithm SHA256).Hash
           foreach ($image in $images) {
             $mount = Join-Path ([IO.Path]::GetTempPath()) ("svl-dmg-test-" + [guid]::NewGuid().ToString('N'))
@@ -253,10 +319,31 @@ jobs:
             }
           }
 
+      - name: Smoke-test native framework-dependent macOS app
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            arm64) arch=arm64 ;;
+            x86_64) arch=x64 ;;
+            *) echo 'Unsupported runner architecture' >&2; exit 1 ;;
+          esac
+          app=$(find artifacts/lightweight -maxdepth 1 -type d -name "*_${arch}_requires_dotnet10.app" -print -quit)
+          test -n "$app"
+          export DOTNET_HOST_TRACE=1 DOTNET_HOST_TRACEFILE="$RUNNER_TEMP/svl-macos-host-trace.log"
+          set +e
+          "$app/Contents/MacOS/SVL.Avalonia" --svl-apply-update
+          code=$?
+          set -e
+          test "$code" -eq 1
+          grep -qF 'Microsoft.NETCore.App' "$DOTNET_HOST_TRACEFILE"
+
       - name: Upload packages
         uses: actions/upload-artifact@v7
         with:
           name: SVL-Avalonia-macos-apps
-          path: artifacts/*.dmg
+          path: |
+            artifacts/bundled/*.dmg
+            artifacts/lightweight/*.dmg
           if-no-files-found: error
           retention-days: 14
