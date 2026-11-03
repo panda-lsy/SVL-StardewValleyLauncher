@@ -68,6 +68,34 @@ jobs:
           New-Item -ItemType Directory -Force artifacts/legacy-upgrade | Out-Null
           Copy-Item -LiteralPath artifacts/win-x64/SVL.Avalonia.exe -Destination "artifacts/legacy-upgrade/SVL.Desktop_v${version}_Release.exe"
 
+      - name: Verify Linux ZIP generated on Windows
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'svl-linux-cross'
+          ./build.ps1 -Config Release -Targets linux -OutputDirectory $output
+          if ($LASTEXITCODE -ne 0) { throw 'Linux cross-build failed.' }
+          $archive = Get-ChildItem $output -Filter 'SVL_v*_release_Linux_x64.zip' | Select-Object -First 1
+          if ($null -eq $archive) { throw 'Linux archive was not generated.' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($archive.FullName)
+          try {
+            $entry = $zip.GetEntry('run-svl.sh')
+            if ($null -eq $entry) { throw 'Linux launcher script is missing.' }
+            $stream = $entry.Open()
+            $memory = [System.IO.MemoryStream]::new()
+            try {
+              $stream.CopyTo($memory)
+              if ([Array]::IndexOf($memory.ToArray(), [byte]13) -ge 0) {
+                throw 'Linux launcher script must not contain CR characters.'
+              }
+            } finally {
+              $memory.Dispose()
+              $stream.Dispose()
+            }
+          } finally {
+            $zip.Dispose()
+          }
+
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:

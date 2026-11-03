@@ -1,0 +1,2 @@
+# Unix shell scripts must remain executable by sh after a Windows checkout.
+*.sh text eol=lf

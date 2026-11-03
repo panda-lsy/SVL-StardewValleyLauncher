@@ -211,6 +211,9 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 chmod +x "$script_dir/__APPHOST__"
 exec "$script_dir/__APPHOST__" "$@"
 '@
+    # PowerShell preserves the source file's line endings in here-strings.
+    # A Linux launcher generated on Windows must always contain Unix newlines.
+    $launcherContent = $launcherContent.Replace("`r`n", "`n").Replace("`r", "`n")
     $launcherContent = $launcherContent.Replace("__APPHOST__", $ExecutableName) + "`n"
     [System.IO.File]::WriteAllText(
         $launcherScript,

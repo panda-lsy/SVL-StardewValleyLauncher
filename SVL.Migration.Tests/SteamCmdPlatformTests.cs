@@ -60,7 +60,7 @@ public sealed class SteamCmdPlatformTests
                 fi
                 echo 'Waiting for user info...OK'
                 exit 0
-                """);
+                """.Replace("\r\n", "\n"));
             File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             if (OperatingSystem.IsMacOS()) File.WriteAllText(Path.Combine(root, "steamcmd"), "fixture");
             else
