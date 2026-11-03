@@ -357,7 +357,7 @@ jobs:
           python3 - "$lite/Contents/MacOS/SVL.Avalonia" "$bundled/Contents/MacOS/SVL.Avalonia" <<'PY'
           import subprocess
           import sys
-          for executable, expected in zip(sys.argv[1:], (42, 41), strict=True):
+          for executable, expected in zip(sys.argv[1:], (42, 41)):
               result = subprocess.run([executable], timeout=30, check=False)
               if result.returncode != expected:
                   raise SystemExit(f"Incorrect runtime mode in {executable}: {result.returncode}")
