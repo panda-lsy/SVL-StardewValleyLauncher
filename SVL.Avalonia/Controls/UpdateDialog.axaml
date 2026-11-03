@@ -8,7 +8,7 @@
         WindowStartupLocation="CenterOwner"
         Title="启动器更新">
   <Border Padding="16">
-    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
       <TextBlock Text="发现新版本" FontSize="20" FontWeight="SemiBold" />
 
       <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,8,0,8">
@@ -23,7 +23,12 @@
         <TextBlock Grid.Column="3" x:Name="PublishedAtText" Text="-" Margin="8,0,0,0" />
       </Grid>
 
-      <Border Grid.Row="3" Classes="hintCard" Padding="10">
+      <StackPanel Grid.Row="3" Margin="0,0,0,10" Spacing="4">
+        <TextBlock x:Name="RuntimeModeText" Text="当前包体：-" />
+        <TextBlock x:Name="RuntimeWarningText" Text="未找到与当前包体一致的更新文件，请前往发布页手动选择。" TextWrapping="Wrap" IsVisible="False" />
+      </StackPanel>
+
+      <Border Grid.Row="4" Classes="hintCard" Padding="10">
         <Grid RowDefinitions="Auto,*">
           <TextBlock Text="更新日志" FontWeight="SemiBold" Margin="0,0,0,8" />
           <TextBox Grid.Row="1"
@@ -37,7 +42,7 @@
       </Border>
 
       <!-- 下载进度区（下载中可见） -->
-      <StackPanel Grid.Row="4" x:Name="ProgressPanel" Spacing="6" Margin="0,10,0,0" IsVisible="False">
+      <StackPanel Grid.Row="5" x:Name="ProgressPanel" Spacing="6" Margin="0,10,0,0" IsVisible="False">
         <Grid ColumnDefinitions="*,Auto">
           <ProgressBar Grid.Column="0" x:Name="DownloadProgress" Minimum="0" Maximum="100" Height="10" />
           <TextBlock Grid.Column="1" x:Name="ProgressText" Text="0%" Margin="8,0,0,0" VerticalAlignment="Center" />
@@ -45,13 +50,13 @@
         <TextBlock x:Name="SizeText" Text="" FontSize="12" Opacity="0.7" />
       </StackPanel>
 
-      <Grid Grid.Row="5" ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="0,12,0,0">
-        <TextBlock Text="可选择忽略此版本、应用内下载，或跳转到发布页。" Opacity="0.75" VerticalAlignment="Center" />
-        <Button Grid.Column="1" Content="忽略此版本" Click="SkipVersion_Click" Margin="8,0,0,0" />
-        <Button Grid.Column="2" Content="稍后" Click="Later_Click" Margin="8,0,0,0" />
-        <Button Grid.Column="3" x:Name="DownloadButton" Content="应用内下载" Click="DownloadButton_Click" Margin="8,0,0,0" Classes="accent" />
-        <Button Grid.Column="4" x:Name="CancelDownloadButton" Content="取消下载" Click="CancelDownloadButton_Click" Margin="8,0,0,0" IsVisible="False" />
-      </Grid>
+      <WrapPanel Grid.Row="6" HorizontalAlignment="Right" Margin="0,12,0,0">
+        <Button Content="忽略此版本" Click="SkipVersion_Click" Margin="0,0,8,0" />
+        <Button Content="稍后" Click="Later_Click" Margin="0,0,8,0" />
+        <Button x:Name="OpenReleaseButton" Content="前往发布页" Click="OpenRelease_Click" Margin="0,0,8,0" />
+        <Button x:Name="DownloadButton" Content="应用内下载" Click="DownloadButton_Click" Margin="0,0,8,0" Classes="accent" />
+        <Button x:Name="CancelDownloadButton" Content="取消下载" Click="CancelDownloadButton_Click" IsVisible="False" />
+      </WrapPanel>
     </Grid>
   </Border>
 </Window>

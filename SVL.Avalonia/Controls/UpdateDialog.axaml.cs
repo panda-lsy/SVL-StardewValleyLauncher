@@ -46,16 +46,25 @@ public partial class UpdateDialog : Window
             ChangelogText.Text = "暂无更新日志";
         }
 
-        // 无可用资产时隐藏应用内下载按钮
-        var hasAsset = releaseInfo.Assets.Count > 0;
-        DownloadButton.IsVisible = hasAsset;
+        UpdateRuntimeDisplay(LauncherUpdateService.DetectCurrentRuntimeMode());
     }
 
     /// <summary>注入更新服务以支持应用内下载（由 DialogService 调用）。</summary>
     internal void InitializeForDownload(LauncherUpdateService updateService, bool autoDownload = false)
     {
         _updateService = updateService;
-        _autoDownloadOnOpen = autoDownload;
+        UpdateRuntimeDisplay(updateService.RuntimeMode);
+        _autoDownloadOnOpen = autoDownload && DownloadButton.IsVisible;
+    }
+
+    private void UpdateRuntimeDisplay(LauncherRuntimeMode runtimeMode)
+    {
+        RuntimeModeText.Text = $"当前包体：{LauncherUpdateService.DescribeRuntimeMode(runtimeMode)}";
+        var asset = _releaseInfo == null
+            ? null
+            : LauncherUpdateService.SelectPreferredAsset(_releaseInfo, runtimeMode, OperatingSystem.IsWindows());
+        DownloadButton.IsVisible = asset != null;
+        RuntimeWarningText.IsVisible = asset == null;
     }
 
     private async void UpdateDialog_Opened(object? sender, EventArgs e)
@@ -100,7 +109,7 @@ public partial class UpdateDialog : Window
             return;
         }
 
-        var asset = LauncherUpdateService.SelectPreferredAsset(_releaseInfo);
+        var asset = _updateService.SelectPreferredAsset(_releaseInfo);
         if (asset == null)
         {
             ProgressText.Text = "没有适合当前平台的更新文件";

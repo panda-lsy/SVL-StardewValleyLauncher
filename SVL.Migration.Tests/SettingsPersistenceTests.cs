@@ -25,7 +25,7 @@ public sealed class SettingsPersistenceTests
             {
                 var payload = Encoding.UTF8.GetBytes("update file");
                 var handler = new FakeUpdateHandler(payload);
-                var service = new LauncherUpdateService(new HttpClient(handler), Path.Combine(root, "downloads"));
+                var service = new LauncherUpdateService(new HttpClient(handler), Path.Combine(root, "downloads"), LauncherRuntimeMode.SelfContained);
                 var store = new AppUserSettingsStore(Path.Combine(root, "config"));
                 var vm = CreateViewModel(store, service);
                 vm.ShowUpdateNotification = false;

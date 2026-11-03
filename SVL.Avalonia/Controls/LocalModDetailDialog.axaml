@@ -91,7 +91,7 @@
 													BorderThickness="0"
 													Padding="0"
 													HorizontalContentAlignment="Left"
-													Cursor="Hand">
+													Cursor="{DynamicResource Svl.Cursor.Hand}">
 											<TextBlock FontSize="12">
 												<Run Text="{Binding StatusPrefix}" Foreground="{Binding StatusPrefixColor}" />
 														<Run Text="{Binding StatusSuffix}" Foreground="{DynamicResource AccentBrush}" />

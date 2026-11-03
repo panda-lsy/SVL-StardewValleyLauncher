@@ -178,7 +178,7 @@
             </Grid>
             <Grid ColumnDefinitions="*,Auto">
               <TextBox Grid.Column="0" Text="{Binding SmapiSearchText}" Watermark="{Binding SmapiSearchWatermarkText}" Margin="0,0,8,0" />
-              <Button Grid.Column="1" Content="{Binding SearchButtonText}" Command="{Binding SearchSmapiCommand}" />
+              <Button Grid.Column="1" Content="{Binding SearchButtonText}" Command="{Binding SearchSmapiCommand}" Cursor="{DynamicResource Svl.Cursor.Search}" />
             </Grid>
             <ComboBox ItemsSource="{Binding SmapiSources}" SelectedItem="{Binding SelectedSmapiSource}" />
           </StackPanel>
@@ -189,7 +189,7 @@
             <TextBlock Text="{Binding ModSearchTitleText}" Classes="hintTitle" />
             <Grid ColumnDefinitions="*,Auto">
               <TextBox Grid.Column="0" Text="{Binding ModSearchText}" Watermark="{Binding ModSearchWatermarkText}" Margin="0,0,8,0" />
-              <Button Grid.Column="1" Content="{Binding SearchButtonText}" Command="{Binding SearchModsCommand}" />
+              <Button Grid.Column="1" Content="{Binding SearchButtonText}" Command="{Binding SearchModsCommand}" Cursor="{DynamicResource Svl.Cursor.Search}" />
             </Grid>
             <!-- 来源/版本/类型 + 重置：左标题右下拉框单行 -->
             <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,*,Auto" Margin="0,2,0,0">
@@ -238,7 +238,7 @@
             <Grid ColumnDefinitions="*,Auto,Auto">
               <TextBox Grid.Column="0" Text="{Binding ModpackSearchText}" Watermark="输入 Modpack 关键词" Margin="0,0,8,0" />
               <ComboBox Grid.Column="1" ItemsSource="{Binding ModpackSources}" SelectedItem="{Binding SelectedModpackSource}" Width="120" Margin="0,0,8,0" />
-              <Button Grid.Column="2" Content="{Binding SearchButtonText}" Command="{Binding SearchModpacksCommand}" />
+              <Button Grid.Column="2" Content="{Binding SearchButtonText}" Command="{Binding SearchModpacksCommand}" Cursor="{DynamicResource Svl.Cursor.Search}" />
             </Grid>
           </StackPanel>
         </Border>

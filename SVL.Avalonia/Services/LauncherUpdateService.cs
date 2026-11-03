@@ -20,11 +20,18 @@ public sealed class LauncherUpdateService
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> DownloadLocks = new(StringComparer.Ordinal);
     private readonly HttpClient _httpClient;
     private readonly string _downloadDirectory;
+    private readonly LauncherRuntimeMode _runtimeMode;
 
     public LauncherUpdateService(HttpClient? httpClient = null, string? downloadDirectory = null)
+        : this(httpClient, downloadDirectory, DetectCurrentRuntimeMode())
+    {
+    }
+
+    internal LauncherUpdateService(HttpClient? httpClient, string? downloadDirectory, LauncherRuntimeMode runtimeMode)
     {
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
         _downloadDirectory = downloadDirectory ?? Path.Combine(Path.GetTempPath(), "SVL", "launcher-update");
+        _runtimeMode = runtimeMode;
     }
 
     private LauncherReleaseInfo? _cachedRelease;
@@ -34,6 +41,7 @@ public sealed class LauncherUpdateService
     private string _cachedSource = "-";
 
     public Version CurrentVersion => ResolveCurrentVersion();
+    public LauncherRuntimeMode RuntimeMode => _runtimeMode;
 
     public static bool IncludesPrerelease(string? channel) =>
         !string.IsNullOrWhiteSpace(channel) &&
@@ -44,11 +52,38 @@ public sealed class LauncherUpdateService
     public static bool PrefersGitee(string? source) =>
         !string.IsNullOrWhiteSpace(source) && source.Contains("Gitee", StringComparison.OrdinalIgnoreCase);
 
-    public static LauncherReleaseAsset? SelectPreferredAsset(LauncherReleaseInfo release) =>
-        release.Assets
-            .Where(asset => !asset.Name.Contains("requires_dotnet", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(asset => OperatingSystem.IsWindows() && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+    internal static LauncherRuntimeMode DetectCurrentRuntimeMode() =>
+        ParseRuntimeMode(typeof(LauncherUpdateService).Assembly
+            .GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => attribute.Key == "SVL.RuntimeMode")?.Value);
+
+    internal static LauncherRuntimeMode ParseRuntimeMode(string? mode) => mode switch
+    {
+        "self-contained" => LauncherRuntimeMode.SelfContained,
+        "framework-dependent" => LauncherRuntimeMode.FrameworkDependent,
+        _ => LauncherRuntimeMode.Unknown
+    };
+
+    public static string DescribeRuntimeMode(LauncherRuntimeMode mode) => mode switch
+    {
+        LauncherRuntimeMode.SelfContained => "自带运行环境",
+        LauncherRuntimeMode.FrameworkDependent => "轻量版（需要 .NET 10）",
+        _ => "未识别（请手动选择下载包）"
+    };
+
+    public LauncherReleaseAsset? SelectPreferredAsset(LauncherReleaseInfo release) =>
+        SelectPreferredAsset(release, _runtimeMode, OperatingSystem.IsWindows());
+
+    internal static LauncherReleaseAsset? SelectPreferredAsset(LauncherReleaseInfo release, LauncherRuntimeMode mode, bool isWindows)
+    {
+        if (mode == LauncherRuntimeMode.Unknown) return null;
+
+        return release.Assets
+            .Where(asset => asset.Name.Contains("requires_dotnet", StringComparison.OrdinalIgnoreCase) ==
+                            (mode == LauncherRuntimeMode.FrameworkDependent))
+            .OrderBy(asset => isWindows && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
             .FirstOrDefault();
+    }
 
     /// <summary>
     /// 下载指定资产到本地临时文件，报告进度（0-100）与已下载字节数。
@@ -401,7 +436,6 @@ public sealed class LauncherUpdateService
             return false;
         }
 
-        if (assetName.Contains("requires_dotnet", StringComparison.OrdinalIgnoreCase)) return false;
         var arch = RuntimeInformation.ProcessArchitecture.ToString();
         foreach (var knownArch in new[] { "x64", "x86", "arm64", "arm32" })
         {
@@ -411,18 +445,23 @@ public sealed class LauncherUpdateService
 
         if (OperatingSystem.IsWindows())
         {
-            return assetName.Contains("Windows_", StringComparison.OrdinalIgnoreCase) ||
+            return (assetName.Contains("Windows_", StringComparison.OrdinalIgnoreCase) &&
+                    assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) ||
                    assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
         }
 
         if (OperatingSystem.IsMacOS())
         {
-            return assetName.Contains("osx_", StringComparison.OrdinalIgnoreCase) ||
-                   assetName.Contains("macOS_", StringComparison.OrdinalIgnoreCase);
+            return (assetName.Contains("osx_", StringComparison.OrdinalIgnoreCase) ||
+                    assetName.Contains("macOS_", StringComparison.OrdinalIgnoreCase)) &&
+                   (assetName.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase) ||
+                    assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
         }
 
-        return assetName.Contains("linux_", StringComparison.OrdinalIgnoreCase) ||
-               assetName.Contains("linux-", StringComparison.OrdinalIgnoreCase);
+        return (assetName.Contains("linux_", StringComparison.OrdinalIgnoreCase) ||
+                assetName.Contains("linux-", StringComparison.OrdinalIgnoreCase)) &&
+               (assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                assetName.EndsWith(".deb", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsDebugBuild

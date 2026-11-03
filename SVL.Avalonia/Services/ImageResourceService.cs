@@ -23,7 +23,7 @@ public sealed class ImageResourceService
                     ["download.category.mods"] = "avares://SVL.Avalonia/Assets/Icons/Junimo.png",
                     ["download.category.modpacks"] = "avares://SVL.Avalonia/Assets/Icons/icon.png",
                     ["download.task.running"] = "avares://SVL.Avalonia/Assets/Icons/Junimo2.png",
-                    ["download.task.completed"] = "avares://SVL.Avalonia/Assets/Icons/Vanilla.png",
+                    ["download.task.completed"] = "avares://SVL.Avalonia/Assets/Icons/Stardew/Finish.png",
                     ["download.task.failed"] = "avares://SVL.Avalonia/Assets/Icons/Modded.png",
                     ["download.task.pending"] = "avares://SVL.Avalonia/Assets/Icons/Junimo.png",
                     ["nav.launch"] = "avares://SVL.Avalonia/Assets/Icons/Vanilla.png",

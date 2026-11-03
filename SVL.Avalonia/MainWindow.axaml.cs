@@ -328,7 +328,7 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>拖放释放时：优先识别 Mod，其次把整合包交给统一导入流程。</summary>
+    /// <summary>拖放释放时先识别 SMAPI，再区分 Mod 和整合包。</summary>
     private async void MainWindow_Drop(object? sender, DragEventArgs e)
     {
         e.Handled = true;
@@ -345,6 +345,14 @@ public partial class MainWindow : Window
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // 只读取 ZIP 目录，不改写用户文件；双层 ZIP 的检测可能耗时，应放到后台。
+        var smapiPath = await Task.Run(() => paths.FirstOrDefault(SmapiArchiveDetector.IsSmapiInstaller));
+        if (!string.IsNullOrWhiteSpace(smapiPath) && DataContext is MainWindowViewModel smapiVm)
+        {
+            await smapiVm.HandleSmapiInstallDropAsync(smapiPath);
+            return;
+        }
 
         var modPaths = paths
             .Where(path => ModArchiveDetector.LooksLikeModInstallSource(path) &&

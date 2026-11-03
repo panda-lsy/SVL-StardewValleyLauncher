@@ -13,17 +13,35 @@ namespace SVL.Migration.Tests;
 public sealed class LauncherUpdateSafetyTests
 {
     [TestMethod]
-    public void AutomaticUpdate_ShouldNeverSelectFrameworkDependentArchive()
+    public void AutomaticUpdate_ShouldSelectOnlyTheCurrentRuntimeMode()
     {
         var release = new LauncherReleaseInfo();
         var lightweight = new LauncherReleaseAsset { Name = "SVL_v1.2.0.0_release_Windows_x64_requires_dotnet10.zip" };
         var bundled = new LauncherReleaseAsset { Name = "SVL_v1.2.0.0_release_Windows_x64.zip" };
+        var bundledExe = new LauncherReleaseAsset { Name = "SVL.Desktop_v1.2.0.0_Release.exe" };
         release.Assets.Add(lightweight);
         release.Assets.Add(bundled);
+        release.Assets.Add(bundledExe);
 
-        Assert.AreSame(bundled, LauncherUpdateService.SelectPreferredAsset(release));
+        Assert.AreSame(lightweight, LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.FrameworkDependent, true));
+        Assert.AreSame(bundledExe, LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.SelfContained, true));
+        Assert.AreSame(bundled, LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.SelfContained, false));
+        Assert.IsNull(LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.Unknown, true));
         release.Assets.Remove(bundled);
-        Assert.IsNull(LauncherUpdateService.SelectPreferredAsset(release));
+        release.Assets.Remove(bundledExe);
+        Assert.IsNull(LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.SelfContained, true));
+        release.Assets.Clear();
+        release.Assets.Add(bundled);
+        Assert.IsNull(LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.FrameworkDependent, true));
+    }
+
+    [TestMethod]
+    public void RuntimeMode_ShouldRejectUnrecognizedMetadata()
+    {
+        Assert.AreEqual(LauncherRuntimeMode.SelfContained, LauncherUpdateService.ParseRuntimeMode("self-contained"));
+        Assert.AreEqual(LauncherRuntimeMode.FrameworkDependent, LauncherUpdateService.ParseRuntimeMode("framework-dependent"));
+        Assert.AreEqual(LauncherRuntimeMode.Unknown, LauncherUpdateService.ParseRuntimeMode(null));
+        Assert.AreEqual(LauncherRuntimeMode.Unknown, LauncherUpdateService.ParseRuntimeMode("other"));
     }
 
     [TestMethod]

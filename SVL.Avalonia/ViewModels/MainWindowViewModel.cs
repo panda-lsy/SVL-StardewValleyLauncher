@@ -997,6 +997,12 @@ public partial class MainWindowViewModel : ObservableObject
         await VersionSettingsPage.InstallModFromDropAsync(filePaths);
     }
 
+    /// <summary>本地 SMAPI 安装包复用下载页的实例选择和安装任务。</summary>
+    public async Task HandleSmapiInstallDropAsync(string filePath)
+    {
+        await DownloadPage.QueueLocalSmapiInstallAsync(filePath);
+    }
+
     private static bool IsPathUnderDirectory(string? path, string? directory)
     {
         if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(directory))

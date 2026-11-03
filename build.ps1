@@ -112,11 +112,13 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 function Publish-Windows {
     param([string]$Rid, [string]$PublishConfig, [string]$OutDir)
     $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
+    $runtimeMode = if ($FrameworkDependent) { "framework-dependent" } else { "self-contained" }
     # .NET 不允许压缩依赖外部运行时的单文件；ZIP 仍会压缩它的内容。
     $compressBundle = if ($FrameworkDependent) { "false" } else { "true" }
     Write-Host "[publish] $Rid ($PublishConfig single-file, self-contained=$selfContained)"
     dotnet publish $Project -c $PublishConfig -r $Rid --self-contained $selfContained `
         -p:PublishSelfContained=$selfContained `
+        -p:SvlRuntimeMode=$runtimeMode `
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:EnableCompressionInSingleFile=$compressBundle `
@@ -128,9 +130,10 @@ function Publish-Windows {
 function Publish-MacOS {
     param([string]$Rid, [string]$PublishConfig, [string]$OutDir)
     $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
+    $runtimeMode = if ($FrameworkDependent) { "framework-dependent" } else { "self-contained" }
     Write-Host "[publish] $Rid ($PublishConfig, self-contained=$selfContained)"
     dotnet publish $Project -c $PublishConfig -r $Rid --self-contained $selfContained `
-        -p:PublishSelfContained=$selfContained -o $OutDir
+        -p:PublishSelfContained=$selfContained -p:SvlRuntimeMode=$runtimeMode -t:Rebuild -o $OutDir
     if ($LASTEXITCODE -ne 0) { Write-Host "[error] publish 失败: $Rid"; exit 1 }
 }
 
@@ -183,13 +186,16 @@ function Build-Linux {
     $zipPath = Join-Path $outBase "${artifactName}.zip"
 
     $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
+    $runtimeMode = if ($FrameworkDependent) { "framework-dependent" } else { "self-contained" }
     $compressBundle = if ($FrameworkDependent) { "false" } else { "true" }
     Write-Host "[publish] $Rid ($PublishConfig single-file, self-contained=$selfContained)"
     dotnet publish $Project -c $PublishConfig -r $Rid --self-contained $selfContained `
         -p:PublishSelfContained=$selfContained `
+        -p:SvlRuntimeMode=$runtimeMode `
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:EnableCompressionInSingleFile=$compressBundle `
+        -t:Rebuild `
         -o $publishDir
     if ($LASTEXITCODE -ne 0) { Write-Host "[error] publish 失败: $Rid"; exit 1 }
 

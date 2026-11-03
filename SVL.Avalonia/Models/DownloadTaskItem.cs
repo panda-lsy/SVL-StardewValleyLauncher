@@ -535,7 +535,7 @@ public partial class DownloadTaskItem : ObservableObject
         DownloadTaskState.Resolving => "search",
         DownloadTaskState.Downloading => "download",
         DownloadTaskState.Installing => "bolt",
-        DownloadTaskState.Completed => "check-circle",
+        DownloadTaskState.Completed => "finish",
         DownloadTaskState.Failed => "exclamation-triangle",
         DownloadTaskState.Cancelled => "times-circle",
         _ => "download"

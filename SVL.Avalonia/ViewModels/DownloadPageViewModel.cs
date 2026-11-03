@@ -651,7 +651,8 @@ public partial class DownloadPageViewModel : ObservableObject
         RetryDiffReportService retryDiffReportService,
         ModpackInstallService modpackInstallService,
         CollectionInstallService collectionInstallService,
-        InstanceRegistryStore? instanceRegistryStore = null)
+        InstanceRegistryStore? instanceRegistryStore = null,
+        string? dataDirectory = null)
     {
         _localizationService = localizationService;
         _imageResourceService = imageResourceService;
@@ -681,17 +682,14 @@ public partial class DownloadPageViewModel : ObservableObject
         ApplyLocalizedTexts();
         ApplyImageResources();
 
-        _downloadRootPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SVL",
-            "Avalonia",
-            "Downloads");
-        _taskStatePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SVL",
-            "Avalonia",
-            "download-tasks-state.json");
-        _smapiIconCachePath = AssetImageConverter.IconCacheDirectory;
+        var dataRoot = string.IsNullOrWhiteSpace(dataDirectory)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SVL", "Avalonia")
+            : Path.GetFullPath(dataDirectory);
+        _downloadRootPath = Path.Combine(dataRoot, "Downloads");
+        _taskStatePath = Path.Combine(dataRoot, "download-tasks-state.json");
+        _smapiIconCachePath = string.IsNullOrWhiteSpace(dataDirectory)
+            ? AssetImageConverter.IconCacheDirectory
+            : Path.Combine(dataRoot, "IconCache");
 
         DownloadTasks.CollectionChanged += (_, args) =>
         {
@@ -2987,6 +2985,38 @@ public partial class DownloadPageViewModel : ObservableObject
 
         return (gameBasePath, instanceName);
     }
+
+    /// <summary>拖入的本地 SMAPI 包直接安装，不下载或改写源文件。</summary>
+    public async Task<bool> QueueLocalSmapiInstallAsync(string archivePath)
+    {
+        if (!await Task.Run(() => SmapiArchiveDetector.IsSmapiInstaller(archivePath)))
+        {
+            await _dialogService.ShowMessageAsync("无法识别 SMAPI 安装包", "请选择包含 SMAPI 安装数据的 ZIP 文件。");
+            return false;
+        }
+
+        var defaultName = Path.GetFileNameWithoutExtension(archivePath);
+        var (gameBasePath, instanceName) = await SelectSmapiInstallTargetAsync(defaultName);
+        if (string.IsNullOrWhiteSpace(gameBasePath) || string.IsNullOrWhiteSpace(instanceName)) return false;
+
+        var task = CreateLocalSmapiTask(archivePath, gameBasePath, instanceName);
+        EnqueueExternalTask(task, $"已加入 SMAPI 安装队列: {instanceName}");
+        return true;
+    }
+
+    internal static DownloadTaskItem CreateLocalSmapiTask(string archivePath, string gameBasePath, string instanceName) => new()
+    {
+        Name = $"SMAPI 安装 - {instanceName}",
+        Status = "已加入队列（本地 SMAPI 安装）",
+        TaskKind = DownloadTaskKind.Generic,
+        TaskAction = DownloadTaskAction.InstallSmapi,
+        SourceUrl = string.Empty,
+        OutputFilePath = Path.GetFullPath(archivePath),
+        TargetGamePath = gameBasePath,
+        TargetInstanceName = instanceName,
+        CanCancel = false,
+        CanRetry = false
+    };
 
     private async Task<bool> QueueSmapiInstallTaskFromExternalAsync(ExternalDownloadRequest request)
     {
@@ -5755,7 +5785,7 @@ public partial class DownloadPageViewModel : ObservableObject
         _ = ProcessQueueAsync();
     }
 
-    private async Task ExecuteTaskAsync(DownloadTaskItem task)
+    internal async Task ExecuteTaskAsync(DownloadTaskItem task)
     {
         // 兼容早期状态/外部入队记录：SMAPI 曾经可能以普通 Mod 动作落盘。
         // 必须在下载前纠正动作，避免下载完成后才进入 SMAPI 分支并临时询问
@@ -5845,6 +5875,24 @@ public partial class DownloadPageViewModel : ObservableObject
         if (task.TaskKind == DownloadTaskKind.NxmCollection)
         {
             await ExecuteCollectionTaskAsync(task);
+            return;
+        }
+
+        if (task.TaskAction == DownloadTaskAction.InstallSmapi && !HasRealDownloadSource(task))
+        {
+            if (!await Task.Run(() => SmapiArchiveDetector.IsSmapiInstaller(task.OutputFilePath)))
+            {
+                task.SetState(DownloadTaskState.Failed, "本地 SMAPI 安装包不可用（可重试）");
+                task.FailedDetails = "找不到有效的本地 SMAPI 安装包，请检查原文件是否被移动或删除。";
+                task.CanRetry = true;
+                task.CanCancel = false;
+                Status = $"任务失败: {task.Name}";
+                TaskStateChanged?.Invoke(task);
+                SaveTaskState();
+                return;
+            }
+
+            await ExecuteSmapiInstallTaskAsync(task);
             return;
         }
 
@@ -6748,90 +6796,7 @@ public partial class DownloadPageViewModel : ObservableObject
 
         if (task.TaskAction == DownloadTaskAction.InstallSmapi)
         {
-            // 下载阶段的 100% 只代表安装包已经落盘；SMAPI 安装仍未完成，
-            // 不能让任务页在安装开始前继续显示满格。
-            task.Progress = 0;
-            task.SetState(DownloadTaskState.Installing, "安装中（SMAPI）");
-            TaskStateChanged?.Invoke(task);
-            EmitLog($"下载完成，开始安装 SMAPI: {task.OutputFilePath}");
-
-            // 安装阶段使用新的 CTS（下载阶段的 cts 已在 finally 中 Dispose）
-            var smapiCts = new CancellationTokenSource();
-            _runningTaskCancellationSources[task] = smapiCts;
-            SmapiInstallResult smapiResult;
-            try
-            {
-                // 兼容旧任务状态：TargetGamePath 可能保存的是
-                // versions/<实例> 或 versions/<实例>/game。SMAPI 安装器接收的
-                // 必须是 Base 路径，否则重启后会再次创建嵌套的 versions 目录。
-                var smapiBasePath = InstanceRuntimePathResolver.ResolveBasePath(task.TargetGamePath);
-                if (string.IsNullOrWhiteSpace(smapiBasePath))
-                {
-                    smapiBasePath = task.TargetGamePath;
-                }
-
-                task.TargetGamePath = smapiBasePath;
-                smapiResult = await _smapiInstallService.InstallFromZipAsync(
-                    task.OutputFilePath,
-                    smapiBasePath,
-                    task.TargetInstanceName,
-                    cancellationToken: smapiCts.Token,
-                    logger: msg => EmitLog($"[SMAPI] {msg}"),
-                    updateExisting: HasPreviouslyInstalledSmapiRuntime(task));
-            }
-            catch (Exception ex)
-            {
-                smapiResult = SmapiInstallResult.Failed($"SMAPI 安装异常: {ex.Message}");
-            }
-            finally
-            {
-                smapiCts.Dispose();
-                _runningTaskCancellationSources.TryRemove(task, out _);
-            }
-
-            if (!smapiResult.IsSuccess)
-            {
-                // 取消态不可重试（避免重试撞残留目录）；仅失败态可重试
-                task.SetState(smapiResult.IsCancelled ? DownloadTaskState.Cancelled : DownloadTaskState.Failed, smapiResult.IsCancelled ? "安装已取消" : "安装失败（可重试）");
-                task.CanRetry = !smapiResult.IsCancelled;
-                Status = $"任务失败: {task.Name}";
-                TaskStateChanged?.Invoke(task);
-                SaveTaskState();
-                EmitLog($"SMAPI 安装失败: {task.Name}, 错误: {smapiResult.Message}");
-                return;
-            }
-
-            task.InstalledPath = smapiResult.RuntimePath;
-            task.SetState(DownloadTaskState.Completed, "已完成（SMAPI）");
-            TaskStateChanged?.Invoke(task);
-            Status = $"SMAPI 安装完成: {task.TargetInstanceName}";
-
-            // 写入 SMAPI 预设图标（Modded.png），与 VersionSettingsPageViewModel.ChangeSmapiVersionAsync 一致。
-            // SMAPI 图标使用独立命名空间，不能复用 Base 原版的通用图标。
-            var iconWritten = Services.InstanceIconResolver.TryWriteDefaultSmapiIcon(smapiResult.RuntimePath);
-            var iconStorageDir = Services.InstanceIconResolver.ResolveStorageDirectory(smapiResult.RuntimePath);
-            var iconFilePath = string.IsNullOrWhiteSpace(iconStorageDir)
-                ? string.Empty
-                : System.IO.Path.Combine(iconStorageDir, ".svl-instance-icon-smapi.png");
-            var resolvedIconPath = Services.InstanceIconResolver.ResolveIconPath(smapiResult.RuntimePath, isSmapiInstance: true);
-            var iconFileExists = !string.IsNullOrWhiteSpace(resolvedIconPath) && System.IO.File.Exists(resolvedIconPath);
-            EmitLog($"SMAPI 图标写入: {(iconWritten ? "成功" : "失败/已存在")}, 路径={smapiResult.RuntimePath}, 文件存在={iconFileExists}, 实际位置={resolvedIconPath}, 预期位置={iconFilePath}");
-
-            var settings = _settingsStore.Load();
-            settings.PreferredInstancePath = smapiResult.RuntimePath;
-            settings.InstanceName = task.TargetInstanceName;
-            settings.PreferredLaunchMode = "SMAPI";
-            _settingsStore.Save(settings);
-            RefreshGamePathState();
-
-            SaveTaskState();
-            EmitLog($"SMAPI 安装完成: 实例={task.TargetInstanceName}, 路径={task.InstalledPath}");
-
-            // 通知 MainWindowViewModel 刷新 LaunchPage/InstancesPage 的实例图标与状态
-            // 解决：SMAPI 安装后图标仍显示 Vanilla.png 的问题（页面未刷新读取新写入的 .svl-instance-icon-smapi.png）
-            // 必须 Dispatcher.UIThread.Post：安装流程经 SemaphoreSlim+Task.Run 后延续在线程池线程，
-            // 非 UI 线程触发 PropertyChanged 不会传播到控件
-            Dispatcher.UIThread.Post(() => InstanceContextChanged?.Invoke());
+            await ExecuteSmapiInstallTaskAsync(task);
             return;
         }
 
@@ -7089,6 +7054,101 @@ public partial class DownloadPageViewModel : ObservableObject
         // 更新任务可能替换了一个包含多个子 Mod 的复合目录。通知外层刷新，
         // 让列表从磁盘重新读取新的 manifest/source，而不是继续显示旧对象状态。
         Dispatcher.UIThread.Post(() => ModInstallationCompleted?.Invoke());
+    }
+
+    /// <summary>共享在线下载和本地拖放的 SMAPI 安装阶段。</summary>
+    private async Task ExecuteSmapiInstallTaskAsync(DownloadTaskItem task)
+    {
+        // 下载阶段的 100% 只代表安装包已经落盘；SMAPI 安装仍未完成，
+        // 不能让任务页在安装开始前继续显示满格。
+        task.Progress = 0;
+        task.CanRetry = false;
+        task.SetState(DownloadTaskState.Installing, "安装中（SMAPI）");
+        TaskStateChanged?.Invoke(task);
+        EmitLog($"开始安装 SMAPI: {task.OutputFilePath}");
+
+        // 安装阶段使用新的 CTS（下载阶段的 cts 已在 finally 中 Dispose）
+        var smapiCts = new CancellationTokenSource();
+        _runningTaskCancellationSources[task] = smapiCts;
+        task.CanCancel = true;
+        SmapiInstallResult smapiResult;
+        try
+        {
+            // 兼容旧任务状态：TargetGamePath 可能保存的是
+            // versions/<实例> 或 versions/<实例>/game。SMAPI 安装器接收的
+            // 必须是 Base 路径，否则重启后会再次创建嵌套的 versions 目录。
+            var smapiBasePath = InstanceRuntimePathResolver.ResolveBasePath(task.TargetGamePath);
+            if (string.IsNullOrWhiteSpace(smapiBasePath))
+            {
+                smapiBasePath = task.TargetGamePath;
+            }
+
+            task.TargetGamePath = smapiBasePath;
+            smapiResult = await _smapiInstallService.InstallFromZipAsync(
+                task.OutputFilePath,
+                smapiBasePath,
+                task.TargetInstanceName,
+                cancellationToken: smapiCts.Token,
+                logger: msg => EmitLog($"[SMAPI] {msg}"),
+                updateExisting: HasPreviouslyInstalledSmapiRuntime(task));
+        }
+        catch (Exception ex)
+        {
+            smapiResult = SmapiInstallResult.Failed($"SMAPI 安装异常: {ex.Message}");
+        }
+        finally
+        {
+            smapiCts.Dispose();
+            _runningTaskCancellationSources.TryRemove(task, out _);
+            task.CanCancel = false;
+        }
+
+        if (!smapiResult.IsSuccess)
+        {
+            // 取消态不可重试（避免重试撞残留目录）；仅失败态可重试
+            task.SetState(smapiResult.IsCancelled ? DownloadTaskState.Cancelled : DownloadTaskState.Failed, smapiResult.IsCancelled ? "安装已取消" : "安装失败（可重试）");
+            task.CanRetry = !smapiResult.IsCancelled;
+            task.FailedDetails = smapiResult.Message;
+            Status = $"任务失败: {task.Name}";
+            TaskStateChanged?.Invoke(task);
+            SaveTaskState();
+            EmitLog($"SMAPI 安装失败: {task.Name}, 错误: {smapiResult.Message}");
+            return;
+        }
+
+        task.InstalledPath = smapiResult.RuntimePath;
+        task.InstalledDirectory = smapiResult.VersionRootPath;
+        task.Progress = 100;
+        task.SetState(DownloadTaskState.Completed, "已完成（SMAPI）");
+        TaskStateChanged?.Invoke(task);
+        Status = $"SMAPI 安装完成: {task.TargetInstanceName}";
+
+        // 写入 SMAPI 预设图标（Modded.png），与 VersionSettingsPageViewModel.ChangeSmapiVersionAsync 一致。
+        // SMAPI 图标使用独立命名空间，不能复用 Base 原版的通用图标。
+        var iconWritten = Services.InstanceIconResolver.TryWriteDefaultSmapiIcon(smapiResult.RuntimePath);
+        var iconStorageDir = Services.InstanceIconResolver.ResolveStorageDirectory(smapiResult.RuntimePath);
+        var iconFilePath = string.IsNullOrWhiteSpace(iconStorageDir)
+            ? string.Empty
+            : System.IO.Path.Combine(iconStorageDir, ".svl-instance-icon-smapi.png");
+        var resolvedIconPath = Services.InstanceIconResolver.ResolveIconPath(smapiResult.RuntimePath, isSmapiInstance: true);
+        var iconFileExists = !string.IsNullOrWhiteSpace(resolvedIconPath) && System.IO.File.Exists(resolvedIconPath);
+        EmitLog($"SMAPI 图标写入: {(iconWritten ? "成功" : "失败/已存在")}, 路径={smapiResult.RuntimePath}, 文件存在={iconFileExists}, 实际位置={resolvedIconPath}, 预期位置={iconFilePath}");
+
+        var settings = _settingsStore.Load();
+        settings.PreferredInstancePath = smapiResult.RuntimePath;
+        settings.InstanceName = task.TargetInstanceName;
+        settings.PreferredLaunchMode = "SMAPI";
+        _settingsStore.Save(settings);
+        RefreshGamePathState();
+
+        SaveTaskState();
+        EmitLog($"SMAPI 安装完成: 实例={task.TargetInstanceName}, 路径={task.InstalledPath}");
+
+        // 通知 MainWindowViewModel 刷新 LaunchPage/InstancesPage 的实例图标与状态
+        // 解决：SMAPI 安装后图标仍显示 Vanilla.png 的问题（页面未刷新读取新写入的 .svl-instance-icon-smapi.png）
+        // 必须 Dispatcher.UIThread.Post：安装流程经 SemaphoreSlim+Task.Run 后延续在线程池线程，
+        // 非 UI 线程触发 PropertyChanged 不会传播到控件
+        Dispatcher.UIThread.Post(() => InstanceContextChanged?.Invoke());
     }
 
     private async Task ExecuteCollectionTaskAsync(DownloadTaskItem task)

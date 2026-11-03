@@ -84,6 +84,7 @@
           <Button Grid.Column="2"
                   Classes="instanceAction"
                   ToolTip.Tip="收藏"
+                  Cursor="{DynamicResource Svl.Cursor.Favorite}"
                   Margin="4,0,0,0"
               Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                   CommandParameter="{Binding}">
@@ -148,7 +149,7 @@
                   BorderThickness="2"
                   CornerRadius="6"
                   Padding="12,10"
-                  Cursor="Hand">
+                  Cursor="{DynamicResource Svl.Cursor.Hand}">
             <ContentPresenter Content="{TemplateBinding Content}"
                               ContentTemplate="{TemplateBinding ContentTemplate}"
                               HorizontalAlignment="Stretch"
@@ -350,6 +351,7 @@
         <Grid Grid.Row="3" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" Margin="0,0,0,8">
           <Button Grid.Row="0" Grid.Column="0"
             Classes="pathAction primary"
+            Cursor="{DynamicResource Svl.Cursor.Add}"
             Content="{Binding AddManualButtonText}"
             Command="{Binding AddInstanceCommand}"
             Margin="0,0,4,4" />

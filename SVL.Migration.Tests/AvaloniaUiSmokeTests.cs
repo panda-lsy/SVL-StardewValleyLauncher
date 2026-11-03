@@ -36,13 +36,25 @@ public sealed class AvaloniaUiSmokeTests
             var application = Application.Current!;
             Assert.IsTrue(GameCursorService.TryInstall(application), "自定义指针应能由当前平台加载");
             Assert.AreEqual(new PixelPoint(0, 0), GameCursorService.NormalCursorHotspot);
+            using var originalCursorStream = AssetLoader.Open(new Uri(GameCursorService.NormalCursorUri));
+            using var originalCursor = new Bitmap(originalCursorStream);
+            using var scaledCursor = GameCursorService.LoadScaledBitmap(GameCursorService.NormalCursorUri);
+            Assert.AreEqual(new PixelSize(originalCursor.PixelSize.Width * 2, originalCursor.PixelSize.Height * 2),
+                scaledCursor.PixelSize, "指针素材应按最近邻放大，避免显示过小");
 
             var explicitCursor = new Cursor(StandardCursorType.Hand);
             var link = new Button { Cursor = explicitCursor, Content = "链接" };
+            var defaultButton = new Button { Content = "普通按钮" };
+            var textCursor = new Cursor(StandardCursorType.Ibeam);
+            var input = new TextBox { Cursor = textCursor };
+            var defaultInput = new TextBox();
             var popupContent = new Border { Width = 50, Height = 30 };
             var popup = new global::Avalonia.Controls.Primitives.Popup { PlacementTarget = link, Child = popupContent };
             var panel = new Grid();
             panel.Children.Add(link);
+            panel.Children.Add(defaultButton);
+            panel.Children.Add(input);
+            panel.Children.Add(defaultInput);
             panel.Children.Add(popup);
             var window = new Window { Content = panel, Width = 180, Height = 100 };
             try
@@ -51,6 +63,9 @@ public sealed class AvaloniaUiSmokeTests
                 window.UpdateLayout();
                 Assert.IsNotNull(window.Cursor, "窗口应使用游戏默认指针");
                 Assert.AreSame(explicitCursor, link.Cursor, "已有特殊指针不能被默认指针覆盖");
+                Assert.AreSame(application.Resources[GameCursorService.HandCursorResource], defaultButton.Cursor, "按钮应使用游戏手形指针");
+                Assert.AreSame(textCursor, input.Cursor, "文本输入指针不能被手形覆盖");
+                Assert.AreSame(application.Resources[GameCursorService.TextCursorResource], defaultInput.Cursor, "文本输入应保留系统 I 形指针");
                 popup.IsOpen = true;
                 window.UpdateLayout();
                 var popupRoot = TopLevel.GetTopLevel(popupContent);
@@ -61,6 +76,7 @@ public sealed class AvaloniaUiSmokeTests
             {
                 window.Close();
                 explicitCursor.Dispose();
+                textCursor.Dispose();
             }
         }, CancellationToken.None).GetAwaiter().GetResult();
     }

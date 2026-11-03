@@ -254,6 +254,8 @@ public partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private string _updateSourceText = "-";
 
+    public string CurrentLauncherRuntimeModeText => LauncherUpdateService.DescribeRuntimeMode(_launcherUpdateService.RuntimeMode);
+
     [ObservableProperty]
     private bool _isCheckingLauncherUpdate;
 
@@ -1826,7 +1828,7 @@ public partial class SettingsPageViewModel : ObservableObject
     /// <summary>无提示模式下下载到可复用缓存，不自动安装。</summary>
     public async Task DownloadUpdateInBackgroundAsync(LauncherUpdateCheckResult result)
     {
-        var asset = result.ReleaseInfo == null ? null : LauncherUpdateService.SelectPreferredAsset(result.ReleaseInfo);
+        var asset = result.ReleaseInfo == null ? null : _launcherUpdateService.SelectPreferredAsset(result.ReleaseInfo);
         if (asset == null)
         {
             UpdateStatusText = "没有适合当前平台的更新文件";

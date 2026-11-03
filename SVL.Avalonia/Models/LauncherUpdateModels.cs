@@ -1,5 +1,13 @@
 namespace SVL.Avalonia.Models;
 
+/// <summary>发布时写入程序集的运行环境类型；未知类型不得自动替换为其他类型。</summary>
+public enum LauncherRuntimeMode
+{
+    Unknown,
+    SelfContained,
+    FrameworkDependent
+}
+
 public sealed class LauncherReleaseAsset
 {
     public string Name { get; set; } = string.Empty;

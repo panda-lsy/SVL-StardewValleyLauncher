@@ -424,13 +424,15 @@
               <ComboBox ItemsSource="{Binding UpdateSourceOptions}" SelectedItem="{Binding SelectedUpdateSource}" />
               <TextBlock Text="{Binding UpdateChannelLabelText}" />
               <ComboBox ItemsSource="{Binding UpdateChannels}" SelectedItem="{Binding SelectedUpdateChannel}" />
-              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" Margin="0,2,0,2">
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,2,0,2">
                 <TextBlock Text="{Binding UpdateStatusLabelText}" Opacity="0.85" />
                 <TextBlock Grid.Column="1" Text="{Binding UpdateStatusText}" TextWrapping="Wrap" />
                 <TextBlock Grid.Row="1" Text="{Binding LatestVersionLabelText}" Opacity="0.85" Margin="0,4,0,0" />
                 <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LatestVersionText}" Margin="0,4,0,0" />
                 <TextBlock Grid.Row="2" Text="{Binding UpdateSourceLabelText}" Opacity="0.85" Margin="0,4,0,0" />
                 <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding UpdateSourceText}" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="3" Text="当前包体：" Opacity="0.85" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CurrentLauncherRuntimeModeText}" Margin="0,4,0,0" TextWrapping="Wrap" />
               </Grid>
               <Button Content="{Binding CheckUpdateButtonText}" Command="{Binding CheckLauncherUpdateCommand}" IsEnabled="{Binding CanCheckLauncherUpdate}" HorizontalAlignment="Left" />
             </StackPanel>

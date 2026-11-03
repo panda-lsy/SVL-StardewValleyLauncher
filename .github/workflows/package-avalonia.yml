@@ -66,19 +66,30 @@ jobs:
           $lite = @(Get-ChildItem artifacts/lightweight -Filter '*_requires_dotnet10.zip')
           if ($lite.Count -ne 1) { throw 'Framework-dependent Windows ZIP is missing.' }
 
-      - name: Smoke-test framework-dependent Windows executable
+      - name: Verify Windows executable runtime modes
         shell: pwsh
         run: |
-          $archive = Get-ChildItem artifacts/lightweight -File -Filter '*_requires_dotnet10.zip' | Select-Object -First 1
-          $extracted = Join-Path $env:RUNNER_TEMP 'svl-win-lite'
-          Expand-Archive -LiteralPath $archive.FullName -DestinationPath $extracted
-          $exe = Join-Path $extracted 'SVL.Avalonia.exe'
-          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Framework-dependent executable is missing.' }
-          $env:DOTNET_HOST_TRACE = '1'
-          $env:DOTNET_HOST_TRACEFILE = Join-Path $env:RUNNER_TEMP 'svl-win-host-trace.log'
-          $process = Start-Process -FilePath $exe -ArgumentList '--svl-apply-update' -PassThru -Wait -WindowStyle Hidden
-          if ($process.ExitCode -ne 1) { throw "Unexpected Windows smoke test exit code: $($process.ExitCode)" }
-          if (-not (Select-String -Path $env:DOTNET_HOST_TRACEFILE -Pattern 'Microsoft.NETCore.App' -Quiet)) { throw 'Runtime was not resolved.' }
+          $probeDir = Join-Path $env:RUNNER_TEMP 'svl-runtime-probe'
+          dotnet build scripts/RuntimeModeProbe/RuntimeModeProbe.csproj -c Release -o $probeDir
+          if ($LASTEXITCODE -ne 0) { throw 'Could not build runtime-mode probe.' }
+          $env:DOTNET_STARTUP_HOOKS = Join-Path $probeDir 'SVL.RuntimeModeProbe.dll'
+          $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = Join-Path $env:RUNNER_TEMP 'svl-bundle-extract'
+          $cases = @(
+            @{ Archive = (Get-ChildItem artifacts/bundled -File -Filter 'SVL_v*_release_Windows_x64.zip' | Select-Object -First 1); Expected = 41; Directory = 'svl-win-bundled' },
+            @{ Archive = (Get-ChildItem artifacts/lightweight -File -Filter '*_requires_dotnet10.zip' | Select-Object -First 1); Expected = 42; Directory = 'svl-win-lite' }
+          )
+          foreach ($case in $cases) {
+            $extracted = Join-Path $env:RUNNER_TEMP $case.Directory
+            Expand-Archive -LiteralPath $case.Archive.FullName -DestinationPath $extracted
+            $exe = Join-Path $extracted 'SVL.Avalonia.exe'
+            $process = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
+            if (-not $process.WaitForExit(30000)) { $process.Kill(); throw "Runtime-mode probe timed out: $exe" }
+            if ($process.ExitCode -ne $case.Expected) { throw "Incorrect runtime mode in $exe (exit $($process.ExitCode))." }
+          }
+          $legacy = (Get-ChildItem artifacts/bundled -File -Filter 'SVL.Desktop_v*_Release.exe' | Select-Object -First 1).FullName
+          $process = Start-Process -FilePath $legacy -PassThru -WindowStyle Hidden
+          if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'WPF upgrade probe timed out.' }
+          if ($process.ExitCode -ne 41) { throw 'WPF upgrade executable must be self-contained.' }
 
       - name: Verify Linux ZIP generated on Windows
         shell: pwsh
@@ -157,6 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          dotnet build scripts/RuntimeModeProbe/RuntimeModeProbe.csproj -c Release -o "$RUNNER_TEMP/svl-runtime-probe"
           zip=$(find artifacts/lightweight -maxdepth 1 -name '*_requires_dotnet10.zip' -print -quit)
           deb=$(find artifacts/lightweight -maxdepth 1 -name '*_requires_dotnet10.deb' -print -quit)
           test -n "$zip" && test -n "$deb"
@@ -166,13 +178,21 @@ jobs:
           unzip -q "$zip" -d "$RUNNER_TEMP/svl-lite"
           dpkg-deb -x "$deb" "$RUNNER_TEMP/svl-lite-deb"
           cmp "$RUNNER_TEMP/svl-lite/SVL.Avalonia" "$RUNNER_TEMP/svl-lite-deb/usr/lib/svl/SVL.Avalonia"
-          export DOTNET_HOST_TRACE=1 DOTNET_HOST_TRACEFILE="$RUNNER_TEMP/svl-linux-host-trace.log"
+          export DOTNET_STARTUP_HOOKS="$RUNNER_TEMP/svl-runtime-probe/SVL.RuntimeModeProbe.dll"
+          export DOTNET_BUNDLE_EXTRACT_BASE_DIR="$RUNNER_TEMP/svl-bundle-extract"
           set +e
-          sh "$RUNNER_TEMP/svl-lite/run-svl.sh" --svl-apply-update
+          timeout 30s sh "$RUNNER_TEMP/svl-lite/run-svl.sh"
           code=$?
           set -e
-          test "$code" -eq 1
-          grep -qF 'Microsoft.NETCore.App' "$DOTNET_HOST_TRACEFILE"
+          test "$code" -eq 42
+          bundled=$(find artifacts -maxdepth 1 -name 'SVL_v*_release_Linux_x64.zip' -print -quit)
+          mkdir -p "$RUNNER_TEMP/svl-bundled"
+          unzip -q "$bundled" -d "$RUNNER_TEMP/svl-bundled"
+          set +e
+          timeout 30s sh "$RUNNER_TEMP/svl-bundled/run-svl.sh"
+          code=$?
+          set -e
+          test "$code" -eq 41
 
       - name: Verify Linux archive entry points
         shell: pwsh
@@ -319,24 +339,29 @@ jobs:
             }
           }
 
-      - name: Smoke-test native framework-dependent macOS app
+      - name: Verify native macOS app runtime modes
         shell: bash
         run: |
           set -euo pipefail
+          dotnet build scripts/RuntimeModeProbe/RuntimeModeProbe.csproj -c Release -o "$RUNNER_TEMP/svl-runtime-probe"
           case "$(uname -m)" in
             arm64) arch=arm64 ;;
             x86_64) arch=x64 ;;
             *) echo 'Unsupported runner architecture' >&2; exit 1 ;;
           esac
-          app=$(find artifacts/lightweight -maxdepth 1 -type d -name "*_${arch}_requires_dotnet10.app" -print -quit)
-          test -n "$app"
-          export DOTNET_HOST_TRACE=1 DOTNET_HOST_TRACEFILE="$RUNNER_TEMP/svl-macos-host-trace.log"
-          set +e
-          "$app/Contents/MacOS/SVL.Avalonia" --svl-apply-update
-          code=$?
-          set -e
-          test "$code" -eq 1
-          grep -qF 'Microsoft.NETCore.App' "$DOTNET_HOST_TRACEFILE"
+          lite=$(find artifacts/lightweight -maxdepth 1 -type d -name "*_${arch}_requires_dotnet10.app" -print -quit)
+          bundled=$(find artifacts/bundled -maxdepth 1 -type d -name "*_${arch}.app" -print -quit)
+          test -n "$lite" && test -n "$bundled"
+          export DOTNET_STARTUP_HOOKS="$RUNNER_TEMP/svl-runtime-probe/SVL.RuntimeModeProbe.dll"
+          export DOTNET_BUNDLE_EXTRACT_BASE_DIR="$RUNNER_TEMP/svl-bundle-extract"
+          python3 - "$lite/Contents/MacOS/SVL.Avalonia" "$bundled/Contents/MacOS/SVL.Avalonia" <<'PY'
+          import subprocess
+          import sys
+          for executable, expected in zip(sys.argv[1:], (42, 41), strict=True):
+              result = subprocess.run([executable], timeout=30, check=False)
+              if result.returncode != expected:
+                  raise SystemExit(f"Incorrect runtime mode in {executable}: {result.returncode}")
+          PY
 
       - name: Upload packages
         uses: actions/upload-artifact@v7

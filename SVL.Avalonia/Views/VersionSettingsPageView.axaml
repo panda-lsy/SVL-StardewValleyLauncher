@@ -826,7 +826,7 @@
                                               Padding="0"
                                               Background="Transparent"
                                               BorderThickness="0"
-                                              Cursor="Hand"
+                                              Cursor="{DynamicResource Svl.Cursor.Hand}"
                                               ToolTip.Tip="{Binding UniqueId}">
                                         <TextBlock FontSize="11">
                                           <Run Text="{Binding StatusPrefix}" Foreground="{Binding StatusPrefixColor}" />

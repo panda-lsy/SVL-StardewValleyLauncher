@@ -45,6 +45,7 @@ public sealed class ThemeIcon : Image
             ["arrow-left"] = "Stardew/ArrowLeft.png",
             ["star"] = "Stardew/Star.png",
             ["clock"] = "Stardew/Clock.png",
+            ["finish"] = "Stardew/Finish.png",
             ["check-circle"] = "Stardew/Enable.png",
             ["times-circle"] = "Stardew/Close.png",
             ["times"] = "Stardew/Close.png",
