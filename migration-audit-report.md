@@ -1,9 +1,12 @@
 # SVL Avalonia 迁移审计
 
-更新时间：2026-09-20
+更新时间：2026-09-25
 
-本报告以当前工作树为准，重点覆盖 Avalonia 主流程与 WPF 旧配置兼容，不把
-`SVL.sln` 中与 Avalonia 无关的旧 WPF/SMAPI 编译问题误计入迁移结果。
+本报告以当前工作树为准，重点覆盖 Avalonia 主流程与 WPF 旧配置兼容。当前
+`SVL.sln` 只包含 `SVL.Avalonia`、`SVL.Core.Platform` 和迁移测试；旧版
+`SVL.Core`/`SVL.Desktop` 源码暂留仓库用于历史对照，但已退出新版默认解决方案与发布依赖。
+Avalonia 中仍保留旧配置、实例列表和缓存格式的读取兼容，这些属于用户数据迁移，不依赖旧 WPF 程序集。
+下方按轮次记录的旧 WPF 构建结果仍是当时的历史记录，不代表它们仍参与当前默认构建。
 
 ## `upstream/main` 分支对照结论
 

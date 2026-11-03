@@ -11,7 +11,7 @@ namespace SVL.Avalonia.Controls;
 
 /// <summary>
 /// 浮窗通知卡片视图。作为 ItemsControl 的 DataTemplate 内容渲染单条 <see cref="NotificationItem"/>。
-/// 样式（卡片背景色 + 图标字符）按 <see cref="NotificationType"/> 在 code-behind 设置，
+/// 样式（卡片背景色 + PNG 状态图标）按 <see cref="NotificationType"/> 在 code-behind 设置，
 /// 对齐 WPF 的 UpdateNotificationStyle 行为。
 /// 入场动画在 Loaded 时由 Y=-150/Opacity=0 过渡到 Y=0/Opacity=1（由 Border.Transitions 驱动）。
 /// 退场动画由 NotificationItem.IsClosing=true 触发，过渡回 Y=-150/Opacity=0。
@@ -119,7 +119,7 @@ public partial class FloatingNotificationControl : UserControl
         Card.Opacity = 0;
     }
 
-    /// <summary>按通知类型设置卡片背景色、图标字符、图标前景色（对齐 WPF UpdateNotificationStyle）。</summary>
+    /// <summary>按通知类型设置卡片背景色与状态 PNG 图标。</summary>
     private void ApplyStyle(NotificationType type)
     {
         // 卡片初始透明度为 0，入场动画在 OnLoaded 触发到 1。
@@ -129,23 +129,19 @@ public partial class FloatingNotificationControl : UserControl
         {
             case NotificationType.Success:
                 Card.Background = ResolveThemeBrush("NotificationSuccessBackground", "#2E7D32");
-                IconText.Text = "✓";
-                IconText.Foreground = Card.Background;
+                StatusIcon.IconName = "check-circle";
                 break;
             case NotificationType.Error:
                 Card.Background = ResolveThemeBrush("NotificationErrorBackground", "#C62828");
-                IconText.Text = "✗";
-                IconText.Foreground = Card.Background;
+                StatusIcon.IconName = "octagon-times";
                 break;
             case NotificationType.Warning:
                 Card.Background = ResolveThemeBrush("NotificationWarningBackground", "#EF6C00");
-                IconText.Text = "ⓘ";
-                IconText.Foreground = Card.Background;
+                StatusIcon.IconName = "exclamation-triangle";
                 break;
             case NotificationType.Info:
                 Card.Background = ResolveThemeBrush("NotificationInfoBackground", "#1565C0");
-                IconText.Text = "i";
-                IconText.Foreground = Card.Background;
+                StatusIcon.IconName = "info-circle";
                 break;
         }
     }

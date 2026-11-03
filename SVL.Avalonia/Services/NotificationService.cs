@@ -27,6 +27,9 @@ public sealed class NotificationService : INotificationService
     /// <summary>活动通知集合，UI 通过 ItemsControl 绑定渲染。</summary>
     public ObservableCollection<NotificationItem> ActiveNotifications { get; } = new();
 
+    /// <summary>是否显示新通知，由全局设置实时控制。</summary>
+    public bool IsEnabled { get; set; } = true;
+
     /// <summary>当前活动通知数量。</summary>
     public int ActiveCount => ActiveNotifications.Count;
 
@@ -76,6 +79,13 @@ public sealed class NotificationService : INotificationService
         if (!Dispatcher.UIThread.CheckAccess())
         {
             Dispatcher.UIThread.Post(() => ShowInternal(title, message, autoCloseDelay, onClosed, type));
+            return;
+        }
+
+        if (!IsEnabled)
+        {
+            // 没有展示通知时也完成回调，避免调用方等待一个永远不会关闭的通知。
+            onClosed?.Invoke();
             return;
         }
 

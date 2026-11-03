@@ -211,7 +211,8 @@ public partial class MainWindowViewModel : ObservableObject
             downloadTaskStateStore,
             retryDiffReportService,
             modpackInstallService,
-            collectionInstallService);
+            collectionInstallService,
+            instanceRegistryStore);
         SettingsPage = new SettingsPageViewModel(_settingsStore, dialogService, nexusAuthService, nexusOAuthService, launcherUpdateService, externalProcessService, nxmProtocolRegistrationService, _localizationService, _imageResourceService);
         InstancesPage = new InstancesPageViewModel(_gameInstallPathLocator, dialogService, instanceRegistryStore, _settingsStore, _imageResourceService, _localizationService);
         TaskStatusPage = new TaskStatusPageViewModel();
@@ -375,8 +376,8 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            var includePrerelease = settings.UpdateChannel?.Contains("pre", StringComparison.OrdinalIgnoreCase) ?? false;
-            var preferGitee = string.Equals(settings.PreferredUpdateSource, "Gitee", StringComparison.OrdinalIgnoreCase);
+            var includePrerelease = LauncherUpdateService.IncludesPrerelease(settings.UpdateChannel);
+            var preferGitee = LauncherUpdateService.PrefersGitee(settings.PreferredUpdateSource);
 
             var result = await _launcherUpdateService.CheckForUpdateAsync(includePrerelease, preferGitee);
             if (!result.Success || !result.HasUpdate || result.ReleaseInfo == null)
@@ -393,6 +394,8 @@ public partial class MainWindowViewModel : ObservableObject
 
             if (!settings.ShowUpdateNotification)
             {
+                if (settings.AutoDownloadUpdate)
+                    await SettingsPage.DownloadUpdateInBackgroundAsync(result);
                 return;
             }
 

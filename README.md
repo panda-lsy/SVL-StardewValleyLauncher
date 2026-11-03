@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="SVL.Desktop/Images/icon.png" alt="SVL Logo" width="128" height="128">
+  <img src="SVL.Avalonia/Assets/Icons/icon.png" alt="SVL Logo" width="128" height="128">
 </p>
 
 <h1 align="center">Stardew Valley Launcher</h1>
@@ -12,8 +12,10 @@
   <img src="https://img.shields.io/badge/.NET-10.0-purple?logo=dotnet" alt=".NET 10">
   <img src="https://img.shields.io/badge/Avalonia-11.2-blueviolet" alt="Avalonia">
   <img src="https://img.shields.io/badge/License-Apache_2.0-green" alt="License">
-  <img src="https://img.shields.io/badge/Platform-Windows_/_macOS-0078D6" alt="Cross-Platform">
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D6" alt="Cross-Platform">
   <img src="https://img.shields.io/github/v/release/panda-lsy/SVL-StardewValleyLauncher?include_prereleases" alt="Release">
+  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fapi.svl.qzz.io%2Fapi%2Fstats%2Fbadges%2Fusers-total.json" alt="SVL 用户总量">
+  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fapi.svl.qzz.io%2Fapi%2Fstats%2Fbadges%2Fusers-daily.json" alt="SVL 近 24 小时活跃用户">
   <a href="https://svl.qzz.io" target="_blank">
     <img src="https://img.shields.io/badge/官网-SVL%20Website-2F855A?style=flat-square" alt="Official Website">
   </a>
@@ -100,14 +102,15 @@
 从 [Releases](../../releases) 页面下载最新版本：
 
 - **Windows**: 下载 `.zip`，解压后运行 `SVL.Avalonia.exe`
-- **Linux x64**: 下载 ZIP，解压后运行 `sh run-svl.sh`
+- **Ubuntu/Debian x64**: 下载 `.deb`，使用软件安装器打开，或运行 `sudo apt install ./svl-launcher_1.2.0.0_amd64.deb`；安装后可从应用菜单启动
+- **Linux x64 免安装版**: 下载 ZIP，解压后运行 `sh run-svl.sh`
 - **macOS**: 下载 `.dmg`，拖入 Applications 文件夹后运行
 
 ### 从源码构建
 
 ```bash
 # 克隆仓库
-git clone --branch Dev-Avalonia --single-branch https://github.com/panda-lsy/SVL-StardewValleyLauncher.git
+git clone --branch main --single-branch https://github.com/panda-lsy/SVL-StardewValleyLauncher.git
 cd SVL-StardewValleyLauncher
 
 # Debug 构建
@@ -120,7 +123,7 @@ dotnet build SVL.Avalonia/SVL.Avalonia.csproj --configuration Release
 dotnet run --project SVL.Avalonia/SVL.Avalonia.csproj
 ```
 
-`SVL.sln` 还包含旧 WPF 工程；日常构建 Avalonia 迁移版请直接指定上述 Avalonia 项目。
+`SVL.sln` 包含 Avalonia 主项目、平台层与迁移测试。旧 WPF/Core 源码暂留仓库供迁移历史对照，但不属于新版默认解决方案或发布依赖。
 
 ### 打包发布
 
@@ -132,6 +135,9 @@ dotnet run --project SVL.Avalonia/SVL.Avalonia.csproj
 
 # Windows x64 Release
 .\build.ps1 -Config Release -Targets windows
+
+# Windows x64 轻量版（目标机器须预装 .NET 10 Runtime）
+.\build.ps1 -Config Release -Targets windows -FrameworkDependent
 
 # 全部目标（Windows + Linux + macOS）双配置
 .\build.ps1 -Config all -Targets all
@@ -145,7 +151,29 @@ dotnet run --project SVL.Avalonia/SVL.Avalonia.csproj
 
 产物输出到 `artifacts/` 目录，命名格式：`SVL_v1.2.0.0_{config}_{platform}_{arch}.{ext}`
 
+macOS DMG 内含自定义 Finder 背景及可拖拽的 `Stardew Valley Launcher.app`、`Applications` 链接。
+Finder 布局使用 `packaging/macos/installer-layout.dsstore`，打包时无需启动 Finder；
+如需重新设计布局，可用 `scripts/generate-macos-dmg-layout.py` 重新生成该文件。
+当前构建使用临时 ad-hoc 签名，正式分发仍需 Developer ID 签名和 Apple 公证。
+
+SteamCMD 首次安装会按系统下载官方 Windows、macOS 或 Linux 安装包。Apple 芯片上的
+macOS SteamCMD 官方启动包是 Intel 架构，需要 Rosetta 2。
+
+Windows 默认包自带运行时，适合普通用户和从旧 WPF 版升级；轻量包名称带
+`requires_dotnet10`，需要安装对应架构的 .NET 10 Runtime，不能作为旧版的直接更新文件。
+自包含构建还生成 `SVL.Desktop_v{版本号}_{Debug|Release}.exe`：旧版更新器要求发布资产
+是真正的单文件 EXE，不能将 ZIP 改名为 EXE。要让旧版在线更新找到该文件，仍须将对应
+EXE 附加到发布页；Actions 工件不会自动成为 Release 资产。
+
+新版首次启动会读取旧版配置和实例列表，旧文件会保留；已有用户再次启动时会补迁移各实例
+的独立启动参数，已经在新版单独保存的设置优先。原版游戏和 Mod 文件不会因配置迁移被移动。
+
+预发布验收步骤与各平台下载链接模板见 [发布准备](docs/release/发布准备.md)。
+
 Linux x64 ZIP 解压后可运行 `sh run-svl.sh`；脚本会设置 apphost 执行权限并转发参数。
+在安装了 `dpkg-deb` 的 Linux 上打包时，还会生成 Ubuntu/Debian x64 `.deb`；安装包自带
+.NET 运行时，会在应用菜单中添加 SVL。也可单独运行
+`sh scripts/package-linux-deb.sh <Linux ZIP> <输出目录> 1.2.0.0`，输出目录中不能已有同名安装包。
 
 ## 项目结构
 
@@ -159,19 +187,9 @@ SVL/
 │   ├── Services/             #   应用服务层
 │   ├── Models/               #   数据模型
 │   └── Assets/               #   图标与图片资源
-├── SVL.Core/                 # 核心功能库（平台无关）
-│   ├── App/                  #   应用核心与生命周期
-│   ├── Config/               #   配置系统
-│   ├── Download/             #   下载管理器
-│   ├── IO/                   #   文件服务
-│   ├── Stardew/              #   星露谷核心
-│   │   ├── Instance/         #     实例管理与隔离
-│   │   ├── Launch/           #     游戏启动编排
-│   │   ├── Mod/              #     Mod 管理与依赖解析
-│   │   └── ResourceProject/  #     NexusMods / Modpack 集成
-│   └── Utils/                #   工具类
 ├── SVL.Core.Platform/        # 平台抽象层（Windows/Linux/macOS 实现）
-├── SVL.Desktop/              # 旧 WPF 架构（参考保留）
+├── SVL.Core/                 # 旧 WPF/Core 源码（暂留参考，不在新版默认构建中）
+├── SVL.Desktop/              # 旧 WPF UI 源码（暂留参考，不在新版默认构建中）
 ├── SVL.Migration.Tests/      # 迁移测试
 ├── build.ps1                 # 统一打包脚本
 ├── CHANGELOG.md

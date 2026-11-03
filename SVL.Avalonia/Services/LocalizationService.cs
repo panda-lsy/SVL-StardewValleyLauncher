@@ -98,7 +98,8 @@ public sealed class LocalizationService
                 ["Settings.ThemeMode"] = "主题模式",
                 ["Settings.FontSize"] = "界面字体大小",
                 ["Settings.Animation"] = "启用动画",
-                ["Settings.Transparency"] = "启用透明效果",
+                ["Settings.Transparency"] = "主窗口透明效果强度",
+                ["Settings.Transparency.Description"] = "0% 完全不透明；数值越高，主窗口背景越透明，100% 为当前最大透明效果。文字、控件和弹窗不受影响。",
                 ["Settings.Save"] = "保存设置",
                 ["Settings.OperationPath"] = "操作路径：基本设置 -> 下载设置 -> 个性化 -> 其他 -> 关于",
                 ["Settings.Card.Update"] = "更新设置",
@@ -120,7 +121,7 @@ public sealed class LocalizationService
                 ["Settings.Update.OpenReleaseFailed"] = "打开发布页失败，请稍后重试",
                     ["Settings.Basic.AutoConnect"] = "启动时自动连接服务器",
                     ["Settings.Basic.ServerAddress"] = "服务器地址",
-                    ["Settings.Basic.SteamInviteCode"] = "Steam 邀请码",
+                ["Settings.Basic.SteamInviteCode"] = "Steam 大厅 ID（64 位数字）",
                 ["Settings.Card.NxmProtocol"] = "NXM 协议",
                 ["Settings.Nxm.Status"] = "状态",
                 ["Settings.Nxm.AutoRegister"] = "启动时尝试注册 NXM 协议",
@@ -257,7 +258,8 @@ public sealed class LocalizationService
                 ["Settings.ThemeMode"] = "Theme",
                 ["Settings.FontSize"] = "UI font size",
                 ["Settings.Animation"] = "Enable animations",
-                ["Settings.Transparency"] = "Enable transparency",
+                ["Settings.Transparency"] = "Main window transparency strength",
+                ["Settings.Transparency.Description"] = "0% is fully opaque. Higher values make the main window background more transparent; 100% is the strongest available effect. Text, controls, and dialogs are unchanged.",
                 ["Settings.Save"] = "Save Settings",
                 ["Settings.OperationPath"] = "Flow: Basic -> Download -> Personalization -> Other -> About",
                 ["Settings.Card.Update"] = "Update Settings",
@@ -279,7 +281,7 @@ public sealed class LocalizationService
                 ["Settings.Update.OpenReleaseFailed"] = "Failed to open release page",
                     ["Settings.Basic.AutoConnect"] = "Auto-connect to server on launch",
                     ["Settings.Basic.ServerAddress"] = "Server Address",
-                    ["Settings.Basic.SteamInviteCode"] = "Steam Invite Code",
+                ["Settings.Basic.SteamInviteCode"] = "Steam lobby ID (64-bit number)",
                 ["Settings.Card.NxmProtocol"] = "NXM Protocol",
                 ["Settings.Nxm.Status"] = "Status",
                 ["Settings.Nxm.AutoRegister"] = "Try to register NXM protocol on startup",
@@ -370,12 +372,23 @@ public sealed class LocalizationService
             return;
         }
 
-        CurrentLanguage = language;
-
         var settings = _settingsStore.Load();
         settings.UiLanguage = language;
         _settingsStore.Save(settings);
 
+        ApplyLanguage(language);
+    }
+
+    /// <summary>立即更新界面语言；持久化由设置页的防抖保存统一处理。</summary>
+    internal void ApplyLanguage(string language)
+    {
+        if (string.IsNullOrWhiteSpace(language) || !Catalog.ContainsKey(language) ||
+            string.Equals(CurrentLanguage, language, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        CurrentLanguage = language;
         LanguageChanged?.Invoke();
     }
 }

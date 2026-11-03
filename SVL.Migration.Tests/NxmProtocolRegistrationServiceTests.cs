@@ -109,6 +109,7 @@ public class NxmProtocolRegistrationServiceTests
 
             var desktopPath = Path.Combine(dataHome, "applications", LinuxNxmProtocolRegistration.DesktopFileId);
             var desktop = File.ReadAllText(desktopPath);
+            StringAssert.Contains(desktop, "Name=Stardew Valley Launcher");
             StringAssert.Contains(desktop, "MimeType=x-scheme-handler/nxm;");
             var escapedExecutable = executable.Replace("\\", "\\\\", StringComparison.Ordinal)
                 .Replace("\"", "\\\"", StringComparison.Ordinal)

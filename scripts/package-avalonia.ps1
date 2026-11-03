@@ -9,7 +9,8 @@
 param(
     [ValidateSet("Debug", "Release", "all")]
     [string]$Configuration = "Release",
-    [string]$OutputDirectory = ""
+    [string]$OutputDirectory = "",
+    [switch]$FrameworkDependent
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,7 +21,7 @@ if (-not (Test-Path -LiteralPath $buildScript -PathType Leaf)) {
     throw "找不到根目录打包脚本: $buildScript"
 }
 
-& $buildScript -Config $Configuration -Targets windows -OutputDirectory $OutputDirectory
+& $buildScript -Config $Configuration -Targets windows -OutputDirectory $OutputDirectory -FrameworkDependent:$FrameworkDependent
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

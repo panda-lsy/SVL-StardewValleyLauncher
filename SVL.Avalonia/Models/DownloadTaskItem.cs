@@ -528,6 +528,19 @@ public partial class DownloadTaskItem : ObservableObject
         }
     }
 
+    /// <summary>主题感知的任务状态 PNG 图标名称。</summary>
+    public string StatusIconName => TaskState switch
+    {
+        DownloadTaskState.Pending => "clock",
+        DownloadTaskState.Resolving => "search",
+        DownloadTaskState.Downloading => "download",
+        DownloadTaskState.Installing => "bolt",
+        DownloadTaskState.Completed => "check-circle",
+        DownloadTaskState.Failed => "exclamation-triangle",
+        DownloadTaskState.Cancelled => "times-circle",
+        _ => "download"
+    };
+
     partial void OnReportPathChanged(string value)
     {
         OnPropertyChanged(nameof(HasReportPath));
@@ -562,6 +575,7 @@ public partial class DownloadTaskItem : ObservableObject
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsFinished));
         OnPropertyChanged(nameof(DisplayStatusText));
+        OnPropertyChanged(nameof(StatusIconName));
     }
 
     partial void OnSpeedTextChanged(string value)

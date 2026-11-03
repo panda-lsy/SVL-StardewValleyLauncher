@@ -1,5 +1,6 @@
 using Avalonia;
 using SVL.Core.Platform.Services;
+using SVL.Avalonia.Services;
 
 namespace SVL.Avalonia;
 
@@ -10,6 +11,7 @@ internal static class Program
     /// 浏览器调用 `SVL.Avalonia.exe "nxm://..."` 时，链接作为 args[0] 传入。
     /// </summary>
     public static string? PendingNxmUrl { get; private set; }
+    public static bool PreviousUpdateFailed { get; private set; }
 
     /// <summary>单实例服务实例。App 在 OnFrameworkInitializationCompleted 中调用 StartListening 接收转发消息。</summary>
     public static SingleInstanceService SingleInstance { get; } = new();
@@ -17,6 +19,12 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (LauncherUpdateApplier.TryHandle(args, out var updateExitCode))
+        {
+            Environment.ExitCode = updateExitCode;
+            return;
+        }
+        PreviousUpdateFailed = args.Contains(LauncherUpdateApplier.FailureArgument, StringComparer.Ordinal);
         // 1. 扫描命令行参数，提取 nxm:// 链接（浏览器协议回调传入）。
         PendingNxmUrl = ExtractNxmUrl(args);
 

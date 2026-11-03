@@ -138,7 +138,10 @@ public sealed class AppUserSettings
     /// <summary>是否启用动画效果。</summary>
     public bool EnableAnimations { get; set; } = true;
 
-    /// <summary>是否启用主窗口透明/半透明效果；不支持的平台回退为不透明窗口。</summary>
+    /// <summary>主窗口背景透明度（0-100）；0 表示完全不透明。</summary>
+    public int BackgroundTransparencyPercent { get; set; } = 25;
+
+    /// <summary>旧版二值透明设置，仅用于兼容读取历史配置。</summary>
     public bool EnableTransparency { get; set; } = true;
 
     /// <summary>界面字体大小（pt）。</summary>

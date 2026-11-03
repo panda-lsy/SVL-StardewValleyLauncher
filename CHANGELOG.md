@@ -2,13 +2,20 @@
 
 All notable changes to SVL (Stardew Valley Launcher) will be documented in this file.
 
-## [1.2.0.0] - 2026-07-10
+## [1.2.0.0] - 预发布准备中
 
 ### 架构迁移
 
-- 从 WPF / .NET Framework 4.8 / Windows-only 迁移到 **Avalonia UI 11.2 / .NET 10 / 跨平台**（Windows + macOS）
+- 从 WPF / .NET Framework 4.8 / Windows-only 迁移到 **Avalonia UI 11.2 / .NET 10 / 跨平台**（Windows + macOS + Linux）
 - 全新 DynamicResource 主题配色系统，完整支持深色/浅色模式
-- 统一打包脚本 `build.ps1`，支持 Windows/macOS 的 Debug/Release 配置
+- 统一打包脚本 `build.ps1`，支持 Windows/macOS/Linux 的 Debug/Release 配置
+
+### 预发布准备
+
+- 增加 Linux x64 ZIP、Ubuntu/Debian 安装包，以及 Intel/Apple Silicon macOS DMG。
+- 完善旧版配置和实例迁移、下载任务恢复、Mod 更新备份与嵌套来源记录。
+- 改进 SteamCMD 跨平台下载、Nexus 登录、Modpack 导入导出与实例图标。
+- 保留旧版匿名统计标识，避免架构迁移造成重复计数。
 
 ### Added
 
@@ -44,8 +51,7 @@ All notable changes to SVL (Stardew Valley Launcher) will be documented in this 
 
 ### Removed
 
-- 移除迁移工作流文件、审计报告、scripts/ 文件夹
-- 移除旧迁移门禁 CI
+- 旧 WPF/Core 不再属于新版默认解决方案或发行依赖；源码保留供历史对照。
 
 ## [1.1.8.6] - 2026-03-24
 

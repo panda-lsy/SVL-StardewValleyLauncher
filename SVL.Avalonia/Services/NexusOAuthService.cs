@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -10,10 +11,15 @@ namespace SVL.Avalonia.Services;
 public sealed class NexusOAuthService
 {
     private const int DefaultLoopbackPort = 12456;
-    private const int MaxPortAttempts = 10;
     private const string ClientId = "vortex_loopback";
     private const string BaseUrl = "https://users.nexusmods.com/oauth";
     private const string Scope = "openid profile email";
+    private readonly HttpClient? _tokenHttpClient;
+
+    public NexusOAuthService(HttpClient? tokenHttpClient = null)
+    {
+        _tokenHttpClient = tokenHttpClient;
+    }
 
     public NexusOAuthStartResult CreateAuthorizationUrl(string? redirectUriOverride = null)
     {
@@ -35,9 +41,11 @@ public sealed class NexusOAuthService
         };
     }
 
-    public async Task<NexusOAuthTokenResult> ExchangeCodeAsync(string code, string codeVerifier, string redirectUri)
+    public async Task<NexusOAuthTokenResult> ExchangeCodeAsync(
+        string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken = default)
     {
-        using var client = new HttpClient();
+        using var ownedClient = _tokenHttpClient == null ? new HttpClient() : null;
+        var client = _tokenHttpClient ?? ownedClient!;
         var payload = new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
@@ -47,18 +55,19 @@ public sealed class NexusOAuthService
             ["code_verifier"] = codeVerifier
         };
 
-        var response = await client.PostAsync($"{BaseUrl}/token", new FormUrlEncodedContent(payload));
+        using var response = await client.PostAsync(
+            $"{BaseUrl}/token", new FormUrlEncodedContent(payload), cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var body = await response.Content.ReadAsStringAsync();
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
             return NexusOAuthTokenResult.Failed($"Token 交换失败: HTTP {(int)response.StatusCode} {body}");
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         var token = await JsonSerializer.DeserializeAsync<NexusOAuthTokenResponse>(stream, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
-        });
+        }, cancellationToken);
 
         if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
         {
@@ -106,46 +115,45 @@ public sealed class NexusOAuthService
         return NexusOAuthTokenResult.Success(token, profile);
     }
 
-    public async Task<NexusOAuthTokenResult> AuthorizeWithLoopbackAsync(Action<string> openBrowser, TimeSpan? timeout = null)
+    public async Task<NexusOAuthTokenResult> AuthorizeWithLoopbackAsync(
+        Action<string> openBrowser,
+        TimeSpan? timeout = null,
+        Action<NexusOAuthStartResult>? onStarted = null,
+        Task<string>? manualCallback = null,
+        CancellationToken cancellationToken = default)
     {
-        var waitTimeout = timeout ?? TimeSpan.FromMinutes(3);
-        HttpListener? listener = null;
+        var waitTimeout = timeout ?? TimeSpan.FromMinutes(10);
+        TcpListener? listener = null;
         NexusOAuthStartResult? start = null;
-
-        for (var i = 0; i < MaxPortAttempts; i++)
+        try
         {
-            var port = DefaultLoopbackPort + i;
-            var redirectUri = $"http://127.0.0.1:{port}";
-            var attempt = CreateAuthorizationUrl(redirectUri);
-            var listenPrefix = BuildListenerPrefix(attempt.RedirectUri);
-
-            var candidate = new HttpListener();
-            try
-            {
-                candidate.Prefixes.Add(listenPrefix);
-                candidate.Start();
-                listener = candidate;
-                start = attempt;
-                break;
-            }
-            catch
-            {
-                candidate.Close();
-            }
+            // 绑定系统分配的空闲回环端口，避免固定端口冲突和 Windows
+            // HttpListener/HTTP.sys URL ACL 导致浏览器回调无法连接。
+            listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var endpoint = (IPEndPoint)listener.LocalEndpoint;
+            start = CreateAuthorizationUrl($"http://127.0.0.1:{endpoint.Port}");
         }
-
-        if (listener == null || start == null)
+        catch (Exception exception)
         {
+            listener?.Stop();
             return NexusOAuthTokenResult.Failed(
-                "无法启动本地回调监听（端口占用），请关闭占用进程后重试或改用手动 code 登录",
+                $"无法启动本地回调监听：{exception.Message}",
                 NexusOAuthFailureReason.ListenerStartFailed);
         }
 
-        using (listener)
+        try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
+                onStarted?.Invoke(start);
+                cancellationToken.ThrowIfCancellationRequested();
                 openBrowser(start.AuthorizeUrl);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -155,38 +163,13 @@ public sealed class NexusOAuthService
                     start.AuthorizeUrl);
             }
 
-            var contextTask = listener.GetContextAsync();
-            var completed = await Task.WhenAny(contextTask, Task.Delay(waitTimeout));
-            if (completed != contextTask)
-            {
-                return NexusOAuthTokenResult.Failed(
-                    "等待 OAuth 回调超时，可点击“重开授权页”继续或改用手动 code 登录",
-                    NexusOAuthFailureReason.Timeout,
-                    start.AuthorizeUrl);
-            }
+            using var timeoutSource = new CancellationTokenSource(waitTimeout);
+            using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token, cancellationToken);
+            var query = await WaitForLoopbackCallbackAsync(listener, start, manualCallback, linkedSource.Token);
 
-            HttpListenerContext context;
-            try
-            {
-                context = await contextTask;
-            }
-            catch (Exception ex)
-            {
-                return NexusOAuthTokenResult.Failed(
-                    $"接收 OAuth 回调失败: {ex.Message}",
-                    NexusOAuthFailureReason.ListenerReceiveFailed,
-                    start.AuthorizeUrl);
-            }
-
-            var code = context.Request.QueryString["code"];
-            var state = context.Request.QueryString["state"];
-            var error = context.Request.QueryString["error"];
-
-            var isOk = !string.IsNullOrWhiteSpace(code) &&
-                       string.Equals(state, start.State, StringComparison.Ordinal) &&
-                       string.IsNullOrWhiteSpace(error);
-
-            await WriteCallbackPageAsync(context.Response, isOk);
+            var code = query.GetValueOrDefault("code");
+            var state = query.GetValueOrDefault("state");
+            var error = query.GetValueOrDefault("error");
 
             if (!string.IsNullOrWhiteSpace(error))
             {
@@ -207,10 +190,44 @@ public sealed class NexusOAuthService
                 return NexusOAuthTokenResult.Failed("OAuth state 校验失败，请重试", NexusOAuthFailureReason.StateMismatch, start.AuthorizeUrl);
             }
 
-            var exchange = await ExchangeCodeAsync(code, start.CodeVerifier, start.RedirectUri);
-            return exchange.IsSuccess
-                ? exchange
-                : NexusOAuthTokenResult.Failed(exchange.Message, NexusOAuthFailureReason.TokenExchangeFailed, start.AuthorizeUrl);
+            try
+            {
+                var exchange = await ExchangeCodeAsync(code, start.CodeVerifier, start.RedirectUri, cancellationToken);
+                return exchange.IsSuccess
+                    ? exchange
+                    : NexusOAuthTokenResult.Failed(exchange.Message, NexusOAuthFailureReason.TokenExchangeFailed, start.AuthorizeUrl);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                return NexusOAuthTokenResult.Failed(
+                    $"Token 交换失败：{exception.Message}", NexusOAuthFailureReason.TokenExchangeFailed, start.AuthorizeUrl);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return NexusOAuthTokenResult.Failed("已取消 Nexus 授权", NexusOAuthFailureReason.Cancelled);
+        }
+        catch (OperationCanceledException)
+        {
+            return NexusOAuthTokenResult.Failed(
+                "等待自动回调超时；可粘贴本次回调地址，或重新开始登录。",
+                NexusOAuthFailureReason.Timeout,
+                start.AuthorizeUrl);
+        }
+        catch (Exception exception)
+        {
+            return NexusOAuthTokenResult.Failed(
+                $"接收 OAuth 回调失败：{exception.Message}",
+                NexusOAuthFailureReason.ListenerReceiveFailed,
+                start.AuthorizeUrl);
+        }
+        finally
+        {
+            listener.Stop();
         }
     }
 
@@ -282,6 +299,46 @@ public sealed class NexusOAuthService
         code = parsedCode;
 
         state = query.TryGetValue("state", out var stateValue) ? stateValue : null;
+        return true;
+    }
+
+    public static bool TryExtractCodeForSession(
+        string callbackUrl, NexusOAuthStartResult start, out string code, out string error)
+    {
+        code = string.Empty;
+        error = string.Empty;
+        if (!Uri.TryCreate(callbackUrl?.Trim(), UriKind.Absolute, out var callbackUri) ||
+            !Uri.TryCreate(start.RedirectUri, UriKind.Absolute, out var expectedUri))
+        {
+            error = "请粘贴浏览器地址栏中的完整回调地址。";
+            return false;
+        }
+
+        if (!string.Equals(callbackUri.Scheme, expectedUri.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(callbackUri.Host, expectedUri.Host, StringComparison.OrdinalIgnoreCase) ||
+            callbackUri.Port != expectedUri.Port ||
+            !string.Equals(callbackUri.AbsolutePath, expectedUri.AbsolutePath, StringComparison.Ordinal) ||
+            !string.IsNullOrEmpty(callbackUri.UserInfo) || !string.IsNullOrEmpty(callbackUri.Fragment))
+        {
+            error = "回调地址不属于当前登录会话，请使用最新打开的授权页面。";
+            return false;
+        }
+
+        var query = ParseQuery(callbackUri.Query);
+        if (!query.TryGetValue("code", out var parsedCode) || string.IsNullOrWhiteSpace(parsedCode))
+        {
+            error = "回调地址中没有授权码，请重新完成 Nexus 授权。";
+            return false;
+        }
+
+        if (!query.TryGetValue("state", out var state) ||
+            !string.Equals(state, start.State, StringComparison.Ordinal))
+        {
+            error = "回调地址与当前登录会话不匹配，请重新完成授权。";
+            return false;
+        }
+
+        code = parsedCode;
         return true;
     }
 
@@ -369,8 +426,8 @@ public sealed class NexusOAuthService
                 continue;
             }
 
-            var key = kv[..index];
-            var value = Uri.UnescapeDataString(kv[(index + 1)..]);
+            var key = WebUtility.UrlDecode(kv[..index]);
+            var value = WebUtility.UrlDecode(kv[(index + 1)..]);
             map[key] = value;
         }
 
@@ -410,23 +467,200 @@ public sealed class NexusOAuthService
             $"&code_challenge={challenge}";
     }
 
-    private static string BuildListenerPrefix(string redirectUri)
+    private static async Task<Dictionary<string, string>> WaitForLoopbackCallbackAsync(
+        TcpListener listener,
+        NexusOAuthStartResult start,
+        Task<string>? manualCallback,
+        CancellationToken cancellationToken)
     {
-        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
-        {
-            return "http://127.0.0.1:12456/";
-        }
+        var callback = new TaskCompletionSource<Dictionary<string, string>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var pendingSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var connections = new List<Task>();
+        Task<TcpClient>? pendingAccept = null;
 
-        var path = uri.AbsolutePath;
-        if (!path.EndsWith('/'))
+        try
         {
-            path += "/";
-        }
+            while (true)
+            {
+                pendingAccept = listener.AcceptTcpClientAsync(pendingSource.Token).AsTask();
+                var completed = manualCallback == null
+                    ? await Task.WhenAny(pendingAccept, callback.Task)
+                    : await Task.WhenAny(pendingAccept, callback.Task, manualCallback);
+                if (completed == callback.Task)
+                {
+                    return await callback.Task;
+                }
 
-        return $"{uri.Scheme}://{uri.Host}:{uri.Port}{path}";
+                if (completed == manualCallback)
+                {
+                    var callbackUrl = await manualCallback!;
+                    if (!TryExtractCodeForSession(callbackUrl, start, out var code, out _))
+                    {
+                        throw new InvalidDataException("手动回调地址与当前授权会话不匹配");
+                    }
+
+                    return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["code"] = code,
+                        ["state"] = start.State
+                    };
+                }
+
+                var client = await pendingAccept;
+                pendingAccept = null;
+                connections.RemoveAll(task => task.IsCompleted);
+                if (connections.Count >= 32)
+                {
+                    client.Dispose();
+                    continue;
+                }
+
+                connections.Add(HandleLoopbackConnectionAsync(client, start, callback, pendingSource.Token));
+            }
+        }
+        finally
+        {
+            pendingSource.Cancel();
+            if (pendingAccept != null)
+            {
+                try
+                {
+                    using var unusedClient = await pendingAccept;
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (SocketException)
+                {
+                }
+            }
+
+            await Task.WhenAll(connections);
+        }
     }
 
-    private static async Task WriteCallbackPageAsync(HttpListenerResponse response, bool success)
+    private static async Task HandleLoopbackConnectionAsync(
+        TcpClient client,
+        NexusOAuthStartResult start,
+        TaskCompletionSource<Dictionary<string, string>> callback,
+        CancellationToken cancellationToken)
+    {
+        using (client)
+        using (var connectionTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            try
+            {
+                connectionTimeout.CancelAfter(TimeSpan.FromSeconds(10));
+                client.NoDelay = true;
+                await using var stream = client.GetStream();
+                var callbackUri = await ReadLoopbackRequestAsync(stream, start.RedirectUri, connectionTimeout.Token);
+                var expectedUri = new Uri(start.RedirectUri);
+                if (!string.Equals(callbackUri.AbsolutePath, expectedUri.AbsolutePath, StringComparison.Ordinal))
+                {
+                    await WritePlainResponseAsync(stream, "404 Not Found", connectionTimeout.Token);
+                    return;
+                }
+
+                var query = ParseQuery(callbackUri.Query);
+                var code = query.GetValueOrDefault("code");
+                var error = query.GetValueOrDefault("error");
+                if ((!string.IsNullOrWhiteSpace(code) || !string.IsNullOrWhiteSpace(error)) &&
+                    string.Equals(query.GetValueOrDefault("state"), start.State, StringComparison.Ordinal))
+                {
+                    try
+                    {
+                        await WriteCallbackPageAsync(stream, string.IsNullOrWhiteSpace(error), connectionTimeout.Token);
+                    }
+                    finally
+                    {
+                        // 收到经过 state 校验的授权结果后，即使浏览器提前断开也继续处理。
+                        callback.TrySetResult(query);
+                    }
+
+                    return;
+                }
+
+                await WritePlainResponseAsync(stream, "400 Bad Request", connectionTimeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // 关闭超时的预连接，继续等待同一授权会话的其他连接。
+            }
+            catch (Exception)
+            {
+                // 浏览器预连接、断开的连接或无效请求都不能结束整个授权会话。
+            }
+        }
+    }
+
+    private static async Task<Uri> ReadLoopbackRequestAsync(
+        Stream stream,
+        string redirectUri,
+        CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(
+            stream,
+            Encoding.ASCII,
+            detectEncodingFromByteOrderMarks: false,
+            bufferSize: 1024,
+            leaveOpen: true);
+
+        var requestLine = await reader.ReadLineAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(requestLine) || requestLine.Length > 8192)
+        {
+            throw new InvalidDataException("本地回调请求行无效");
+        }
+
+        var requestParts = requestLine.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        if (requestParts.Length != 3 || !string.Equals(requestParts[0], "GET", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("本地回调请求格式无效");
+        }
+
+        var headerLength = requestLine.Length;
+        while (true)
+        {
+            var header = await reader.ReadLineAsync(cancellationToken);
+            if (header == null)
+            {
+                throw new InvalidDataException("本地回调请求头不完整");
+            }
+
+            headerLength += header.Length;
+            if (headerLength > 16 * 1024)
+            {
+                throw new InvalidDataException("本地回调请求头过大");
+            }
+
+            if (header.Length == 0)
+            {
+                break;
+            }
+        }
+
+        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var expectedUri) ||
+            !requestParts[1].StartsWith("/", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("本地回调地址无效");
+        }
+
+        var callbackUri = new Uri(expectedUri, requestParts[1]);
+        if (!string.Equals(callbackUri.Host, expectedUri.Host, StringComparison.OrdinalIgnoreCase) ||
+            callbackUri.Port != expectedUri.Port)
+        {
+            throw new InvalidDataException("收到的请求不是当前 Nexus OAuth 回调");
+        }
+
+        return callbackUri;
+    }
+
+    private static Task WritePlainResponseAsync(Stream stream, string status, CancellationToken cancellationToken)
+    {
+        return WriteHttpResponseAsync(stream, status, "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(status), cancellationToken);
+    }
+
+    private static async Task WriteCallbackPageAsync(Stream stream, bool success, CancellationToken cancellationToken)
     {
         var html = new StringBuilder();
         html.AppendLine("<!DOCTYPE html>");
@@ -479,9 +713,9 @@ public sealed class NexusOAuthService
             html.AppendLine("          <polyline points=\"20 6 9 17 4 12\"/>");
             html.AppendLine("        </svg>");
             html.AppendLine("      </div>");
-            html.AppendLine("      <h1>认证成功</h1>");
-            html.AppendLine("      <p>SVL 已成功连接到您的 Nexus Mods 账户</p>");
-            html.AppendLine("      <p>请返回 SVL 继续操作</p>");
+            html.AppendLine("      <h1>授权已收到</h1>");
+            html.AppendLine("      <p>SVL 正在完成 Nexus Mods 登录</p>");
+            html.AppendLine("      <p>请返回 SVL 查看登录结果</p>");
             html.AppendLine("    </div>");
         }
         else
@@ -504,12 +738,18 @@ public sealed class NexusOAuthService
         html.AppendLine("</body>");
         html.AppendLine("</html>");
 
-        var bytes = Encoding.UTF8.GetBytes(html.ToString());
-        response.StatusCode = 200;
-        response.ContentType = "text/html; charset=utf-8";
-        response.ContentLength64 = bytes.Length;
-        await response.OutputStream.WriteAsync(bytes);
-        response.Close();
+        await WriteHttpResponseAsync(
+            stream, "200 OK", "text/html; charset=utf-8", Encoding.UTF8.GetBytes(html.ToString()), cancellationToken);
+    }
+
+    private static async Task WriteHttpResponseAsync(
+        Stream stream, string status, string contentType, byte[] bytes, CancellationToken cancellationToken)
+    {
+        var headers = Encoding.ASCII.GetBytes(
+            $"HTTP/1.1 {status}\r\nContent-Type: {contentType}\r\nContent-Length: {bytes.Length}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n");
+        await stream.WriteAsync(headers, cancellationToken);
+        await stream.WriteAsync(bytes, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
     }
 }
 
@@ -582,7 +822,8 @@ public enum NexusOAuthFailureReason
     MissingCode,
     StateMismatch,
     TokenExchangeFailed,
-    Unknown
+    Unknown,
+    Cancelled
 }
 
 public sealed class NexusOAuthValidateResult

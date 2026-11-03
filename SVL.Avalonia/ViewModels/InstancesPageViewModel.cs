@@ -64,7 +64,7 @@ public sealed partial class InstanceItem : ObservableObject
         ? "未知版本"
         : FormatVersion(Version);
 
-    public string FavoriteGlyph => IsFavorite ? "★" : "☆";
+    public double FavoriteIconOpacity => IsFavorite ? 1d : 0.42d;
 
     private static string FormatVersion(string version)
     {
@@ -79,7 +79,7 @@ public sealed partial class InstanceItem : ObservableObject
 
     partial void OnIsFavoriteChanged(bool value)
     {
-        OnPropertyChanged(nameof(FavoriteGlyph));
+        OnPropertyChanged(nameof(FavoriteIconOpacity));
     }
 }
 
@@ -909,7 +909,7 @@ public partial class InstancesPageViewModel : ObservableObject
         yield return Path.Combine(home, "Games", "Stardew Valley");
     }
 
-    private static string? ResolveGameRootPath(string candidatePath)
+    internal static string? ResolveGameRootPath(string candidatePath)
     {
         if (string.IsNullOrWhiteSpace(candidatePath))
         {
@@ -931,6 +931,8 @@ public partial class InstancesPageViewModel : ObservableObject
         {
             normalized,
             Path.Combine(normalized, "Content"),
+            // SteamCMD 的 macOS depot 可以直接包含 Contents，而不是 .app 目录。
+            Path.Combine(normalized, "Contents", "MacOS"),
             Path.Combine(normalized, "Stardew Valley.app", "Contents", "MacOS")
         };
 
@@ -952,6 +954,33 @@ public partial class InstancesPageViewModel : ObservableObject
         }
 
         return null;
+    }
+
+    internal static (bool Success, bool AlreadyRegistered, string Path, string Message) RegisterDownloadedBase(
+        InstanceRegistryStore registry, string downloadedPath)
+    {
+        var resolved = ResolveGameRootPath(downloadedPath);
+        if (string.IsNullOrWhiteSpace(resolved))
+            return (false, false, string.Empty, $"未在下载目录中找到游戏核心文件：{downloadedPath}");
+
+        // 旧版本可能已保存下载目录本身；如果它与实际运行目录指向同一游戏，
+        // 不再重复登记，但仍通知调用方刷新，修复之前的无效显示。
+        var alreadyRegistered = registry.LoadManualInstances().Any(record =>
+            !string.IsNullOrWhiteSpace(record.Path) &&
+            string.Equals(ResolveGameRootPath(record.Path), resolved, StringComparison.OrdinalIgnoreCase));
+        if (!alreadyRegistered)
+        {
+            var trimmed = downloadedPath.Trim().Trim('"')
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var name = Path.GetFileName(trimmed);
+            if (string.IsNullOrWhiteSpace(name)) name = "Stardew Valley";
+            alreadyRegistered = !registry.TryAddManualInstance(name, resolved);
+        }
+
+        var message = alreadyRegistered
+            ? $"该游戏路径已在列表中：{resolved}"
+            : $"已添加游戏 Base 路径：{resolved}";
+        return (true, alreadyRegistered, resolved, message);
     }
 
     private static bool IsVersionScopedPath(string candidatePath)
@@ -1149,7 +1178,7 @@ public partial class InstancesPageViewModel : ObservableObject
 
     private string ResolveInstanceIcon(string instancePath, bool isSmapiInstance)
     {
-        var customIcon = InstanceIconResolver.ResolveIconPath(instancePath, isSmapiInstance);
+        var customIcon = InstanceIconResolver.ResolveDisplayIconPath(instancePath, isSmapiInstance);
         if (!string.IsNullOrWhiteSpace(customIcon))
         {
             return customIcon;

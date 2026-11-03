@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:SVL.Avalonia.ViewModels"
+        xmlns:controls="using:SVL.Avalonia.Controls"
         x:Class="SVL.Avalonia.Controls.NexusLoginDialog"
         Width="500"
         Height="640"
@@ -12,11 +13,11 @@
       <Border Grid.Row="0" Background="{DynamicResource AccentBrush}" CornerRadius="12,12,0,0" Padding="22,16">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-            <Path Data="{StaticResource Icon.Unlock}" Width="18" Height="18" Stretch="Uniform" Fill="{DynamicResource TextOnAccentBrush}" />
+            <controls:ThemeIcon IconName="lock-open" UseLightGlyph="True" Width="20" Height="20" Stretch="Uniform" />
             <TextBlock Text="Nexus Mods 登录" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextOnAccentBrush}" />
           </StackPanel>
           <Button Grid.Column="1" Width="30" Height="30" Padding="0" Command="{Binding CloseCommand}" Background="{DynamicResource CardHighlightBg}" BorderThickness="0" Foreground="{DynamicResource TextOnAccentBrush}">
-              <Path Data="{StaticResource Icon.X}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource TextOnAccentBrush}" />
+              <controls:ThemeIcon IconName="times" UseLightGlyph="True" Width="16" Height="16" Stretch="Uniform" />
           </Button>
         </Grid>
       </Border>
@@ -32,7 +33,7 @@
             <StackPanel Spacing="6">
               <StackPanel IsVisible="{Binding IsLoggedIn}">
                 <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                  <Path Data="{StaticResource Icon.Check}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource ColorBrushSuccess}" VerticalAlignment="Center" />
+                  <controls:ThemeIcon IconName="check-circle" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                   <TextBlock Text="已登录" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                 </StackPanel>
                 <TextBlock Text="{Binding UserName}" HorizontalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
@@ -40,7 +41,7 @@
               </StackPanel>
               <StackPanel IsVisible="{Binding IsNotLoggedIn}">
                 <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                  <Path Data="{StaticResource Icon.Lock}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" />
+                  <controls:ThemeIcon IconName="lock" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                   <TextBlock Text="未登录" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                 </StackPanel>
                 <TextBlock Text="请点击下方按钮登录您的 Nexus Mods 账户" Opacity="0.7" HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}" />
@@ -58,7 +59,7 @@
                   BorderThickness="0"
                   IsVisible="{Binding IsNotLoggedIn}" />
 
-            <Button Content="重新打开浏览器窗口"
+            <Button Content="重试登录并打开浏览器"
                   Command="{Binding ReopenBrowserPageCommand}"
               Width="220"
               HorizontalAlignment="Center"
@@ -77,13 +78,23 @@
                   Height="40"
                   IsVisible="{Binding IsLoggedIn}">
             <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-              <Path Data="{StaticResource Icon.LogOut}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" />
+              <controls:ThemeIcon IconName="logout" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
               <TextBlock Text="登出" VerticalAlignment="Center" />
             </StackPanel>
           </Button>
 
           <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" Opacity="0.78" Foreground="{DynamicResource TextPrimaryBrush}" />
           <TextBlock Text="{Binding OauthStatusMessage}" TextWrapping="Wrap" HorizontalAlignment="Center" Opacity="0.72" Foreground="{DynamicResource TextSecondaryBrush}" />
+
+          <Expander Header="回调页面打不开？手动完成登录" IsVisible="{Binding ShowManualOAuthCallback}">
+            <StackPanel Spacing="8" Margin="0,8,0,0">
+              <TextBlock Text="请粘贴当前授权页面跳转后的完整地址。授权码仅用于本次登录，请勿分享。"
+                         TextWrapping="Wrap" Opacity="0.75" />
+              <TextBox Text="{Binding OauthCallbackInput, UpdateSourceTrigger=PropertyChanged}"
+                       Watermark="粘贴浏览器地址栏中的回调地址" />
+              <Button Content="提交回调地址" Command="{Binding CompleteOAuthLoginCommand}" HorizontalAlignment="Left" />
+            </StackPanel>
+          </Expander>
 
           <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
             <StackPanel Spacing="6">

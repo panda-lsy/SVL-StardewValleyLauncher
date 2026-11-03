@@ -13,12 +13,15 @@ public partial class NexusLoginDialogViewModel : ObservableObject
     private static string _sharedLastOAuthAuthorizeUrl = string.Empty;
     private readonly NexusAuthService _nexusAuthService;
     private readonly NexusOAuthService _nexusOAuthService;
+    private readonly Action<string> _openOAuthBrowser;
     private readonly string _existingOAuthAccessToken;
     private readonly string _existingOAuthRefreshToken;
     private readonly string _existingUserName;
     private readonly string _existingMembershipType;
     private readonly int _existingUserId;
     private NexusOAuthStartResult? _oauthStart;
+    private TaskCompletionSource<string>? _manualOAuthCallback;
+    private CancellationTokenSource? _oauthCancellation;
     private string _lastOAuthAuthorizeUrl = string.Empty;
 
     [ObservableProperty]
@@ -48,13 +51,15 @@ public partial class NexusLoginDialogViewModel : ObservableObject
     private string _oauthCallbackInput = string.Empty;
 
     [ObservableProperty]
-    private string _oauthStatusMessage = "点击“开始 OAuth 授权”后，在浏览器完成登录并粘贴回调 URL 或 code";
+    private string _oauthStatusMessage = "点击“登录 Nexus Mods”后，将在浏览器完成授权并自动返回此窗口";
 
     public bool CanRetryOpenAuthorizePage => !string.IsNullOrWhiteSpace(_lastOAuthAuthorizeUrl);
 
     public bool CanCopyAuthorizeUrl => !string.IsNullOrWhiteSpace(_lastOAuthAuthorizeUrl);
 
     public bool ShowReopenBrowserButton => CanRetryOpenAuthorizePage;
+
+    public bool ShowManualOAuthCallback => _oauthStart != null && !IsLoggedIn;
 
     public string RollbackAuthorizeUrlPreview => BuildAuthorizeUrlPreview(_lastOAuthAuthorizeUrl);
 
@@ -68,10 +73,12 @@ public partial class NexusLoginDialogViewModel : ObservableObject
         string existingOAuthRefreshToken,
         string existingUserName,
         string existingMembershipType,
-        int existingUserId)
+        int existingUserId,
+        Action<string>? openOAuthBrowser = null)
     {
         _nexusAuthService = nexusAuthService;
         _nexusOAuthService = nexusOAuthService;
+        _openOAuthBrowser = openOAuthBrowser ?? OpenOAuthBrowser;
         ApiKey = existingApiKey;
         _existingOAuthAccessToken = existingOAuthAccessToken ?? string.Empty;
         _existingOAuthRefreshToken = existingOAuthRefreshToken ?? string.Empty;
@@ -205,29 +212,6 @@ public partial class NexusLoginDialogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void StartOAuthAuthorize()
-    {
-        _oauthStart = _nexusOAuthService.CreateAuthorizationUrl();
-        _lastOAuthAuthorizeUrl = _oauthStart.AuthorizeUrl;
-        _sharedLastOAuthAuthorizeUrl = _lastOAuthAuthorizeUrl;
-        NotifyAuthorizeUrlChanged();
-        OauthStatusMessage = "已打开授权页面，请完成授权后粘贴回调 URL 或 code";
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = _oauthStart.AuthorizeUrl,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            OauthStatusMessage = $"打开授权页面失败: {ex.Message}";
-        }
-    }
-
-    [RelayCommand]
     private async Task StartOAuthAutoLoginAsync()
     {
         if (IsBusy)
@@ -236,6 +220,13 @@ public partial class NexusLoginDialogViewModel : ObservableObject
         }
 
         IsBusy = true;
+        _oauthStart = null;
+        OauthCallbackInput = string.Empty;
+        NotifyAuthorizeUrlChanged();
+        var manualCallback = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _manualOAuthCallback = manualCallback;
+        using var oauthCancellation = new CancellationTokenSource();
+        _oauthCancellation = oauthCancellation;
         OauthStatusMessage = "正在启动本地回调监听并打开授权页面...";
 
         NexusOAuthTokenResult tokenResult;
@@ -245,31 +236,39 @@ public partial class NexusLoginDialogViewModel : ObservableObject
             {
                 _lastOAuthAuthorizeUrl = url;
                 _sharedLastOAuthAuthorizeUrl = url;
-                global::Avalonia.Threading.Dispatcher.UIThread.Post(NotifyAuthorizeUrlChanged);
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = url,
-                    UseShellExecute = true
-                });
+                _openOAuthBrowser(url);
 
-                _ = Task.Run(async () =>
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    await Task.Delay(5000);
-                    if (IsBusy && !string.IsNullOrWhiteSpace(_lastOAuthAuthorizeUrl))
+                    NotifyAuthorizeUrlChanged();
+                    if (IsBusy && ReferenceEquals(_manualOAuthCallback, manualCallback))
                     {
-                        global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                        {
-                            OauthStatusMessage = "正在等待浏览器授权，如页面被关闭可点击\u201c重开授权页\u201d。";
-                        });
+                        OauthStatusMessage = "正在等待浏览器授权；若回调页面无法打开，可在下方粘贴回调地址。";
                     }
                 });
-            });
+            }, onStarted: start =>
+            {
+                _oauthStart = start;
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(NotifyAuthorizeUrlChanged);
+            }, manualCallback: manualCallback.Task, cancellationToken: oauthCancellation.Token);
         }
         catch (Exception ex)
         {
             IsBusy = false;
             OauthStatusMessage = $"OAuth 授权过程出错: {ex.Message}";
             return;
+        }
+        finally
+        {
+            if (ReferenceEquals(_manualOAuthCallback, manualCallback))
+            {
+                _manualOAuthCallback = null;
+            }
+
+            if (ReferenceEquals(_oauthCancellation, oauthCancellation))
+            {
+                _oauthCancellation = null;
+            }
         }
 
         IsBusy = false;
@@ -280,10 +279,11 @@ public partial class NexusLoginDialogViewModel : ObservableObject
 
             OauthStatusMessage = tokenResult.FailureReason switch
             {
-                NexusOAuthFailureReason.Timeout => "授权等待超时。可点击“重开授权页”继续，或使用手动 code 回填。",
-                NexusOAuthFailureReason.ListenerStartFailed => "本地监听端口不可用。请关闭占用进程后重试，或切换手动 code 回填。",
+                NexusOAuthFailureReason.Timeout => "等待自动回调超时；可在下方粘贴本次回调地址，或重新开始登录。",
+                NexusOAuthFailureReason.ListenerStartFailed => "无法启动本地回调服务。请检查安全软件是否阻止 SVL，然后重试。",
                 NexusOAuthFailureReason.UserCancelled => "你在浏览器中取消了授权，可重试授权。",
-                NexusOAuthFailureReason.BrowserOpenFailed => "无法自动打开浏览器，请点击“重开授权页”手动打开。",
+                NexusOAuthFailureReason.Cancelled => "已取消 Nexus 授权。",
+                NexusOAuthFailureReason.BrowserOpenFailed => "无法自动打开浏览器，请点击“重试登录并打开浏览器”再次尝试。",
                 _ => tokenResult.Message
             };
             return;
@@ -294,6 +294,8 @@ public partial class NexusLoginDialogViewModel : ObservableObject
         UserName = profile.UserName;
         MembershipType = profile.MembershipType;
         IsLoggedIn = true;
+        _oauthStart = null;
+        OauthCallbackInput = string.Empty;
         _lastOAuthAuthorizeUrl = string.Empty;
         _sharedLastOAuthAuthorizeUrl = string.Empty;
         NotifyAuthorizeUrlChanged();
@@ -309,30 +311,6 @@ public partial class NexusLoginDialogViewModel : ObservableObject
             UserId = profile.UserId,
             AvatarUrl = profile.AvatarUrl
         });
-    }
-
-    [RelayCommand]
-    private void RetryOpenAuthorizePage()
-    {
-        if (string.IsNullOrWhiteSpace(_lastOAuthAuthorizeUrl))
-        {
-            OauthStatusMessage = "当前没有可重开的授权页面，请重新开始 OAuth。";
-            return;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = _lastOAuthAuthorizeUrl,
-                UseShellExecute = true
-            });
-            OauthStatusMessage = "已重开授权页面，请在浏览器完成授权后返回。";
-        }
-        catch (Exception ex)
-        {
-            OauthStatusMessage = $"重开授权页面失败: {ex.Message}";
-        }
     }
 
     [RelayCommand]
@@ -364,29 +342,59 @@ public partial class NexusLoginDialogViewModel : ObservableObject
             return;
         }
 
+        var callbackUrl = OauthCallbackInput.Trim();
+        if (!NexusOAuthService.TryExtractCodeForSession(callbackUrl, _oauthStart, out var code, out var error))
+        {
+            OauthStatusMessage = error;
+            return;
+        }
+
         if (IsBusy)
         {
+            if (_manualOAuthCallback?.TrySetResult(callbackUrl) == true)
+            {
+                OauthCallbackInput = string.Empty;
+                OauthStatusMessage = "已收到回调地址，正在完成 Nexus 登录...";
+            }
+            else
+            {
+                OauthStatusMessage = "当前授权正在处理，请稍候。";
+            }
+
             return;
         }
 
-        if (!NexusOAuthService.TryExtractCodeFromCallback(OauthCallbackInput, out var code, out var stateFromCallback))
-        {
-            OauthStatusMessage = "未能解析授权码，请粘贴完整回调 URL 或纯 code";
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(stateFromCallback) &&
-            !string.Equals(stateFromCallback, _oauthStart.State, StringComparison.Ordinal))
-        {
-            OauthStatusMessage = "state 校验失败，请重新发起授权";
-            return;
-        }
-
+        OauthCallbackInput = string.Empty;
         IsBusy = true;
+        using var oauthCancellation = new CancellationTokenSource();
+        _oauthCancellation = oauthCancellation;
         OauthStatusMessage = "正在交换 Token...";
 
-        var tokenResult = await _nexusOAuthService.ExchangeCodeAsync(code, _oauthStart.CodeVerifier, _oauthStart.RedirectUri);
-        IsBusy = false;
+        NexusOAuthTokenResult tokenResult;
+        try
+        {
+            tokenResult = await _nexusOAuthService.ExchangeCodeAsync(
+                code, _oauthStart.CodeVerifier, _oauthStart.RedirectUri, oauthCancellation.Token);
+        }
+        catch (OperationCanceledException) when (oauthCancellation.IsCancellationRequested)
+        {
+            OauthStatusMessage = "已取消 Nexus 授权。";
+            return;
+        }
+        catch (Exception ex)
+        {
+            OauthStatusMessage = $"OAuth 登录失败: {ex.Message}";
+            return;
+        }
+        finally
+        {
+            if (ReferenceEquals(_oauthCancellation, oauthCancellation))
+            {
+                _oauthCancellation = null;
+            }
+
+            IsBusy = false;
+        }
 
         if (!tokenResult.IsSuccess || tokenResult.Token == null)
         {
@@ -399,6 +407,7 @@ public partial class NexusLoginDialogViewModel : ObservableObject
         UserName = profile.UserName;
         MembershipType = profile.MembershipType;
         IsLoggedIn = true;
+        _oauthStart = null;
         _lastOAuthAuthorizeUrl = string.Empty;
         _sharedLastOAuthAuthorizeUrl = string.Empty;
         NotifyAuthorizeUrlChanged();
@@ -419,7 +428,24 @@ public partial class NexusLoginDialogViewModel : ObservableObject
     [RelayCommand]
     private void Cancel()
     {
+        CancelPendingOAuth();
         RequestClose?.Invoke(this, null);
+    }
+
+    public void CancelPendingOAuth()
+    {
+        try
+        {
+            _oauthCancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 授权流程可能刚好在窗口关闭时完成并释放了取消源。
+        }
+
+        _oauthStart = null;
+        OauthCallbackInput = string.Empty;
+        NotifyAuthorizeUrlChanged();
     }
 
     [RelayCommand]
@@ -429,9 +455,28 @@ public partial class NexusLoginDialogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ReopenBrowserPage()
+    private Task ReopenBrowserPageAsync()
     {
-        RetryOpenAuthorizePage();
+        if (IsBusy)
+        {
+            if (!string.IsNullOrWhiteSpace(_lastOAuthAuthorizeUrl))
+            {
+                try
+                {
+                    _openOAuthBrowser(_lastOAuthAuthorizeUrl);
+                    OauthStatusMessage = "已重新打开当前授权页面，请在浏览器完成授权。";
+                }
+                catch (Exception ex)
+                {
+                    OauthStatusMessage = $"打开浏览器失败: {ex.Message}";
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        OauthStatusMessage = "正在重新启动本地回调监听并打开授权页面...";
+        return StartOAuthAutoLoginAsync();
     }
 
     [RelayCommand]
@@ -448,6 +493,7 @@ public partial class NexusLoginDialogViewModel : ObservableObject
         MembershipType = string.Empty;
         ApiKey = string.Empty;
         OauthCallbackInput = string.Empty;
+        _oauthStart = null;
         OauthStatusMessage = "已登出";
         StatusMessage = "已登出";
         _lastOAuthAuthorizeUrl = string.Empty;
@@ -470,6 +516,7 @@ public partial class NexusLoginDialogViewModel : ObservableObject
     partial void OnIsLoggedInChanged(bool value)
     {
         OnPropertyChanged(nameof(IsNotLoggedIn));
+        OnPropertyChanged(nameof(ShowManualOAuthCallback));
     }
 
     private static global::Avalonia.Input.Platform.IClipboard? GetClipboard()
@@ -482,11 +529,17 @@ public partial class NexusLoginDialogViewModel : ObservableObject
         return null;
     }
 
+    private static void OpenOAuthBrowser(string url)
+    {
+        Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+    }
+
     private void NotifyAuthorizeUrlChanged()
     {
         OnPropertyChanged(nameof(CanRetryOpenAuthorizePage));
         OnPropertyChanged(nameof(CanCopyAuthorizeUrl));
         OnPropertyChanged(nameof(ShowReopenBrowserButton));
+        OnPropertyChanged(nameof(ShowManualOAuthCallback));
         OnPropertyChanged(nameof(RollbackAuthorizeUrlPreview));
     }
 

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:controls="using:SVL.Avalonia.Controls"
              x:Class="SVL.Avalonia.Views.ModpackSearchPageView"
              x:DataType="vm:ModpackSearchPageViewModel">
   <Border Classes="panel">
@@ -42,14 +43,20 @@
       </ItemsControl>
 
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12">
-        <Button Content="◀ 上一页"
-                Command="{Binding PreviousPageCommand}"
-                MinWidth="100" Height="30" Padding="12,0" />
+        <Button Command="{Binding PreviousPageCommand}" MinWidth="100" Height="30" Padding="12,0">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <controls:ThemeIcon IconName="arrow-left" Width="14" Height="14" />
+            <TextBlock Text="上一页" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
         <TextBlock Text="{Binding PageInfoText}"
                    FontSize="12" Opacity="0.6" VerticalAlignment="Center" />
-        <Button Content="下一页 ▶"
-                Command="{Binding NextPageCommand}"
-                MinWidth="100" Height="30" Padding="12,0" />
+        <Button Command="{Binding NextPageCommand}" MinWidth="100" Height="30" Padding="12,0">
+          <StackPanel Orientation="Horizontal" Spacing="4">
+            <TextBlock Text="下一页" VerticalAlignment="Center" />
+            <controls:ThemeIcon IconName="arrow-right" Width="14" Height="14" />
+          </StackPanel>
+        </Button>
       </StackPanel>
     </StackPanel>
   </Border>

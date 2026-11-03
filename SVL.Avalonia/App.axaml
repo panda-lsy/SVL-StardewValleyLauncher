@@ -5,9 +5,6 @@
              RequestedThemeVariant="Light">
   <Application.Resources>
     <ResourceDictionary>
-      <ResourceDictionary.MergedDictionaries>
-        <ResourceInclude Source="avares://SVL.Avalonia/Resources/Icons.axaml" />
-      </ResourceDictionary.MergedDictionaries>
       <converters:AssetImageConverter x:Key="AssetImageConverter" />
 
       <!-- 关闭动画时由 ThemeService 使用空 Transitions 替换活动资源。 -->

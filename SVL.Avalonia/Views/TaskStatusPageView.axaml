@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SVL.Avalonia.ViewModels"
              xmlns:models="using:SVL.Avalonia.Models"
+             xmlns:controls="using:SVL.Avalonia.Controls"
              x:Class="SVL.Avalonia.Views.TaskStatusPageView"
              x:DataType="vm:TaskStatusPageViewModel">
   <Grid ColumnDefinitions="320,*">
@@ -29,8 +30,8 @@
         <!-- 空状态 -->
         <Border Grid.Row="1" Classes="hintCard" IsVisible="{Binding IsEmptyState}">
           <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Path Data="{StaticResource Icon.Inbox}" Width="40" Height="40" Stretch="Uniform"
-                  Fill="{DynamicResource DefaultTextForeground}" HorizontalAlignment="Center" Opacity="0.4" />
+            <controls:ThemeIcon IconName="archive" Width="40" Height="40" Stretch="Uniform"
+                                HorizontalAlignment="Center" Opacity="0.4" />
             <TextBlock Text="当前没有任务" FontWeight="SemiBold" HorizontalAlignment="Center" />
             <TextBlock Text="去下载页发起任务后，这里会实时显示进度。" Opacity="0.72" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="240" />
             <Button Content="前往下载" Command="{Binding GoToDownloadCommand}" HorizontalAlignment="Center" MinWidth="120" Height="34" Margin="0,8,0,0" />

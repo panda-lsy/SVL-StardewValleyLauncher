@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:controls="using:SVL.Avalonia.Controls"
              xmlns:converters="using:SVL.Avalonia.Converters"
              mc:Ignorable="d"
              x:Class="SVL.Avalonia.Views.SettingsPageView"
@@ -18,34 +19,34 @@
         <Border Classes="hintCard">
           <StackPanel Spacing="6">
             <Button Classes="settingsNav" Classes.selected="{Binding IsBasicTab}" Command="{Binding SelectTabCommand}" CommandParameter="0" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
-              <TextBlock>
-                <Run Text="› " />
-                <Run Text="{Binding TabBasicText}" />
-              </TextBlock>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:ThemeIcon IconName="arrow-right" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding TabBasicText}" VerticalAlignment="Center" />
+              </StackPanel>
             </Button>
             <Button Classes="settingsNav" Classes.selected="{Binding IsDownloadTab}" Command="{Binding SelectTabCommand}" CommandParameter="1" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
-              <TextBlock>
-                <Run Text="› " />
-                <Run Text="{Binding TabDownloadText}" />
-              </TextBlock>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:ThemeIcon IconName="arrow-right" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding TabDownloadText}" VerticalAlignment="Center" />
+              </StackPanel>
             </Button>
             <Button Classes="settingsNav" Classes.selected="{Binding IsPersonalizationTab}" Command="{Binding SelectTabCommand}" CommandParameter="2" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
-              <TextBlock>
-                <Run Text="› " />
-                <Run Text="{Binding TabPersonalizationText}" />
-              </TextBlock>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:ThemeIcon IconName="arrow-right" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding TabPersonalizationText}" VerticalAlignment="Center" />
+              </StackPanel>
             </Button>
             <Button Classes="settingsNav" Classes.selected="{Binding IsOtherTab}" Command="{Binding SelectTabCommand}" CommandParameter="3" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
-              <TextBlock>
-                <Run Text="› " />
-                <Run Text="{Binding TabOtherText}" />
-              </TextBlock>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:ThemeIcon IconName="arrow-right" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding TabOtherText}" VerticalAlignment="Center" />
+              </StackPanel>
             </Button>
             <Button Classes="settingsNav" Classes.selected="{Binding IsAboutTab}" Command="{Binding SelectTabCommand}" CommandParameter="4" Margin="0,0,0,4" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MinHeight="36">
-              <TextBlock>
-                <Run Text="› " />
-                <Run Text="{Binding TabAboutText}" />
-              </TextBlock>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <controls:ThemeIcon IconName="arrow-right" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding TabAboutText}" VerticalAlignment="Center" />
+              </StackPanel>
             </Button>
           </StackPanel>
         </Border>
@@ -88,15 +89,14 @@
           <Border Classes="hintCard" IsVisible="{Binding IsBasicTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding BasicCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="cog" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="基本设置" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="以下字段会影响窗口标题、应用名称和启动标识。" Opacity="0.72" TextWrapping="Wrap" />
               <TextBlock Text="游戏窗口标题" />
               <Grid ColumnDefinitions="*,Auto">
-                <TextBox Text="{Binding GameWindowTitle}" />
+                <TextBox Text="{Binding GameWindowTitle, UpdateSourceTrigger=PropertyChanged}" />
                 <Button Grid.Column="1"
-                        Content="?"
                         Command="{Binding ShowWindowTitleHelpCommand}"
                         Width="32"
                         Height="32"
@@ -106,27 +106,30 @@
                         FontWeight="Bold"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center"
-                        ToolTip.Tip="查看窗口标题占位符说明" />
+                        ToolTip.Tip="查看窗口标题占位符说明">
+                  <controls:ThemeIcon IconName="question-circle" Width="18" Height="18" Stretch="Uniform" />
+                </Button>
               </Grid>
               <TextBlock Text="启动器标题" />
-              <TextBox Text="{Binding LauncherTitle}" />
+              <TextBox Text="{Binding LauncherTitle, UpdateSourceTrigger=PropertyChanged}" />
               <TextBlock Text="启动器简称" />
-              <TextBox Text="{Binding LauncherAppName}" />
+              <TextBox Text="{Binding LauncherAppName, UpdateSourceTrigger=PropertyChanged}" />
               <TextBlock Text="游戏启动后启动器行为" />
               <ComboBox ItemsSource="{Binding LauncherVisibilityOptions}"
                         SelectedIndex="{Binding SelectedLauncherVisibilityIndex}" />
               <CheckBox Content="{Binding InstanceAutoConnectLabelText}" IsChecked="{Binding InstanceAutoConnectServer}" Margin="0,6,0,0" />
               <TextBlock Text="{Binding InstanceServerAddressLabelText}" />
-              <TextBox Text="{Binding InstanceServerAddress}" Watermark="例如: 127.0.0.1:24642" />
+              <TextBox Text="{Binding InstanceServerAddress, UpdateSourceTrigger=PropertyChanged}" Watermark="例如: 127.0.0.1:24642" />
               <TextBlock Text="{Binding InstanceSteamInviteCodeLabelText}" />
-              <TextBox Text="{Binding InstanceSteamInviteCode}" Watermark="例如: ABCD-EFGH-IJKL" />
+              <TextBox Text="{Binding InstanceSteamInviteCode, UpdateSourceTrigger=PropertyChanged}" Watermark="例如: 109775241234567890" />
+              <TextBlock Text="自动连接支持 64 位 Steam 大厅数字 ID；游戏内邀请码和 IP 地址仍需手动加入。" Opacity="0.68" TextWrapping="Wrap" />
             </StackPanel>
           </Border>
 
           <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding DownloadCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="download" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="下载设置" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="下载任务与 Collection 处理参数" Opacity="0.72" TextWrapping="Wrap" />
@@ -153,7 +156,7 @@
           <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding DownloadCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="download-alt" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="接管下载" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="粘贴 http/https 下载地址，另存为本地文件。适用于非 Nexus/CurseForge 来源的 Mod 或资源。" Opacity="0.72" TextWrapping="Wrap" />
@@ -165,7 +168,7 @@
           <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding NexusCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="globe" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="NexusMods 账户" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="登录后可直接处理 NXM 链接与受限资源" Opacity="0.72" TextWrapping="Wrap" />
@@ -202,7 +205,7 @@
           <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding NxmProtocolCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="link" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding NxmProtocolCardTitleText}" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="处理浏览器中的 nxm:// 协议跳转" Opacity="0.72" TextWrapping="Wrap" />
@@ -217,7 +220,7 @@
           <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding DownloadCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="archive" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="缓存管理" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="社区汉化数据源与本地缓存清理" Opacity="0.72" TextWrapping="Wrap" />
@@ -279,7 +282,7 @@
               </StackPanel>
               <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                 <TextBlock Text="下载归档缓存保留时长（分钟）" VerticalAlignment="Center" />
-                <ComboBox ItemsSource="{Binding CacheRetentionOptionsMinutes}"
+                <ComboBox ItemsSource="{Binding DownloadCacheRetentionOptionsMinutes}"
                           SelectedItem="{Binding DownloadCacheRetentionMinutes}"
                           MinWidth="100" />
                 <TextBlock Text="（至少 1 小时）" VerticalAlignment="Center" Opacity="0.7" />
@@ -296,7 +299,7 @@
           <Border Classes="hintCard" IsVisible="{Binding IsDownloadTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding DownloadCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="analytics" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="检测并发" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="控制 Mod 更新与汉化检测同时处理的条目数量。数值越大速度越快，但会增加网络与 CPU 占用。"
@@ -319,7 +322,7 @@
           <Border Classes="hintCard" IsVisible="{Binding IsPersonalizationTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding PersonalizationCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="paint-brush" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="个性化" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="{Binding ThemeModeLabelText}" />
@@ -328,13 +331,20 @@
               <ComboBox ItemsSource="{Binding ThemeStyleOptions}" SelectedItem="{Binding SelectedThemeStyle}" />
               <TextBlock Text="自定义强调色（#RGB / #RRGGBB，可选）" />
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <TextBox Text="{Binding PrimaryColor}" Watermark="#D47748" Width="132" />
+                <TextBox Text="{Binding PrimaryColor, UpdateSourceTrigger=PropertyChanged}" Watermark="#D47748" Width="132" />
                 <Button Content="应用" Command="{Binding ApplyPrimaryColorCommand}" />
                 <Button Content="恢复默认" Command="{Binding ClearPrimaryColorCommand}" />
               </StackPanel>
               <TextBlock Text="{Binding PrimaryColorStatus}" Opacity="0.72" TextWrapping="Wrap" />
               <CheckBox Content="{Binding AnimationLabelText}" IsChecked="{Binding EnableAnimations}" />
-              <CheckBox Content="{Binding TransparencyLabelText}" IsChecked="{Binding EnableTransparency}" />
+              <TextBlock Text="{Binding TransparencyLabelText}" />
+              <Grid ColumnDefinitions="*,Auto">
+                <Slider Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
+                        Value="{Binding BackgroundTransparencyPercent, Mode=TwoWay}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding BackgroundTransparencyPercentText}"
+                           MinWidth="42" Margin="12,0,0,0" VerticalAlignment="Center" TextAlignment="Right" />
+              </Grid>
+              <TextBlock Text="{Binding TransparencyDescriptionText}" Opacity="0.72" TextWrapping="Wrap" />
               <TextBlock Text="{Binding FontSizeLabelText}" />
               <ComboBox ItemsSource="{Binding FontSizeOptions}" SelectedItem="{Binding FontSize}" />
               <TextBlock Text="{Binding UiLanguageLabelText}" />
@@ -345,13 +355,14 @@
           <Border Classes="hintCard" IsVisible="{Binding IsOtherTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding OtherCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="ellipses-horizontal" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="其他" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="{Binding OtherSectionSubtitleText}" Opacity="0.72" TextWrapping="Wrap" />
               <CheckBox Content="{Binding ShowNotificationsLabelText}" IsChecked="{Binding ShowNotifications}" />
               <CheckBox Content="{Binding ShowModTypeFilterNoticeLabelText}" IsChecked="{Binding ShowModTypeFilterDisabledNotice}" />
               <CheckBox Content="{Binding DebugModeLabelText}" IsChecked="{Binding DebugMode}" />
+              <TextBlock Text="调试模式在重启启动器后生效。" Opacity="0.68" TextWrapping="Wrap" />
               <CheckBox Content="{Binding MinimizeOnStartupLabelText}" IsChecked="{Binding MinimizeToTrayOnStartup}" />
               <CheckBox Content="{Binding MinimizeOnCloseLabelText}" IsChecked="{Binding MinimizeToTrayOnClose}" />
             </StackPanel>
@@ -361,7 +372,7 @@
           <Border Classes="hintCard" IsVisible="{Binding IsAboutTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding AboutCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="info-circle" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="作者" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <Grid ColumnDefinitions="Auto,*">
@@ -401,13 +412,14 @@
           <Border Classes="hintCard" IsVisible="{Binding IsAboutTab}">
             <StackPanel Spacing="8">
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Image Source="{Binding UpdateCardIconSource, Converter={StaticResource AssetImageConverter}}" Width="14" Height="14" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="bolt" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding UpdateCardTitleText}" Classes="hintTitle" VerticalAlignment="Center" />
               </StackPanel>
               <TextBlock Text="自动检查和版本通道策略" Opacity="0.72" TextWrapping="Wrap" />
               <CheckBox Content="{Binding AutoUpdateCheckLabelText}" IsChecked="{Binding EnableAutoUpdateCheck}" />
               <CheckBox Content="{Binding AutoDownloadUpdateLabelText}" IsChecked="{Binding AutoDownloadUpdate}" IsEnabled="{Binding EnableAutoUpdateCheck}" />
               <CheckBox Content="{Binding ShowUpdateNotificationLabelText}" IsChecked="{Binding ShowUpdateNotification}" IsEnabled="{Binding EnableAutoUpdateCheck}" />
+              <TextBlock Text="关闭更新提示后仍会在后台下载，安装需手动确认。" Opacity="0.68" TextWrapping="Wrap" />
               <TextBlock Text="{Binding UpdateSourcePreferenceLabelText}" />
               <ComboBox ItemsSource="{Binding UpdateSourceOptions}" SelectedItem="{Binding SelectedUpdateSource}" />
               <TextBlock Text="{Binding UpdateChannelLabelText}" />
@@ -426,7 +438,7 @@
 
           <Border Classes="hintCard">
             <Grid ColumnDefinitions="*,Auto">
-              <TextBlock Text="修改完成后请保存，语言与主题会立即影响界面。" VerticalAlignment="Center" Opacity="0.75" />
+              <TextBlock Text="设置更改后会自动保存，也可点击按钮立即保存。" VerticalAlignment="Center" Opacity="0.75" />
               <Button Grid.Column="1" Content="{Binding SaveButtonText}" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Right" MinWidth="120" />
             </Grid>
           </Border>

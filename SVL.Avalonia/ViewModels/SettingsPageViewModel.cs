@@ -21,7 +21,11 @@ public partial class SettingsPageViewModel : ObservableObject
     private readonly INxmProtocolRegistrationService _nxmProtocolRegistrationService;
     private readonly LocalizationService _localizationService;
     private readonly ImageResourceService _imageResourceService;
+    private readonly object _autoSaveSync = new();
     private CancellationTokenSource? _autoSaveCts;
+    private bool _isApplyingSettings;
+    private bool _hasPendingAutoSave;
+    private string? _invalidPrimaryColorError;
 
     public ObservableCollection<string> Tabs { get; } = ["基本设置", "下载设置", "个性化", "其他", "关于"];
 
@@ -77,7 +81,13 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _fontSizeLabelText = "界面字体大小";
 
     [ObservableProperty]
-    private string _transparencyLabelText = "启用透明效果";
+    private string _transparencyLabelText = "主窗口透明效果强度";
+
+    [ObservableProperty]
+    private string _transparencyDescriptionText = "0% 完全不透明；数值越高，主窗口背景越透明，100% 为当前最大透明效果。文字、控件和弹窗不受影响。";
+
+    [ObservableProperty]
+    private string _backgroundTransparencyPercentText = "25%";
 
     [ObservableProperty]
     private string _animationLabelText = "启用动画";
@@ -185,7 +195,7 @@ public partial class SettingsPageViewModel : ObservableObject
     private int _fontSize = 14;
 
     [ObservableProperty]
-    private bool _enableTransparency = true;
+    private double _backgroundTransparencyPercent = 25;
 
     [ObservableProperty]
     private bool _enableAnimations = true;
@@ -328,7 +338,10 @@ public partial class SettingsPageViewModel : ObservableObject
 
     /// <summary>过期缓存清理的保留时长选项（分钟）。</summary>
     public ObservableCollection<int> CacheRetentionOptionsMinutes { get; } =
-    [5, 15, 30, 60, 180, 720, 1440, 10080, 43200];
+    [5, 15, 30, 60, 180, 720, 1440, 10080];
+
+    public ObservableCollection<int> DownloadCacheRetentionOptionsMinutes { get; } =
+    [60, 180, 720, 1440, 10080, 43200];
 
     [ObservableProperty]
     private string _selectedLocalizationSource = "Gitee";
@@ -539,6 +552,19 @@ public partial class SettingsPageViewModel : ObservableObject
 
     private void ApplySettings(AppUserSettings settings)
     {
+        _isApplyingSettings = true;
+        try
+        {
+            ApplySettingsCore(settings);
+        }
+        finally
+        {
+            _isApplyingSettings = false;
+        }
+    }
+
+    private void ApplySettingsCore(AppUserSettings settings)
+    {
         GameWindowTitle = settings.GameWindowTitle;
         LauncherTitle = settings.LauncherTitle;
         LauncherAppName = settings.LauncherAppName;
@@ -577,7 +603,8 @@ public partial class SettingsPageViewModel : ObservableObject
         IsDarkMode = ThemeService.IsDarkMode;
         EnableAnimations = settings.EnableAnimations;
         ThemeService.SetAnimationsEnabled(EnableAnimations);
-        EnableTransparency = settings.EnableTransparency;
+        BackgroundTransparencyPercent = Math.Clamp(settings.BackgroundTransparencyPercent, 0, 100);
+        ThemeService.SetBackgroundTransparencyPercent((int)Math.Round(BackgroundTransparencyPercent));
         FontSize = FontSizeOptions.Contains(settings.FontSize) ? settings.FontSize : 14;
 
         // 主题风格
@@ -585,6 +612,7 @@ public partial class SettingsPageViewModel : ObservableObject
         var schemeName = settings.ThemeColorScheme ?? "Blue";
         SelectedThemeStyle = ResolveThemeDisplayName(styleName, schemeName);
         PrimaryColor = settings.PrimaryColor ?? string.Empty;
+        _invalidPrimaryColorError = null;
 
         // 恢复主题
         ThemeService.RestoreFromSettings(settings);
@@ -593,6 +621,7 @@ public partial class SettingsPageViewModel : ObservableObject
             : $"当前强调色：{ThemeService.CustomPrimaryColorHex}";
 
         SelectedUiLanguage = string.IsNullOrWhiteSpace(settings.UiLanguage) ? "zh-CN" : settings.UiLanguage;
+        _localizationService.ApplyLanguage(SelectedUiLanguage);
         ShowNotifications = settings.ShowNotifications;
         ShowModTypeFilterDisabledNotice = settings.ShowModTypeFilterDisabledNotice;
         DebugMode = settings.DebugMode;
@@ -662,7 +691,8 @@ public partial class SettingsPageViewModel : ObservableObject
         settings.UiLanguage = SelectedUiLanguage;
         settings.FontSize = FontSizeOptions.Contains(FontSize) ? FontSize : 14;
         settings.EnableAnimations = EnableAnimations;
-        settings.EnableTransparency = EnableTransparency;
+        settings.BackgroundTransparencyPercent = Math.Clamp((int)Math.Round(BackgroundTransparencyPercent), 0, 100);
+        settings.EnableTransparency = settings.BackgroundTransparencyPercent > 0;
 
         // 保存主题
         ResolveThemeStyleAndScheme(SelectedThemeStyle, out var styleName, out var schemeName);
@@ -707,6 +737,7 @@ public partial class SettingsPageViewModel : ObservableObject
         UiLanguageLabelText = _localizationService.Get("Settings.UiLanguage");
         FontSizeLabelText = _localizationService.Get("Settings.FontSize");
         TransparencyLabelText = _localizationService.Get("Settings.Transparency");
+        TransparencyDescriptionText = _localizationService.Get("Settings.Transparency.Description");
         AnimationLabelText = _localizationService.Get("Settings.Animation");
         SaveButtonText = _localizationService.Get("Settings.Save");
         InstanceAutoConnectLabelText = _localizationService.Get("Settings.Basic.AutoConnect");
@@ -782,7 +813,29 @@ public partial class SettingsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAboutTab));
 
         StatusMessage = $"当前标签：{Tabs[normalizedIndex]}";
+        ScheduleAutoSave();
     }
+
+    private void ScheduleInputAutoSave()
+    {
+        if (_isApplyingSettings)
+        {
+            return;
+        }
+
+        StatusMessage = "设置已更改（正在自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnGameWindowTitleChanged(string value) => ScheduleInputAutoSave();
+    partial void OnInstanceAutoConnectServerChanged(bool value) => ScheduleInputAutoSave();
+    partial void OnInstanceServerAddressChanged(string value) => ScheduleInputAutoSave();
+    partial void OnInstanceSteamInviteCodeChanged(string value) => ScheduleInputAutoSave();
+    partial void OnEnableDownloadProxyChanged(bool value) => ScheduleInputAutoSave();
+    partial void OnDownloadProxyUrlChanged(string value) => ScheduleInputAutoSave();
+    partial void OnDownloadProxyUserNameChanged(string value) => ScheduleInputAutoSave();
+    partial void OnDownloadProxyPasswordChanged(string value) => ScheduleInputAutoSave();
+    partial void OnEnableDownloadFloatingTaskButtonChanged(bool value) => ScheduleInputAutoSave();
 
     partial void OnLauncherTitleChanged(string value)
     {
@@ -844,7 +897,34 @@ public partial class SettingsPageViewModel : ObservableObject
 
     partial void OnSelectedUiLanguageChanged(string value)
     {
+        if (!_isApplyingSettings)
+        {
+            _localizationService.ApplyLanguage(value);
+        }
         StatusMessage = $"界面语言切换为：{value}（已自动保存）";
+        ScheduleAutoSave();
+    }
+
+    partial void OnPrimaryColorChanged(string value)
+    {
+        if (_isApplyingSettings)
+        {
+            return;
+        }
+
+        if (!ThemeService.TrySetCustomPrimaryColor(value, out var errorMessage))
+        {
+            _invalidPrimaryColorError = errorMessage;
+            PrimaryColorStatus = errorMessage;
+            StatusMessage = errorMessage;
+            return;
+        }
+
+        _invalidPrimaryColorError = null;
+        PrimaryColorStatus = string.IsNullOrWhiteSpace(value)
+            ? "留空使用当前配色方案的默认强调色"
+            : $"当前强调色：{ThemeService.CustomPrimaryColorHex}";
+        StatusMessage = "自定义强调色已应用（正在自动保存）";
         ScheduleAutoSave();
     }
 
@@ -856,7 +936,9 @@ public partial class SettingsPageViewModel : ObservableObject
 
     partial void OnDebugModeChanged(bool value)
     {
-        StatusMessage = value ? "已启用调试模式（已自动保存）" : "已禁用调试模式（已自动保存）";
+        StatusMessage = value
+            ? "已启用调试模式，重启后生效（正在自动保存）"
+            : "已禁用调试模式，重启后生效（正在自动保存）";
         ScheduleAutoSave();
     }
 
@@ -954,10 +1036,18 @@ public partial class SettingsPageViewModel : ObservableObject
         ScheduleAutoSave();
     }
 
-    partial void OnEnableTransparencyChanged(bool value)
+    partial void OnBackgroundTransparencyPercentChanged(double value)
     {
-        ThemeService.SetTransparencyEnabled(value);
-        StatusMessage = value ? "已启用透明效果（已自动保存）" : "已禁用透明效果（已自动保存）";
+        var normalized = Math.Clamp(value, 0, 100);
+        if (Math.Abs(normalized - value) > 0.001)
+        {
+            BackgroundTransparencyPercent = normalized;
+            return;
+        }
+
+        BackgroundTransparencyPercentText = $"{(int)Math.Round(normalized)}%";
+        ThemeService.SetBackgroundTransparencyPercent((int)Math.Round(normalized));
+        StatusMessage = $"主窗口透明效果强度：{BackgroundTransparencyPercentText}（已自动保存）";
         ScheduleAutoSave();
     }
 
@@ -1283,16 +1373,33 @@ public partial class SettingsPageViewModel : ObservableObject
 
     partial void OnSelectedLocalizationSourceChanged(string value)
     {
-        ScheduleAutoSave();
         StatusMessage = $"社区汉化源切换为：{value}（已自动保存）";
+        ScheduleAutoSave();
     }
 
     [RelayCommand]
     private void SaveSettings()
     {
-        _settingsStore.Save(BuildSettings());
-        _localizationService.SetLanguage(SelectedUiLanguage);
-        StatusMessage = $"设置已保存（{System.DateTime.Now:HH:mm:ss}）";
+        lock (_autoSaveSync)
+        {
+            CancelPendingAutoSave();
+            if (!TryPersistSettings())
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            _localizationService.SetLanguage(SelectedUiLanguage);
+            StatusMessage = string.IsNullOrEmpty(_invalidPrimaryColorError)
+                ? $"设置已保存（{System.DateTime.Now:HH:mm:ss}）"
+                : $"其他设置已保存；强调色未保存：{_invalidPrimaryColorError}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"设置已保存，但应用语言失败：{ex.Message}";
+        }
     }
 
     /// <summary>
@@ -1313,7 +1420,11 @@ public partial class SettingsPageViewModel : ObservableObject
             return;
         }
 
-        _autoSaveCts?.Cancel();
+        lock (_autoSaveSync)
+        {
+            CancelPendingAutoSave();
+            _hasPendingAutoSave = false;
+        }
 
         var current = _settingsStore.Load();
         var defaults = new AppUserSettings
@@ -1338,6 +1449,11 @@ public partial class SettingsPageViewModel : ObservableObject
     {
         try
         {
+            if (!FlushPendingSettings())
+            {
+                return;
+            }
+
             ApplySettings(_settingsStore.Load());
         }
         catch
@@ -1349,22 +1465,116 @@ public partial class SettingsPageViewModel : ObservableObject
     /// <summary>防抖自动保存：设置项变更后 1000ms 无新变更则持久化，避免遗忘保存。</summary>
     private void ScheduleAutoSave()
     {
-        _autoSaveCts?.Cancel();
-        _autoSaveCts = new CancellationTokenSource();
-        var token = _autoSaveCts.Token;
-        _ = Task.Run(async () =>
+        if (_isApplyingSettings)
         {
-            try
+            return;
+        }
+
+        CancellationTokenSource source;
+        lock (_autoSaveSync)
+        {
+            CancelPendingAutoSave();
+            source = new CancellationTokenSource();
+            _autoSaveCts = source;
+            _hasPendingAutoSave = true;
+        }
+
+        StatusMessage = StatusMessage.Replace("（已自动保存）", "（正在自动保存）", StringComparison.Ordinal);
+        _ = SaveAfterDelayAsync(source);
+    }
+
+    private async Task SaveAfterDelayAsync(CancellationTokenSource source)
+    {
+        try
+        {
+            await Task.Delay(1000, source.Token);
+            if (global::Avalonia.Application.Current != null && !Dispatcher.UIThread.CheckAccess())
             {
-                await Task.Delay(1000, token);
-                if (token.IsCancellationRequested) return;
-                _settingsStore.Save(BuildSettings());
+                await Dispatcher.UIThread.InvokeAsync(() => PersistScheduledSettings(source));
             }
-            catch (OperationCanceledException)
+            else
             {
-                // 被新的变更取消，正常
+                PersistScheduledSettings(source);
             }
-        });
+        }
+        catch (OperationCanceledException)
+        {
+            // 被新的变更或立即保存取消。
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Settings] 自动保存调度失败: {ex.Message}");
+        }
+        finally
+        {
+            lock (_autoSaveSync)
+            {
+                if (ReferenceEquals(_autoSaveCts, source))
+                {
+                    _autoSaveCts = null;
+                }
+            }
+
+            source.Dispose();
+        }
+    }
+
+    private void PersistScheduledSettings(CancellationTokenSource source)
+    {
+        lock (_autoSaveSync)
+        {
+            if (source.IsCancellationRequested || !ReferenceEquals(_autoSaveCts, source))
+            {
+                return;
+            }
+
+            if (TryPersistSettings())
+            {
+                StatusMessage = StatusMessage.Replace("（正在自动保存）", "（已自动保存）", StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>在退出或重新加载前同步写入尚未完成防抖的设置。</summary>
+    public bool FlushPendingSettings()
+    {
+        lock (_autoSaveSync)
+        {
+            CancelPendingAutoSave();
+            if (!_hasPendingAutoSave)
+            {
+                return true;
+            }
+
+            if (!TryPersistSettings())
+            {
+                return false;
+            }
+
+            StatusMessage = StatusMessage.Replace("（正在自动保存）", "（已自动保存）", StringComparison.Ordinal);
+            return true;
+        }
+    }
+
+    private void CancelPendingAutoSave()
+    {
+        _autoSaveCts?.Cancel();
+        _autoSaveCts = null;
+    }
+
+    private bool TryPersistSettings()
+    {
+        try
+        {
+            _settingsStore.Save(BuildSettings());
+            _hasPendingAutoSave = false;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"保存设置失败：{ex.Message}";
+            return false;
+        }
     }
 
     [RelayCommand]
@@ -1613,6 +1823,29 @@ public partial class SettingsPageViewModel : ObservableObject
         NexusLoggedOut?.Invoke();
     }
 
+    /// <summary>无提示模式下下载到可复用缓存，不自动安装。</summary>
+    public async Task DownloadUpdateInBackgroundAsync(LauncherUpdateCheckResult result)
+    {
+        var asset = result.ReleaseInfo == null ? null : LauncherUpdateService.SelectPreferredAsset(result.ReleaseInfo);
+        if (asset == null)
+        {
+            UpdateStatusText = "没有适合当前平台的更新文件";
+            return;
+        }
+
+        try
+        {
+            UpdateStatusText = "正在后台下载启动器更新";
+            await _launcherUpdateService.DownloadAssetAsync(asset, null, CancellationToken.None);
+            UpdateStatusText = "启动器更新已下载，可在检查更新时安装";
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusText = $"后台下载更新失败：{ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"[Update] {UpdateStatusText}");
+        }
+    }
+
     /// <summary>由 MainWindowViewModel 启动时自动检查调用：复用弹窗逻辑，避免重复检查。</summary>
     public async Task ShowUpdateDialogFromAutoCheckAsync(LauncherUpdateCheckResult result)
     {
@@ -1639,6 +1872,10 @@ public partial class SettingsPageViewModel : ObservableObject
                 SkippedUpdateVersion = release.TagName;
                 _settingsStore.Save(BuildSettings());
             }
+            else if (action == UpdateDialogAction.OpenRelease && !string.IsNullOrWhiteSpace(release.HtmlUrl))
+            {
+                _externalProcessService.TryOpenUrl(release.HtmlUrl);
+            }
         }
         finally
         {
@@ -1660,9 +1897,8 @@ public partial class SettingsPageViewModel : ObservableObject
 
         try
         {
-            var includePrerelease = string.Equals(SelectedUpdateChannel, "预览版", StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(SelectedUpdateChannel, "preview", StringComparison.OrdinalIgnoreCase);
-            var preferGitee = SelectedUpdateSource.Contains("Gitee", StringComparison.OrdinalIgnoreCase);
+            var includePrerelease = LauncherUpdateService.IncludesPrerelease(SelectedUpdateChannel);
+            var preferGitee = LauncherUpdateService.PrefersGitee(SelectedUpdateSource);
 
             var result = await _launcherUpdateService.CheckForUpdateAsync(includePrerelease, preferGitee);
             if (!result.Success || result.ReleaseInfo == null)

@@ -5,6 +5,7 @@
              xmlns:vm="using:SVL.Avalonia.ViewModels"
              xmlns:model="using:SVL.Avalonia.Models"
              xmlns:converters="using:SVL.Avalonia.Converters"
+             xmlns:controls="using:SVL.Avalonia.Controls"
              mc:Ignorable="d"
              x:Class="SVL.Avalonia.Views.DownloadPageView"
              x:Name="Root"
@@ -18,7 +19,7 @@
           <Grid ColumnDefinitions="4,Auto,*">
             <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsGameCategory}" />
             <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsGameCategory}" />
-            <Image Grid.Column="1" Source="{Binding CategoryGameIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <controls:ThemeIcon Grid.Column="1" IconName="retro-pc" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" Margin="8,0,0,0" />
             <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
               <TextBlock Text="游戏本体" FontWeight="SemiBold" />
               <TextBlock Text="SteamCMD 登录下载" FontSize="11" Opacity="0.72" />
@@ -29,7 +30,7 @@
           <Grid ColumnDefinitions="4,Auto,*">
             <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsSmapiCategory}" />
             <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsSmapiCategory}" />
-            <Image Grid.Column="1" Source="{Binding CategorySmapiIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <controls:ThemeIcon Grid.Column="1" IconName="pencil-ruler" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" Margin="8,0,0,0" />
             <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
               <TextBlock Text="{Binding CategorySmapiText}" FontWeight="SemiBold" />
               <TextBlock Text="{Binding CategorySmapiSubText}" FontSize="11" Opacity="0.72" />
@@ -40,7 +41,7 @@
           <Grid ColumnDefinitions="4,Auto,*">
             <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsModsCategory}" />
             <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsModsCategory}" />
-            <Image Grid.Column="1" Source="{Binding CategoryModsIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <controls:ThemeIcon Grid.Column="1" IconName="notebook" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" Margin="8,0,0,0" />
             <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
               <TextBlock Text="{Binding CategoryModsText}" FontWeight="SemiBold" />
               <TextBlock Text="{Binding CategoryModsSubText}" FontSize="11" Opacity="0.72" />
@@ -51,7 +52,7 @@
           <Grid ColumnDefinitions="4,Auto,*">
             <Border Grid.ColumnSpan="3" Background="{DynamicResource CategorySelectedBg}" CornerRadius="6" IsVisible="{Binding IsModpacksCategory}" />
             <Border Grid.Column="0" Background="{DynamicResource CategoryIndicator}" CornerRadius="2" IsVisible="{Binding IsModpacksCategory}" />
-            <Image Grid.Column="1" Source="{Binding CategoryModpacksIconSource, Converter={StaticResource AssetImageConverter}}" Width="18" Height="18" VerticalAlignment="Center" Margin="8,0,0,0" />
+            <controls:ThemeIcon Grid.Column="1" IconName="archive" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" Margin="8,0,0,0" />
             <StackPanel Grid.Column="2" Spacing="1" Margin="8,0,0,0">
               <TextBlock Text="{Binding CategoryModpacksText}" FontWeight="SemiBold" />
               <TextBlock Text="{Binding CategoryModpacksSubText}" FontSize="11" Opacity="0.72" />
@@ -72,7 +73,7 @@
                             Command="{Binding DataContext.SelectTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}">
                       <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Image Source="{Binding StatusIconSource, Converter={StaticResource AssetImageConverter}}" Width="12" Height="12" VerticalAlignment="Center" />
+                        <controls:ThemeIcon IconName="{Binding StatusIconName}" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
                     </Button>
@@ -118,7 +119,7 @@
                             Command="{Binding DataContext.SelectTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             CommandParameter="{Binding}">
                       <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Image Source="{Binding StatusIconSource, Converter={StaticResource AssetImageConverter}}" Width="12" Height="12" VerticalAlignment="Center" />
+                        <controls:ThemeIcon IconName="{Binding StatusIconName}" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
                     </Button>
@@ -375,6 +376,7 @@
                           HorizontalAlignment="Left" MinWidth="140" Margin="0,4,0,0" />
                   <ProgressBar Minimum="0" Maximum="100" Value="{Binding GameDownloadProgress}" Height="8"
                                IsVisible="{Binding IsSteamCmdBusy}" />
+                  <TextBlock Text="{Binding Status}" Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
 
                 <!-- 翻页导航：上一步在左，下一步在右 -->
@@ -393,7 +395,7 @@
                 <!-- 自定义指令输入栏 -->
                 <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
                   <TextBox Grid.Column="0" Text="{Binding SteamCmdInputText}"
-                           Watermark="输入自定义 SteamCMD 指令，如 app_update 413150 或 download_depot 413150 413151"
+                           Watermark="输入自定义 SteamCMD 指令，如 app_update 413150"
                            FontFamily="Cascadia Mono,Consolas,Courier New" FontSize="11"
                            VerticalAlignment="Center" />
                   <Button Grid.Column="1" Content="发送" Command="{Binding SendSteamCmdInputCommand}"

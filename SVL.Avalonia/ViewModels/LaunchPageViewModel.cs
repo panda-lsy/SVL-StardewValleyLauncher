@@ -16,6 +16,7 @@ public partial class LaunchPageViewModel : ObservableObject
     private readonly IGameInstallPathLocator _gameInstallPathLocator;
     private readonly IExternalProcessService _externalProcessService;
     private readonly AppUserSettingsStore _settingsStore;
+    private readonly InstanceLaunchSettingsStore _instanceLaunchSettingsStore;
     private readonly LocalizationService _localizationService;
     private readonly ImageResourceService _imageResourceService;
     private string _currentGamePath = string.Empty;
@@ -182,6 +183,7 @@ public partial class LaunchPageViewModel : ObservableObject
         _gameInstallPathLocator = gameInstallPathLocator;
         _externalProcessService = externalProcessService;
         _settingsStore = settingsStore;
+        _instanceLaunchSettingsStore = new InstanceLaunchSettingsStore(settingsStore);
         _localizationService = localizationService;
         _imageResourceService = imageResourceService;
         _localizationService.LanguageChanged += ApplyLocalizedTexts;
@@ -478,7 +480,7 @@ public partial class LaunchPageViewModel : ObservableObject
     private string ResolveInstanceIconSource(string instancePath, bool isSmapiInstance)
     {
         // 自定义图标优先级高于系统预设图标
-        var customIcon = InstanceIconResolver.ResolveIconPath(instancePath, isSmapiInstance);
+        var customIcon = InstanceIconResolver.ResolveDisplayIconPath(instancePath, isSmapiInstance);
         if (!string.IsNullOrWhiteSpace(customIcon))
         {
             return customIcon;
@@ -555,6 +557,23 @@ public partial class LaunchPageViewModel : ObservableObject
             return;
         }
 
+        try
+        {
+            var instanceSettings = _instanceLaunchSettingsStore.GetEffective(_currentGamePath, settings);
+            settings.GameWindowTitle = instanceSettings.WindowTitle;
+            settings.InstanceCustomLaunchArguments = instanceSettings.CustomArguments;
+            settings.InstanceAutoConnectServer = instanceSettings.AutoConnectServer;
+            settings.InstanceServerAddress = instanceSettings.ServerAddress;
+            settings.InstanceSteamInviteCode = instanceSettings.SteamInviteCode;
+            settings.OverrideSteamLaunchOptions = instanceSettings.OverrideSteamLaunchOptions;
+            settings.SteamLaunchOptions = instanceSettings.SteamLaunchOptions;
+        }
+        catch (Exception ex)
+        {
+            ActionStatus = $"无法读取当前版本的启动设置：{ex.Message}";
+            return;
+        }
+
         var launchTarget = ResolveLaunchTarget(_currentGamePath, _preferredLaunchModeToken);
         if (string.IsNullOrWhiteSpace(launchTarget) || (!File.Exists(launchTarget) && !Directory.Exists(launchTarget)))
         {
@@ -565,7 +584,7 @@ public partial class LaunchPageViewModel : ObservableObject
         IsLaunching = true;
         LaunchButtonText = Text("Launch.Button.Launching");
 
-        var launchArguments = BuildLaunchArguments(settings);
+        var launchArguments = BuildLaunchArguments(settings, out var connectionNotice);
         var hasArguments = !string.IsNullOrWhiteSpace(launchArguments);
 
         Process? gameProcess = null;
@@ -606,6 +625,7 @@ public partial class LaunchPageViewModel : ObservableObject
                 PreferredLaunchMode,
                 safeText,
                 argsText);
+            if (!string.IsNullOrWhiteSpace(connectionNotice)) ActionStatus += "；" + connectionNotice;
 
             // 只有拿到真实进程句柄且配置了自定义标题时才等待窗口并设置标题；
             // 启动器不应等待游戏退出，否则“启动中”会持续整个游戏生命周期。
@@ -837,9 +857,10 @@ public partial class LaunchPageViewModel : ObservableObject
         return "auto";
     }
 
-    private string BuildLaunchArguments(Models.AppUserSettings settings)
+    private string BuildLaunchArguments(Models.AppUserSettings settings, out string connectionNotice)
     {
         var args = new List<string>();
+        connectionNotice = string.Empty;
 
         if (EnableSafeLaunch)
         {
@@ -849,6 +870,15 @@ public partial class LaunchPageViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(settings.InstanceCustomLaunchArguments))
         {
             args.Add(settings.InstanceCustomLaunchArguments.Trim());
+        }
+
+        if (settings.InstanceAutoConnectServer)
+        {
+            if (ulong.TryParse(settings.InstanceSteamInviteCode?.Trim(), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lobbyId) && lobbyId > 0)
+                args.Add($"+connect_lobby {lobbyId.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+            else
+                connectionNotice = "未提供有效的 Steam 大厅数字 ID，请在游戏联机菜单手动加入";
         }
 
         return string.Join(" ", args);

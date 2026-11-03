@@ -42,7 +42,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
+        UpdateMaximizeRestoreIcon();
+        RefreshMainWindowThemeResources(ThemeService.BackgroundTransparencyPercent);
         ThemeService.ThemeChanged += OnThemeChanged;
         Closed += OnWindowClosed;
 
@@ -87,6 +88,11 @@ public partial class MainWindow : Window
     {
         base.OnPropertyChanged(change);
 
+        if (change.Property == Window.WindowStateProperty)
+        {
+            UpdateMaximizeRestoreIcon();
+        }
+
         if (change.Property == TopLevel.ActualTransparencyLevelProperty)
         {
             if (_hasBeenOpened)
@@ -94,7 +100,7 @@ public partial class MainWindow : Window
                 // ActualTransparencyLevel 可能在窗口打开后的首个属性变更中暂时为 None，
                 // 不应因此把用户已经开启的半透明画刷切回不透明；后端不支持透明时，
                 // TransparencyBackgroundFallback 会负责提供不透明回退色。
-                RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
+                RefreshMainWindowThemeResources(ThemeService.BackgroundTransparencyPercent);
             }
 
             LogWindowTransparencyState("平台透明级别已更新");
@@ -106,7 +112,7 @@ public partial class MainWindow : Window
         _hasBeenOpened = true;
         // 不以 ActualTransparencyLevel 作为画刷开关。部分平台/窗口后端在 Opened
         // 事件时尚未报告最终透明级别，提前切回不透明会让主页面看起来没有透明效果。
-        RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
+        RefreshMainWindowThemeResources(ThemeService.BackgroundTransparencyPercent);
         LogWindowTransparencyState("主窗口已打开");
     }
 
@@ -114,13 +120,13 @@ public partial class MainWindow : Window
     {
         if (Dispatcher.UIThread.CheckAccess())
         {
-            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
+            RefreshMainWindowThemeResources(ThemeService.BackgroundTransparencyPercent);
             return;
         }
 
         Dispatcher.UIThread.Post(() =>
         {
-            RefreshMainWindowThemeResources(ThemeService.TransparencyEnabled);
+            RefreshMainWindowThemeResources(ThemeService.BackgroundTransparencyPercent);
         });
     }
 
@@ -134,20 +140,23 @@ public partial class MainWindow : Window
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
         // 程序主动退出、系统关机和应用 Shutdown 不应被“最小化到托盘”拦截。
-        if (_allowClose ||
-            e.CloseReason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown)
+        if (!_allowClose &&
+            e.CloseReason is not (WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown) &&
+            ShouldMinimizeToTrayOnClose?.Invoke() == true)
         {
+            e.Cancel = true;
+            Hide();
+            DebugConsoleService.Instance.Append("主窗口已隐藏到系统托盘。", DebugLogLevel.Debug);
             return;
         }
 
-        if (ShouldMinimizeToTrayOnClose?.Invoke() != true)
+        if (DataContext is MainWindowViewModel vm)
         {
-            return;
+            var instanceSaved = vm.VersionSettingsPage.FlushPendingInstanceSettings();
+            var globalSaved = vm.SettingsPage.FlushPendingSettings();
+            if (!instanceSaved || !globalSaved)
+                DebugConsoleService.Instance.Append("退出时保存设置失败，请检查配置目录权限。", DebugLogLevel.Error);
         }
-
-        e.Cancel = true;
-        Hide();
-        DebugConsoleService.Instance.Append("主窗口已隐藏到系统托盘。", DebugLogLevel.Debug);
     }
 
     /// <summary>绕过托盘设置关闭主窗口，供“退出”、启动游戏和生命周期收尾使用。</summary>
@@ -165,22 +174,30 @@ public partial class MainWindow : Window
             vm.LaunchPage.GameStartedRequested += OnGameStartedRequested;
             vm.LaunchPage.GameExitedRequested += OnGameExitedRequested;
             vm.SettingsPage.PropertyChanged += OnSettingsPropertyChanged;
-            ApplyWindowTransparency(vm.SettingsPage.EnableTransparency);
+            Notifications.IsEnabled = vm.SettingsPage.ShowNotifications;
+            ApplyWindowTransparency((int)Math.Round(vm.SettingsPage.BackgroundTransparencyPercent));
         }
     }
 
     private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(SettingsPageViewModel.EnableTransparency), StringComparison.Ordinal) &&
+        if (string.Equals(e.PropertyName, nameof(SettingsPageViewModel.ShowNotifications), StringComparison.Ordinal) &&
+            sender is SettingsPageViewModel notificationSettings)
+        {
+            Notifications.IsEnabled = notificationSettings.ShowNotifications;
+        }
+
+        if (string.Equals(e.PropertyName, nameof(SettingsPageViewModel.BackgroundTransparencyPercent), StringComparison.Ordinal) &&
             sender is SettingsPageViewModel settings)
         {
-            ApplyWindowTransparency(settings.EnableTransparency);
+            ApplyWindowTransparency((int)Math.Round(settings.BackgroundTransparencyPercent));
         }
     }
 
-    private void ApplyWindowTransparency(bool enabled)
+    private void ApplyWindowTransparency(int transparencyPercent)
     {
-        TransparencyLevelHint = enabled
+        transparencyPercent = Math.Clamp(transparencyPercent, 0, 100);
+        TransparencyLevelHint = transparencyPercent > 0
             // AcrylicBlur 必须优先于 Transparent：Windows 会按顺序选择第一个可用级别，
             // 否则 Transparent 一旦可用，后面的 AcrylicBlur 永远不会生效，主页面看起来
             // 只有普通半透明铺层而没有 Debug 页面那样明显的桌面材质效果。
@@ -189,12 +206,12 @@ public partial class MainWindow : Window
 
         // 透明设置决定主题画刷是否半透明；平台能力只决定窗口最终是否能透出桌面，
         // 不应让瞬时的 ActualTransparencyLevel 覆盖用户设置。
-        RefreshMainWindowThemeResources(enabled);
+        RefreshMainWindowThemeResources(transparencyPercent);
 
-        LogWindowTransparencyState(enabled ? "设置已开启" : "设置已关闭");
+        LogWindowTransparencyState($"背景透明度 {transparencyPercent}%");
     }
 
-    private void RefreshMainWindowThemeResources(bool enabled)
+    private void RefreshMainWindowThemeResources(int transparencyPercent)
     {
         var appResources = Application.Current?.Resources;
         if (appResources is null)
@@ -208,7 +225,7 @@ public partial class MainWindow : Window
             {
                 var color = source.Color;
                 Resources[key] = new SolidColorBrush(Color.FromArgb(
-                    enabled ? transparentAlpha : (byte)0xFF,
+                    ThemeService.GetSurfaceAlphaForTransparency(transparentAlpha, transparencyPercent),
                     color.R,
                     color.G,
                     color.B));
@@ -386,6 +403,18 @@ public partial class MainWindow : Window
         WindowState = WindowState == WindowState.Maximized
             ? WindowState.Normal
             : WindowState.Maximized;
+    }
+
+    private void UpdateMaximizeRestoreIcon()
+    {
+        if (MaximizeButtonIcon is null || RestoreButtonIcon is null)
+        {
+            return;
+        }
+
+        var isMaximized = WindowState == WindowState.Maximized;
+        MaximizeButtonIcon.IsVisible = !isMaximized;
+        RestoreButtonIcon.IsVisible = isMaximized;
     }
 
     private void CloseButton_Click(object? sender, RoutedEventArgs e)

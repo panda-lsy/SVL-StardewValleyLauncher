@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:SVL.Avalonia.ViewModels"
+             xmlns:controls="using:SVL.Avalonia.Controls"
              xmlns:converters="using:SVL.Avalonia.Converters"
              xmlns:angif="using:AnimatedImage.Avalonia"
              mc:Ignorable="d"
@@ -77,23 +78,21 @@
                   Margin="8,0,0,0"
               Command="{Binding DataContext.OpenVersionSettingsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                   CommandParameter="{Binding}">
-            <Path Data="{StaticResource Icon.Settings}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+            <controls:ThemeIcon IconName="cog" Width="18" Height="18" Stretch="Uniform" />
           </Button>
 
           <Button Grid.Column="2"
                   Classes="instanceAction"
                   ToolTip.Tip="收藏"
-                  Content="{Binding FavoriteGlyph}"
                   Margin="4,0,0,0"
               Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                  CommandParameter="{Binding}" />
+                  CommandParameter="{Binding}">
+            <controls:ThemeIcon IconName="star" Width="18" Height="18" Stretch="Uniform"
+                                Opacity="{Binding FavoriteIconOpacity}" />
+          </Button>
 
-          <TextBlock Grid.Column="3"
-                     Text="→"
-                     FontSize="20"
-                     Foreground="{DynamicResource AccentBrush}"
-                     VerticalAlignment="Center"
-                     Margin="8,0,12,0" />
+          <controls:ThemeIcon Grid.Column="3" IconName="arrow-right" Width="18" Height="18"
+                              Stretch="Uniform" VerticalAlignment="Center" Margin="8,0,12,0" />
         </Grid>
       </Border>
     </DataTemplate>

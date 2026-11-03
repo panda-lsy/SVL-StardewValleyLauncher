@@ -7,6 +7,9 @@ public sealed class LauncherReleaseAsset
     public string BrowserDownloadUrl { get; set; } = string.Empty;
 
     public long Size { get; set; }
+
+    /// <summary>发布源提供时用于校验完整性的 SHA-256；为空表示来源未提供。</summary>
+    public string Sha256 { get; set; } = string.Empty;
 }
 
 public sealed class LauncherReleaseInfo

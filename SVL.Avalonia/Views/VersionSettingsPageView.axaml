@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:SVL.Avalonia.ViewModels"
              xmlns:converters="using:SVL.Avalonia.Converters"
+             xmlns:controls="using:SVL.Avalonia.Controls"
              xmlns:angif="using:AnimatedImage.Avalonia"
              x:Class="SVL.Avalonia.Views.VersionSettingsPageView"
              x:Name="Root"
@@ -114,8 +115,8 @@
     </Style>
 
     <Style Selector="Button.rowAction">
-      <Setter Property="Width" Value="30" />
-      <Setter Property="Height" Value="30" />
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Background" Value="Transparent" />
@@ -161,7 +162,7 @@
                     Classes.selected="{Binding IsOverviewSection}"
                     Command="{Binding SwitchToGeneralSectionCommand}">
               <Grid ColumnDefinitions="Auto,*">
-                <Path Data="{StaticResource Icon.BarChart}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Details.png" Width="24" Height="24" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock Grid.Column="1" Text="{Binding OverviewNavText}" VerticalAlignment="Center" />
               </Grid>
             </Button>
@@ -169,7 +170,7 @@
                     Classes.selected="{Binding IsAutoInstallSection}"
                     Command="{Binding SwitchToAutoInstallSectionCommand}">
               <Grid ColumnDefinitions="Auto,*">
-                <Path Data="{StaticResource Icon.Download}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Download.png" Width="24" Height="24" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock Grid.Column="1" Text="{Binding AutoInstallNavText}" VerticalAlignment="Center" />
               </Grid>
             </Button>
@@ -177,7 +178,7 @@
                     Classes.selected="{Binding IsModManageSection}"
                     Command="{Binding SwitchToModManageSectionCommand}">
               <Grid ColumnDefinitions="Auto,*">
-                <Path Data="{StaticResource Icon.Package}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Chest.png" Width="24" Height="24" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock Grid.Column="1" Text="{Binding ModManageNavText}" VerticalAlignment="Center" />
               </Grid>
             </Button>
@@ -185,7 +186,7 @@
                     Classes.selected="{Binding IsSettingsSection}"
                     Command="{Binding SwitchToInstanceSettingsSectionCommand}">
               <Grid ColumnDefinitions="Auto,*">
-                <Path Data="{StaticResource Icon.Settings}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Settings.png" Width="24" Height="24" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock Grid.Column="1" Text="{Binding InstanceSettingsNavText}" VerticalAlignment="Center" />
               </Grid>
             </Button>
@@ -193,7 +194,7 @@
                     Classes.selected="{Binding IsExportSection}"
                     Command="{Binding SwitchToExportSectionCommand}">
               <Grid ColumnDefinitions="Auto,*">
-                <Path Data="{StaticResource Icon.Upload}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Export.png" Width="24" Height="24" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock Grid.Column="1" Text="{Binding ExportNavText}" VerticalAlignment="Center" />
               </Grid>
             </Button>
@@ -259,17 +260,17 @@
                     <TextBlock Text="{Binding OverviewVersionCardTitleText}" Classes="sectionTitle" />
                     <TextBlock Text="{Binding InstanceDisplayName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="4">
-                      <Path Data="{StaticResource Icon.Gamepad}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Opacity="0.78" />
+                      <controls:ThemeIcon IconName="retro-pc" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" />
                       <TextBlock Text="原版: " FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding InstanceVersionText}" FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowSmapiVersion}">
-                      <Path Data="{StaticResource Icon.Wrench}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Opacity="0.78" />
+                      <controls:ThemeIcon IconName="pencil-ruler" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" />
                       <TextBlock Text="SMAPI: " FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding SmapiVersionText}" FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowNoSmapiHint}">
-                      <Path Data="{StaticResource Icon.Lightbulb}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Opacity="0.68" />
+                      <controls:ThemeIcon IconName="lightbulb" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" Opacity="0.68" />
                       <TextBlock Text="当前为原版，自动安装页可执行 SMAPI 安装/切换流程" FontSize="12" Opacity="0.68" VerticalAlignment="Center" TextWrapping="Wrap" />
                     </StackPanel>
                   </StackPanel>
@@ -334,7 +335,7 @@
                           CornerRadius="6"
                           Padding="10">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                      <Path Data="{StaticResource Icon.AlertTriangle}" Width="15" Height="15" Stretch="Uniform" Fill="{DynamicResource ColorBrushWarn}" VerticalAlignment="Center" />
+                      <controls:ThemeIcon IconName="exclamation-triangle" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding AdvancedWarningText}"
                                  Foreground="{DynamicResource TextSecondaryBrush}"
                                  TextWrapping="Wrap"
@@ -385,12 +386,12 @@
                     <TextBlock Text="{Binding GeneralSectionButtonText}" Classes="sectionTitle" />
                     <TextBlock Text="{Binding InstanceDisplayName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="4">
-                      <Path Data="{StaticResource Icon.Gamepad}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Opacity="0.78" />
+                      <controls:ThemeIcon IconName="retro-pc" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" />
                       <TextBlock Text="原版: " FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding InstanceVersionText}" FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding ShowSmapiVersion}">
-                      <Path Data="{StaticResource Icon.Wrench}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" Opacity="0.78" />
+                      <controls:ThemeIcon IconName="pencil-ruler" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" />
                       <TextBlock Text="SMAPI: " FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding SmapiVersionText}" FontSize="13" Opacity="0.78" VerticalAlignment="Center" />
                     </StackPanel>
@@ -422,9 +423,8 @@
                           IsVisible="{Binding IsInstallingSmapi}">
                     <StackPanel Spacing="6">
                       <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Path Data="{StaticResource Icon.RefreshCw}" Width="16" Height="16"
-                              Stretch="Uniform" Fill="{DynamicResource AccentBrush}"
-                              VerticalAlignment="Center" />
+                        <controls:ThemeIcon IconName="refresh" Width="16" Height="16"
+                                            Stretch="Uniform" VerticalAlignment="Center" />
                         <TextBlock Text="正在安装 SMAPI..."
                                    FontSize="13"
                                    FontWeight="SemiBold"
@@ -448,7 +448,7 @@
                       IsVisible="{Binding ShowSwitchToSmapiHint}">
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                    <Path Data="{StaticResource Icon.Wrench}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource ColorBrushWarn}" VerticalAlignment="Center" />
+                    <controls:ThemeIcon IconName="pencil-ruler" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding SwitchToSmapiTipText}"
                                FontSize="13"
                                Foreground="{DynamicResource TextSecondaryBrush}"
@@ -474,7 +474,7 @@
                     Padding="12"
                     IsVisible="{Binding ShowBaseModeModWarning}">
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <Path Data="{StaticResource Icon.AlertTriangle}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource ColorBrushWarn}" VerticalAlignment="Center" />
+                <controls:ThemeIcon IconName="exclamation-triangle" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" />
                 <TextBlock Text="这是原版版本，不支持使用 MOD。请先安装并切换到 SMAPI 版本。"
                            FontSize="13"
                            Foreground="{DynamicResource TextSecondaryBrush}"
@@ -491,7 +491,7 @@
                     IsVisible="{Binding ShowSwitchToSmapiHint}">
               <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                  <Path Data="{StaticResource Icon.Wrench}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource ColorBrushWarn}" VerticalAlignment="Center" />
+                  <controls:ThemeIcon IconName="pencil-ruler" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center" />
                   <TextBlock Text="{Binding SwitchToSmapiTipText}"
                              FontSize="13"
                              Foreground="{DynamicResource TextSecondaryBrush}"
@@ -558,7 +558,9 @@
                     <Button Classes="toolbarAction" Content="刷新选中汉化" Command="{Binding RefreshSelectedLocalizationCommand}" IsEnabled="{Binding IsCheckingLocalization, Converter={x:Static BoolConverters.Not}}" />
                     <Button Classes="toolbarAction" Content="全选" Command="{Binding ToggleAllSelectionCommand}" />
                     <Button Classes="toolbarAction" Content="刷新" Command="{Binding ReloadModsCommand}" />
-                    <Button Classes="toolbarAction" Width="34" Padding="0" Content="+" ToolTip.Tip="从本地安装 Mod" Command="{Binding InstallModFromLocalCommand}" />
+                    <Button Classes="toolbarAction" Width="34" Padding="0" ToolTip.Tip="从本地安装 Mod" Command="{Binding InstallModFromLocalCommand}">
+                      <controls:ThemeIcon IconName="plus" Width="18" Height="18" Stretch="Uniform" />
+                    </Button>
                   </WrapPanel>
 
                   <WrapPanel IsVisible="{Binding IsBackupTab}">
@@ -726,7 +728,7 @@
 
                   <StackPanel IsVisible="{Binding IsCheckingModUpdates}" Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                      <Path Data="{StaticResource Icon.RefreshCw}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" />
+                      <controls:ThemeIcon IconName="refresh" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                       <TextBlock Text="更新检测" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding CurrentUpdateProcessingModName}" FontSize="13" Opacity="0.78" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
@@ -735,7 +737,7 @@
 
                   <StackPanel IsVisible="{Binding IsCheckingLocalization}" Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                      <Path Data="{StaticResource Icon.RefreshCw}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" />
+                      <controls:ThemeIcon IconName="refresh" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
                       <TextBlock Text="汉化检测" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding CurrentLocalizationProcessingModName}" FontSize="13" Opacity="0.78" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
@@ -872,13 +874,13 @@
                                     <TextBlock Text="{Binding LocalizationToggleButtonText}" FontSize="11" FontWeight="SemiBold" />
                                   </Button>
                                   <Button Classes="rowAction" Command="{Binding DataContext.ShowLocalItemDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="查看本地详情">
-                                    <Path Data="{StaticResource Icon.FileText}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Details.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                   </Button>
                                   <Button Classes="rowAction" IsVisible="{Binding IsNormalItem}" Command="{Binding DataContext.ShowOnlineItemDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="查看在线详情">
-                                    <Path Data="{StaticResource Icon.Globe}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Online.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                   </Button>
                                   <Button Classes="rowAction" Command="{Binding DataContext.OpenItemFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="打开目录">
-                                    <Path Data="{StaticResource Icon.FolderOpen}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Catalog.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                   </Button>
                                 </WrapPanel>
                                 <WrapPanel HorizontalAlignment="Right" Orientation="Horizontal">
@@ -887,22 +889,25 @@
                                           Command="{Binding DataContext.UpdateItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                           CommandParameter="{Binding .}"
                                           ToolTip.Tip="更新">
-                                    <TextBlock Text="更新" FontSize="11" FontWeight="SemiBold" />
+                                    <controls:ThemeIcon IconName="download" Width="18" Height="18" Stretch="Uniform" />
                                   </Button>
                                   <Button Classes="rowAction" IsVisible="{Binding IsNormalItem}" Command="{Binding DataContext.CheckItemUpdateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="检查更新">
-                                    <Path Data="{StaticResource Icon.RefreshCw}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Update.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                   </Button>
-                                  <Button Classes="rowAction" IsVisible="{Binding IsNormalItem}" Command="{Binding DataContext.ToggleItemEnabledCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="启用/禁用">
-                                    <Path Data="{StaticResource Icon.Power}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                  <Button Classes="rowAction" IsVisible="{Binding IsNormalItem}" Command="{Binding DataContext.ToggleItemEnabledCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="{Binding ToggleActionText}">
+                                    <Grid Width="22" Height="22">
+                                      <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Disable.png" IsVisible="{Binding IsEnabled}" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+                                      <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Enable.png" IsVisible="{Binding !IsEnabled}" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+                                    </Grid>
                                   </Button>
                                   <Button Classes="rowAction" IsVisible="{Binding IsNormalItem}" Command="{Binding DataContext.BackupItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="备份">
-                                    <Path Data="{StaticResource Icon.HardDrive}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Backup.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                   </Button>
                                   <Button Classes="rowAction" IsVisible="{Binding IsBackupItem}" Command="{Binding DataContext.RestoreItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="恢复备份">
-                                    <Path Data="{StaticResource Icon.RotateCcw}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <controls:ThemeIcon IconName="file-import" Width="18" Height="18" Stretch="Uniform" />
                                   </Button>
                                   <Button Classes="rowAction" Command="{Binding DataContext.DeleteItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="删除">
-                                    <Path Data="{StaticResource Icon.Trash2}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Trash.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                   </Button>
                                 </WrapPanel>
                               </StackPanel>
@@ -948,22 +953,25 @@
                                             Command="{Binding DataContext.UpdateItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             CommandParameter="{Binding .}"
                                             ToolTip.Tip="更新">
-                                      <TextBlock Text="更新" FontSize="10" FontWeight="SemiBold" />
+                                      <controls:ThemeIcon IconName="download" Width="18" Height="18" Stretch="Uniform" />
                                     </Button>
                                     <Button Classes="rowAction" IsVisible="{Binding HasLocalization}" Command="{Binding DataContext.ToggleModLocalizationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="切换中英文">
                                       <TextBlock Text="{Binding LocalizationToggleButtonText}" FontSize="10" FontWeight="SemiBold" />
                                     </Button>
                                     <Button Classes="rowAction" Command="{Binding DataContext.ShowLocalItemDetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="查看本地详情">
-                                      <Path Data="{StaticResource Icon.FileText}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                      <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Details.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                     </Button>
                                     <Button Classes="rowAction" Command="{Binding DataContext.OpenItemFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="打开目录">
-                                      <Path Data="{StaticResource Icon.FolderOpen}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                      <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Catalog.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                     </Button>
-                                    <Button Classes="rowAction" Command="{Binding DataContext.ToggleItemEnabledCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="启用/禁用">
-                                      <Path Data="{StaticResource Icon.Power}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                    <Button Classes="rowAction" Command="{Binding DataContext.ToggleItemEnabledCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="{Binding ToggleActionText}">
+                                      <Grid Width="22" Height="22">
+                                        <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Disable.png" IsVisible="{Binding IsEnabled}" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+                                        <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Enable.png" IsVisible="{Binding !IsEnabled}" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
+                                      </Grid>
                                     </Button>
                                     <Button Classes="rowAction" Command="{Binding DataContext.DeleteItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding .}" ToolTip.Tip="删除">
-                                      <Path Data="{StaticResource Icon.Trash2}" Width="14" Height="14" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" />
+                                      <Image Source="avares://SVL.Avalonia/Assets/Icons/Stardew/Trash.png" Width="22" Height="22" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="None" />
                                     </Button>
                                   </WrapPanel>
                                 </Grid>
@@ -1024,8 +1032,8 @@
           <StackPanel IsVisible="{Binding IsSettingsSection}" Spacing="10">
             <Border Classes="hintCard" Padding="14,12">
               <StackPanel Orientation="Horizontal" Spacing="10">
-                <Path Data="{StaticResource Icon.Info}" Width="16" Height="16" Stretch="Uniform" Fill="{DynamicResource DefaultTextForeground}" VerticalAlignment="Center" />
-                <TextBlock Text="这些设置只对该游戏版本生效，不会影响其他版本"
+                <controls:ThemeIcon IconName="info-circle" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
+                <TextBlock Text="启动设置只对当前版本生效并自动保存；写入 Steam 需要单独操作。"
                            FontSize="13"
                            Opacity="0.84"
                            TextWrapping="Wrap"
@@ -1039,9 +1047,8 @@
 
                 <TextBlock Text="窗口标题" FontWeight="SemiBold" />
                 <Grid ColumnDefinitions="*,Auto">
-                  <TextBox Text="{Binding GameWindowTitle}" Watermark="例如: Stardew Valley &lt;ver&gt; - &lt;name&gt;" />
+                  <TextBox Text="{Binding GameWindowTitle, UpdateSourceTrigger=PropertyChanged}" Watermark="例如: Stardew Valley &lt;ver&gt; - &lt;name&gt;" />
                   <Button Grid.Column="1"
-                          Content="?"
                           Command="{Binding ShowWindowTitleHelpCommand}"
                           Width="32"
                           Height="32"
@@ -1051,15 +1058,23 @@
                           Margin="8,0,0,0"
                           HorizontalContentAlignment="Center"
                           VerticalContentAlignment="Center"
-                          ToolTip.Tip="查看窗口标题占位符说明" />
+                          ToolTip.Tip="查看窗口标题占位符说明">
+                    <controls:ThemeIcon IconName="question-circle" Width="18" Height="18" Stretch="Uniform" />
+                  </Button>
                 </Grid>
 
                 <TextBlock Text="启动参数" FontWeight="SemiBold" />
-                <TextBox Text="{Binding InstanceCustomLaunchArguments}"
+                <TextBox Text="{Binding InstanceCustomLaunchArguments, UpdateSourceTrigger=PropertyChanged}"
                          Height="68"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          Watermark="例如: --debug --loglevel trace" />
+
+                <CheckBox Content="启动时尝试加入 Steam 大厅" IsChecked="{Binding InstanceAutoConnectServer}" />
+                <TextBlock Text="Steam 大厅 ID（64 位数字）" FontWeight="SemiBold" />
+                <TextBox Text="{Binding InstanceSteamInviteCode, UpdateSourceTrigger=PropertyChanged}" Watermark="例如: 109775241234567890" />
+                <TextBlock Text="仅支持 Steam 大厅数字 ID；游戏内字母邀请码和 IP 地址仍需在联机菜单手动输入。"
+                           Opacity="0.72" TextWrapping="Wrap" />
 
                 <WrapPanel>
                   <Button Content="重置默认" Command="{Binding ResetStartupOptionsCommand}" Margin="0,0,8,8" />
@@ -1084,7 +1099,7 @@
                 <CheckBox Content="覆盖 Steam 启动参数" IsChecked="{Binding OverrideSteamLaunchOptions}" />
 
                 <TextBlock Text="编辑参数" FontWeight="SemiBold" />
-                <TextBox Text="{Binding SteamLaunchOptions}"
+                <TextBox Text="{Binding SteamLaunchOptions, UpdateSourceTrigger=PropertyChanged}"
                          AcceptsReturn="True"
                          Height="72"
                          TextWrapping="Wrap"

@@ -161,7 +161,7 @@ internal static class LinuxNxmProtocolRegistration
         return string.Join('\n',
             "[Desktop Entry]",
             "Type=Application",
-            "Name=SVL",
+            "Name=Stardew Valley Launcher",
             "Comment=Handle Nexus Mods download links",
             "NoDisplay=true",
             "Terminal=false",

@@ -85,6 +85,7 @@ public partial class DownloadPageViewModel : ObservableObject
     private readonly INxmLinkParser _nxmLinkParser;
     private readonly IGameInstallPathLocator _gameInstallPathLocator;
     private readonly AppUserSettingsStore _settingsStore;
+    private readonly InstanceRegistryStore _instanceRegistryStore;
     private readonly HttpDownloadService _httpDownloadService;
     private readonly NexusModDownloadResolverService _nexusModDownloadResolverService;
     private readonly DownloadInstallService _downloadInstallService;
@@ -649,7 +650,8 @@ public partial class DownloadPageViewModel : ObservableObject
         DownloadTaskStateStore taskStateStore,
         RetryDiffReportService retryDiffReportService,
         ModpackInstallService modpackInstallService,
-        CollectionInstallService collectionInstallService)
+        CollectionInstallService collectionInstallService,
+        InstanceRegistryStore? instanceRegistryStore = null)
     {
         _localizationService = localizationService;
         _imageResourceService = imageResourceService;
@@ -673,6 +675,7 @@ public partial class DownloadPageViewModel : ObservableObject
         _retryDiffReportService = retryDiffReportService;
         _modpackInstallService = modpackInstallService;
         _collectionInstallService = collectionInstallService;
+        _instanceRegistryStore = instanceRegistryStore ?? new InstanceRegistryStore();
         _localizationService.LanguageChanged += ApplyLocalizedTexts;
         _imageResourceService.ResourcesChanged += ApplyImageResources;
         ApplyLocalizedTexts();
@@ -889,6 +892,22 @@ public partial class DownloadPageViewModel : ObservableObject
         try
         {
             TraceSteamLog("SteamCmdLoginAsync: 开始登录");
+            Status = "正在检查 SteamCMD 更新；首次运行可能需要几分钟，请稍候。";
+            using (var prepareTimeout = new CancellationTokenSource(TimeSpan.FromMinutes(10)))
+            {
+                try
+                {
+                    await _steamCmdService.PrepareForLoginAsync(
+                        log: msg => Dispatcher.UIThread.Post(() => AppendSteamCmdLog(msg)),
+                        cancellationToken: prepareTimeout.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    Status = "SteamCMD 更新超时（10 分钟），请检查网络后重试";
+                    return;
+                }
+            }
+
             Status = "正在登录 Steam...若开启手机令牌，请在 Steam 手机 APP 中批准登录；若为邮箱验证码，请填入验证码。等待可能耗时（SteamCMD 日志缓冲，非实时）。";
             using var loginTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
 
@@ -984,7 +1003,7 @@ public partial class DownloadPageViewModel : ObservableObject
                     $"游戏文件已下载完成。是否将“{savePath}”添加到游戏列表作为 Base 路径？");
                 if (addAsBase)
                 {
-                    TryAddDownloadedGameAsBase(savePath);
+                    await TryAddDownloadedGameAsBaseAsync(savePath);
                 }
             }
             else
@@ -1004,31 +1023,25 @@ public partial class DownloadPageViewModel : ObservableObject
     }
 
     /// <summary>把下载完成的游戏目录添加到游戏列表作为 Base 路径（vanilla）。</summary>
-    private void TryAddDownloadedGameAsBase(string path)
+    private async Task TryAddDownloadedGameAsBaseAsync(string path)
     {
         try
         {
-            var store = new InstanceRegistryStore();
-            var records = store.LoadManualInstances();
-            if (records.Any(r => string.Equals(r.Path, path, StringComparison.OrdinalIgnoreCase)))
+            var result = InstancesPageViewModel.RegisterDownloadedBase(_instanceRegistryStore, path);
+            Status = result.Message;
+            AppendSteamCmdLog(result.Message);
+            if (result.Success)
             {
-                Status = "该路径已在游戏列表中";
-                return;
+                // 注册和去重后都刷新：旧版可能已经保存了根目录，但页面仍是旧缓存。
+                InstanceContextChanged?.Invoke();
             }
-
-            var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                name = "Stardew Valley";
-            }
-
-            records.Add(new ManualInstanceRecord { Name = name, Path = path });
-            store.SaveManualInstances(records);
-            Status = $"已将“{path}”添加到游戏列表（Base 路径）";
+            await _dialogService.ShowMessageAsync(result.Success ? "游戏路径已就绪" : "无法添加游戏路径", result.Message);
         }
         catch (Exception ex)
         {
             Status = $"添加 Base 路径失败: {ex.Message}";
+            AppendSteamCmdLog(Status);
+            await _dialogService.ShowMessageAsync("添加游戏路径失败", Status);
         }
     }
 

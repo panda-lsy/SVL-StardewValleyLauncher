@@ -304,6 +304,12 @@ public class MainFlowSmokeTests
             Assert.IsTrue(mainWindow.VersionSettingsPage.IsModManageSection);
 
             var modPage = mainWindow.VersionSettingsPage;
+            var modLoadDeadline = DateTime.UtcNow.AddSeconds(5);
+            while (modPage.Mods.Count != 4 && DateTime.UtcNow < modLoadDeadline)
+            {
+                await Task.Delay(10);
+            }
+
             Assert.IsTrue(modPage.HasMods);
             Assert.AreEqual(4, modPage.Mods.Count);
             var bomMod = modPage.Mods.Single(item => string.Equals(item.DisplayName, "BOM Manifest Mod", StringComparison.Ordinal));

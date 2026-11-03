@@ -3636,6 +3636,7 @@ public sealed class DownloadProgressAndNexusCacheTests
     }
 
     [TestMethod]
+    [Timeout(25000)]
     public async Task CurseforgeModpackInstall_ShouldReuseCachedArchiveAndKeepCurseforgeCredential()
     {
         var root = Path.Combine(Path.GetTempPath(), "svl-cf-cache-e2e-" + Guid.NewGuid().ToString("N"));
@@ -3696,12 +3697,16 @@ public sealed class DownloadProgressAndNexusCacheTests
                 IsArchiveWithManifest);
             File.Delete(cachePath);
 
+            // 该用例验证缓存复用与来源凭证；模拟 SMAPI 目录超时，避免依赖外网，
+            // 同时验证请求超时不会被误判为用户取消。
+            using var catalogClient = new HttpClient(new TimeoutHttpMessageHandler());
+            var progressMessages = new List<string>();
             var nxmParser = new SVL.Core.Platform.Abstractions.NxmLinkParser();
             var service = new ModpackInstallService(
                 new FixedGameInstallPathLocator(gamePath),
                 new TestSmapiInstallService(),
                 new HttpDownloadService(settingsStore),
-                new RemoteCatalogService(settingsStore),
+                new RemoteCatalogService(settingsStore, catalogClient),
                 settingsStore,
                 new NexusModDownloadResolverService(),
                 nxmParser);
@@ -3710,13 +3715,14 @@ public sealed class DownloadProgressAndNexusCacheTests
                 packagePath,
                 instanceName,
                 gamePath,
-                onProgress: null);
+                onProgress: progress => progressMessages.Add(progress.StepText ?? string.Empty));
 
             var installedPath = Path.Combine(
                 targetModsPath,
                 "Content Patcher");
             var credentialPath = Path.Combine(installedPath, "svl-source.json");
             Assert.IsTrue(result.IsSuccess, result.Message);
+            Assert.IsTrue(progressMessages.Any(message => message.Contains("回退通用解析")));
             Assert.AreEqual(1, result.InstalledMods.Count);
             Assert.AreEqual(0, result.FailedMods.Count);
             Assert.IsTrue(File.Exists(Path.Combine(installedPath, "manifest.json")));
@@ -3761,6 +3767,52 @@ public sealed class DownloadProgressAndNexusCacheTests
             {
                 Directory.Delete(root, true);
             }
+        }
+    }
+
+    [TestMethod]
+    public async Task CurseforgeModpackInstall_ShouldHonorCancellationDuringSmapiLookup()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "svl-cf-cancel-lookup-" + Guid.NewGuid().ToString("N"));
+        var gamePath = Path.Combine(root, "Game");
+        var packagePath = Path.Combine(root, "curseforge-pack.zip");
+        var instanceName = "Existing-" + Guid.NewGuid().ToString("N")[..8];
+        var instancePath = Path.Combine(gamePath, "versions", instanceName);
+        var smapiFileId = 900_000_000L + Random.Shared.Next(1_000_000);
+
+        try
+        {
+            Directory.CreateDirectory(instancePath);
+            var markerPath = Path.Combine(instancePath, "keep-me.txt");
+            File.WriteAllText(markerPath, "existing instance");
+            using (var package = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+            {
+                WriteArchiveText(package, "manifest.json",
+                    $"{{\"name\":\"Cancel lookup\",\"manifestVersion\":1,\"files\":[{{\"projectID\":898372,\"fileID\":{smapiFileId},\"required\":true}}]}}");
+            }
+
+            using var cancellation = new CancellationTokenSource();
+            using var catalogClient = new HttpClient(new CancelRequestHttpMessageHandler(cancellation));
+            var settings = new AppUserSettingsStore(Path.Combine(root, "settings"));
+            var service = new ModpackInstallService(
+                new FixedGameInstallPathLocator(gamePath),
+                new TestSmapiInstallService(),
+                new HttpDownloadService(settings),
+                new RemoteCatalogService(settings, catalogClient),
+                settings,
+                new NexusModDownloadResolverService(),
+                new SVL.Core.Platform.Abstractions.NxmLinkParser());
+
+            var result = await service.InstallCurseforgeModpackAsync(
+                packagePath, instanceName, gamePath, onProgress: null,
+                cancellationToken: cancellation.Token, updateExisting: true);
+
+            Assert.IsTrue(result.IsCancelled, result.Message);
+            Assert.AreEqual("existing instance", File.ReadAllText(markerPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
     }
 
@@ -4954,6 +5006,29 @@ public sealed class DownloadProgressAndNexusCacheTests
         public string TryLocateSteamStardewPath() => gamePath;
 
         public string TryLocateGogStardewPath() => null;
+    }
+
+    private sealed class TimeoutHttpMessageHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("请求应当在超时后取消");
+        }
+    }
+
+    private sealed class CancelRequestHttpMessageHandler(CancellationTokenSource cancellation) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellation.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("用户取消应传递到目录请求");
+        }
     }
 
     private sealed class TestSmapiInstallService : SVL.Core.Platform.Abstractions.ISmapiInstallService

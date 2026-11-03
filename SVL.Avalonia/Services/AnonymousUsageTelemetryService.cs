@@ -23,6 +23,13 @@ public static class AnonymousUsageTelemetryService
         "telemetry",
         "usage-state.json");
 
+    // 旧 WPF 版使用 PascalCase，新版使用 camelCase；读取时需兼容两者，
+    // 否则升级后会生成新的匿名标识，将同一用户重复计数。
+    private static readonly JsonSerializerOptions StateReadOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     /// <summary>
     /// 每日上报一次匿名活跃信息（失败静默）。
     /// </summary>
@@ -30,16 +37,35 @@ public static class AnonymousUsageTelemetryService
     {
         try
         {
-            // 支持环境变量一键关闭统计
-            var disableFlag = Environment.GetEnvironmentVariable("SVL_DISABLE_ANON_TELEMETRY");
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+            await ReportDailyActiveAsync(
+                client,
+                TelemetryStatePath,
+                DateTime.UtcNow,
+                Environment.GetEnvironmentVariable("SVL_DISABLE_ANON_TELEMETRY"));
+        }
+        catch
+        {
+            // 失败静默，不影响启动器正常使用。
+        }
+    }
+
+    internal static async Task ReportDailyActiveAsync(
+        HttpClient client,
+        string statePath,
+        DateTime nowUtc,
+        string? disableFlag)
+    {
+        try
+        {
             if (string.Equals(disableFlag, "1", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(disableFlag, "true", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
-            var state = LoadState();
-            var todayUtc = DateTime.UtcNow.Date;
+            var state = LoadState(statePath);
+            var todayUtc = nowUtc.Date;
             if (state.LastReportedDateUtc.HasValue && state.LastReportedDateUtc.Value >= todayUtc)
             {
                 return;
@@ -56,10 +82,9 @@ public static class AnonymousUsageTelemetryService
                 Version = (System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString()) ?? "1.2.0.0",
                 Runtime = "net10.0",
                 OsVersion = Environment.OSVersion.VersionString,
-                TimestampUtc = DateTime.UtcNow
+                TimestampUtc = nowUtc
             };
 
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
             var jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -69,14 +94,14 @@ public static class AnonymousUsageTelemetryService
                 Encoding.UTF8,
                 "application/json");
 
-            var response = await client.PostAsync(TelemetryEndpoint, content);
+            using var response = await client.PostAsync(TelemetryEndpoint, content);
             if (!response.IsSuccessStatusCode)
             {
                 return;
             }
 
             state.LastReportedDateUtc = todayUtc;
-            SaveState(state);
+            SaveState(statePath, state);
         }
         catch
         {
@@ -84,17 +109,17 @@ public static class AnonymousUsageTelemetryService
         }
     }
 
-    private static TelemetryState LoadState()
+    private static TelemetryState LoadState(string statePath)
     {
         try
         {
-            if (!File.Exists(TelemetryStatePath))
+            if (!File.Exists(statePath))
             {
                 return new TelemetryState();
             }
 
-            var json = File.ReadAllText(TelemetryStatePath);
-            return JsonSerializer.Deserialize<TelemetryState>(json) ?? new TelemetryState();
+            var json = File.ReadAllText(statePath);
+            return JsonSerializer.Deserialize<TelemetryState>(json, StateReadOptions) ?? new TelemetryState();
         }
         catch
         {
@@ -102,18 +127,18 @@ public static class AnonymousUsageTelemetryService
         }
     }
 
-    private static void SaveState(TelemetryState state)
+    private static void SaveState(string statePath, TelemetryState state)
     {
         try
         {
-            var dir = Path.GetDirectoryName(TelemetryStatePath);
+            var dir = Path.GetDirectoryName(statePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
 
             var json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(TelemetryStatePath, json);
+            File.WriteAllText(statePath, json);
         }
         catch
         {

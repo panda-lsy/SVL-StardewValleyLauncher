@@ -5125,6 +5125,8 @@ public sealed class AvaloniaMigrationHardeningTests
         Assert.IsNotNull(workspace, "无法定位工作区根目录");
         var root = workspace!.FullName;
         var mainWindowText = File.ReadAllText(Path.Combine(root, "SVL.Avalonia", "MainWindow.axaml"));
+        var mainWindowCodeText = File.ReadAllText(Path.Combine(root, "SVL.Avalonia", "MainWindow.axaml.cs"));
+        var appText = File.ReadAllText(Path.Combine(root, "SVL.Avalonia", "App.axaml"));
         var themeText = File.ReadAllText(Path.Combine(root, "SVL.Avalonia", "Resources", "Theme.axaml"));
         var instancesViewText = File.ReadAllText(Path.Combine(root, "SVL.Avalonia", "Views", "InstancesPageView.axaml"));
         var instancesCodeText = File.ReadAllText(Path.Combine(root, "SVL.Avalonia", "Views", "InstancesPageView.axaml.cs"));
@@ -5132,22 +5134,63 @@ public sealed class AvaloniaMigrationHardeningTests
         StringAssert.Contains(mainWindowText, "UseLayoutRounding=\"True\"");
         StringAssert.Contains(mainWindowText, "Width=\"120\" Height=\"48\" RowDefinitions=\"48\" ColumnDefinitions=\"40,40,40\"");
         Assert.AreEqual(3, CountOccurrences(mainWindowText, "Classes=\"winCtrl"));
-         // 窗口控制区使用统一尺寸画布；最小化符号必须用居中矩形，避免
-         // 细长 StreamGeometry 经 Uniform 拉伸后贴到画布上沿。
-         Assert.AreEqual(3, CountOccurrences(mainWindowText, "Width=\"24\" Height=\"24\""));
-         Assert.AreEqual(3, CountOccurrences(mainWindowText, "Grid.Row=\"0\" Grid.Column="));
-         StringAssert.Contains(mainWindowText, "<Rectangle Width=\"12\" Height=\"2\" Fill=\"White\"");
-         Assert.IsFalse(mainWindowText.Contains("Data=\"{StaticResource Icon.Minus}\"", StringComparison.Ordinal));
-         StringAssert.Contains(mainWindowText, "Data=\"{StaticResource Icon.Maximize}\"");
-         StringAssert.Contains(mainWindowText, "Data=\"{StaticResource Icon.X}\"");
-         var generatedIconReferences = Directory
-             .EnumerateFiles(Path.Combine(root, "SVL.Avalonia"), "*.axaml", SearchOption.AllDirectories)
-             .Where(path => !path.Contains("bin", StringComparison.OrdinalIgnoreCase) &&
-                            !path.Contains("obj", StringComparison.OrdinalIgnoreCase))
-             .SelectMany(File.ReadLines)
-             .Where(line => line.Contains("Assets/Icons/Generated", StringComparison.Ordinal));
-         Assert.IsFalse(generatedIconReferences.Any(), "界面不应重新引用已撤回的生成式 PNG 图标");
-         StringAssert.Contains(themeText, "<Style Selector=\"ContextMenu\">");
+        Assert.AreEqual(3, CountOccurrences(mainWindowText, "<Grid Width=\"24\" Height=\"24\""));
+        Assert.AreEqual(3, CountOccurrences(mainWindowText, "Grid.Row=\"0\" Grid.Column="));
+        Assert.AreEqual(4, CountOccurrences(mainWindowText, "<Path"),
+            "返回、最大化、还原、关闭标题栏图形保留专门绘制的 Path");
+        StringAssert.Contains(mainWindowText, "<Rectangle Width=\"12\" Height=\"2\" Fill=\"White\"");
+        Assert.IsFalse(mainWindowText.Contains("ThemeIcon", StringComparison.Ordinal),
+            "标题栏控制图形不使用通用 PNG 图标");
+        Assert.IsFalse(appText.Contains("Resources/Icons.axaml", StringComparison.Ordinal),
+            "旧矢量图标字典不再加载到新版主 UI");
+        StringAssert.Contains(mainWindowCodeText, "UpdateMaximizeRestoreIcon");
+        StringAssert.Contains(themeText, "Button.nav.back:pointerover");
+        StringAssert.Contains(themeText, "Button.nav.back:focus");
+        StringAssert.Contains(themeText, "Button.winCtrl.close:pointerover");
+        StringAssert.Contains(themeText, "DynamicResource NotificationErrorBackground");
+
+        var versionSettingsText = File.ReadAllText(Path.Combine(root, "SVL.Avalonia", "Views", "VersionSettingsPageView.axaml"));
+        StringAssert.Contains(versionSettingsText, "IconName=\"retro-pc\"");
+        StringAssert.Contains(versionSettingsText, "IconName=\"pencil-ruler\"");
+        foreach (var iconName in new[]
+                 {
+                     "retro-pc", "pencil-ruler", "analytics", "download", "archive", "cog", "upload",
+                     "lightbulb", "exclamation-triangle", "refresh", "info-circle", "notebook", "globe",
+                     "folder-open", "bolt", "save", "file-import", "trash", "plus", "question-circle",
+                     "star", "arrow-right", "download-alt", "lock-open", "times", "check-circle", "lock",
+                     "logout", "clock", "search", "times-circle", "octagon-times", "paint-brush", "link",
+                     "ellipses-horizontal"
+                 })
+        {
+            Assert.IsTrue(SVL.Avalonia.Controls.ThemeIcon.IsIconMapped(iconName),
+                $"语义图标 {iconName} 必须映射到游戏图像");
+        }
+
+        var avaloniaViewsRoot = Path.Combine(root, "SVL.Avalonia");
+        var strayVectorIcons = Directory
+            .EnumerateFiles(avaloniaViewsRoot, "*.axaml", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+                           !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+                           !string.Equals(Path.GetFullPath(path), Path.GetFullPath(Path.Combine(avaloniaViewsRoot, "MainWindow.axaml")), StringComparison.OrdinalIgnoreCase))
+            .SelectMany(path => File.ReadLines(path).Select(line => (Path: path, Line: line)))
+            .Where(item => item.Line.TrimStart().StartsWith("<Path", StringComparison.Ordinal));
+        Assert.IsFalse(strayVectorIcons.Any(), "除主窗口的五个标题栏图形外，其余 UI 图标必须使用 PNG");
+
+        var gameIconNames = new[]
+        {
+            "Details", "Download", "Chest", "Settings", "Export", "Online", "Update", "Enable", "Disable", "Catalog", "Backup", "Trash"
+        };
+        foreach (var iconName in gameIconNames)
+        {
+            StringAssert.Contains(versionSettingsText,
+                $"Assets/Icons/Stardew/{iconName}.png",
+                $"版本设置应使用游戏图像 {iconName}");
+            Assert.IsTrue(File.Exists(Path.Combine(root, "SVL.Avalonia", "Assets", "Icons", "Stardew", $"{iconName}.png")),
+                $"游戏图标 {iconName}.png 必须随新版项目提供");
+        }
+        Assert.IsFalse(versionSettingsText.Contains("Assets/Icons/Generated/", StringComparison.Ordinal));
+
+        StringAssert.Contains(themeText, "<Style Selector=\"ContextMenu\">");
         StringAssert.Contains(themeText, "<Style Selector=\"MenuFlyoutPresenter\">");
         StringAssert.Contains(themeText, "<Style Selector=\"ContextMenu MenuItem:pointerover\">");
         StringAssert.Contains(instancesViewText, "PointerPressed=\"PathEntry_PointerPressed\"");

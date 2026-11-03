@@ -66,6 +66,19 @@ public static class InstanceIconResolver
         return string.Empty;
     }
 
+    /// <summary>
+    /// 展示时将安装器生成的 SMAPI 图标视为默认预设，随启动器资源更新；
+    /// 其他图标包括用户主动选择的预设和整合包图标都保留原有优先级。
+    /// </summary>
+    public static string ResolveDisplayIconPath(string? instancePath, bool isSmapiInstance = false)
+    {
+        var iconPath = ResolveIconPath(instancePath, isSmapiInstance);
+        return isSmapiInstance && !string.IsNullOrWhiteSpace(iconPath) &&
+               IsGeneratedSmapiIcon(instancePath) && IsSmapiIconPath(iconPath)
+            ? string.Empty
+            : iconPath;
+    }
+
     private static bool HasUserCustomIcon(string instancePath)
     {
         foreach (var candidate in EnumerateIconCandidates(instancePath, isSmapiInstance: false))

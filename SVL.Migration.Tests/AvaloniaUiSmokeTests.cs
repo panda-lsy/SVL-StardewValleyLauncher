@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -5,7 +6,10 @@ using Avalonia.Headless;
 using Avalonia.Animation;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.VisualTree;
+using AvaloniaPath = Avalonia.Controls.Shapes.Path;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SVL.Avalonia;
 using SVL.Avalonia.Controls;
@@ -23,6 +27,84 @@ namespace SVL.Migration.Tests;
 [TestClass]
 public sealed class AvaloniaUiSmokeTests
 {
+    [TestMethod]
+    public void GameCursor_ShouldApplyToWindowsAndPreserveExplicitControlCursors()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+        session.Dispatch(() =>
+        {
+            var application = Application.Current!;
+            Assert.IsTrue(GameCursorService.TryInstall(application), "自定义指针应能由当前平台加载");
+            Assert.AreEqual(new PixelPoint(0, 0), GameCursorService.NormalCursorHotspot);
+
+            var explicitCursor = new Cursor(StandardCursorType.Hand);
+            var link = new Button { Cursor = explicitCursor, Content = "链接" };
+            var popupContent = new Border { Width = 50, Height = 30 };
+            var popup = new global::Avalonia.Controls.Primitives.Popup { PlacementTarget = link, Child = popupContent };
+            var panel = new Grid();
+            panel.Children.Add(link);
+            panel.Children.Add(popup);
+            var window = new Window { Content = panel, Width = 180, Height = 100 };
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                Assert.IsNotNull(window.Cursor, "窗口应使用游戏默认指针");
+                Assert.AreSame(explicitCursor, link.Cursor, "已有特殊指针不能被默认指针覆盖");
+                popup.IsOpen = true;
+                window.UpdateLayout();
+                var popupRoot = TopLevel.GetTopLevel(popupContent);
+                Assert.IsNotNull(popupRoot, "弹出内容应有独立的窗口根");
+                Assert.IsNotNull(popupRoot.Cursor, "弹出菜单也应使用游戏默认指针");
+            }
+            finally
+            {
+                window.Close();
+                explicitCursor.Dispose();
+            }
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void GameIcons_ShouldLoadWithoutBundlingArchivedGeneratedAssets()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+        session.Dispatch(() =>
+        {
+            foreach (var iconName in new[] { "retro-pc", "pencil-ruler", "archive", "cog", "trash", "arrow-left", "arrow-right" })
+            {
+                var icon = new ThemeIcon { IconName = iconName };
+                Assert.IsNotNull(icon.Source, $"游戏图标 {iconName} 应能从应用资源加载");
+                Assert.AreEqual(BitmapInterpolationMode.None, RenderOptions.GetBitmapInterpolationMode(icon));
+            }
+
+            using var sprite = AssetLoader.Open(new Uri("avares://SVL.Avalonia/Assets/Icons/Stardew/Book.png"));
+            var header = new byte[24];
+            sprite.ReadExactly(header);
+            Assert.AreEqual(16, BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(16, 4)));
+            Assert.AreEqual(16, BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(20, 4)));
+            Assert.IsFalse(AssetLoader.Exists(new Uri("avares://SVL.Avalonia/Assets/Icons/Generated/UI/Info.png")));
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    [TestMethod]
+    public void NotificationService_ShouldHonorTheDisplayPreferenceWithoutLosingCallbacks()
+    {
+        var session = HeadlessUnitTestSession.GetOrStartForAssembly(typeof(AvaloniaUiSmokeTests).Assembly);
+        session.Dispatch(() =>
+        {
+            var service = new NotificationService { IsEnabled = false };
+            var callbackCalled = false;
+            ((INotificationService)service).Show("提示", "内容", 0, () => callbackCalled = true, NotificationType.Info);
+            Assert.AreEqual(0, service.ActiveCount);
+            Assert.IsTrue(callbackCalled);
+
+            service.IsEnabled = true;
+            ((INotificationService)service).Show("提示", "内容", 0, null, NotificationType.Info);
+            Assert.AreEqual(1, service.ActiveCount);
+        }, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     [TestMethod]
     public void MainWindow_ShouldLoadAndKeepWindowButtonsOnSharedGrid()
     {
@@ -43,6 +125,13 @@ public sealed class AvaloniaUiSmokeTests
                     .OfType<ContentControl>()
                     .Single();
                 var pageRoot = new UserControl();
+                var themeTestIcon = new ThemeIcon
+                {
+                    IconName = "retro-pc",
+                    Width = 18,
+                    Height = 18
+                };
+                pageRoot.Content = themeTestIcon;
                 pagePresenter.Content = pageRoot;
                 window.UpdateLayout();
                 Assert.IsTrue(pageRoot.Background is ISolidColorBrush pageBrush && pageBrush.Color.A == 0x00,
@@ -64,6 +153,78 @@ public sealed class AvaloniaUiSmokeTests
                     .ToList();
                 Assert.AreEqual(1, centers.Count, "三个窗口按钮必须处于同一水平中心线");
 
+                var maximizeButton = buttons.Single(button => button.Classes.Contains("max"));
+                var maximizeIcon = maximizeButton.GetVisualDescendants()
+                    .OfType<AvaloniaPath>()
+                    .Single(icon => icon.Name == "MaximizeButtonIcon");
+                var restoreIcon = maximizeButton.GetVisualDescendants()
+                    .OfType<AvaloniaPath>()
+                    .Single(icon => icon.Name == "RestoreButtonIcon");
+                Assert.IsTrue(maximizeIcon.IsVisible);
+                Assert.IsFalse(restoreIcon.IsVisible);
+
+                var previousDarkMode = ThemeService.IsDarkMode;
+                window.UpdateLayout();
+                var originalThemedSource = themeTestIcon.Source;
+                Assert.IsNotNull(originalThemedSource, "页面 PNG 图标必须能从应用资源加载");
+                Assert.IsFalse(buttons.SelectMany(button => button.GetVisualDescendants().OfType<ThemeIcon>()).Any(),
+                    "标题栏窗口控制图形保持专门绘制，不使用通用 PNG 图标");
+                foreach (var iconName in new[]
+                         {
+                             "retro-pc", "pencil-ruler", "notebook", "archive", "download", "download-alt",
+                             "file-import", "analytics", "cog", "paint-brush", "info-circle", "question-circle",
+                             "exclamation-triangle", "lightbulb", "plus", "refresh", "globe", "link",
+                             "search", "ellipses-horizontal", "bolt", "arrow-left", "arrow-right", "star", "clock",
+                             "check-circle", "times-circle", "times", "octagon-times",
+                             "lock-open", "lock", "logout"
+                         })
+                {
+                    Assert.IsTrue(ThemeIcon.IsIconMapped(iconName), $"语义图标“{iconName}”必须登记到游戏图标映射表");
+                    themeTestIcon.IconName = iconName;
+                    window.UpdateLayout();
+                    Assert.IsNotNull(themeTestIcon.Source, $"语义图标“{iconName}”必须映射到游戏图像");
+                }
+
+                foreach (var (iconName, fileName) in new[] { ("notebook", "Book.png"), ("archive", "Chest.png") })
+                {
+                    themeTestIcon.IconName = iconName;
+                    Assert.IsNotNull(themeTestIcon.Source);
+                    // Headless 后端将解码位图替换为 1x1 占位图，须读取原始 PNG 的 IHDR 检查尺寸。
+                    using var stream = AssetLoader.Open(new Uri($"avares://SVL.Avalonia/Assets/Icons/Stardew/{fileName}"));
+                    var header = new byte[24];
+                    stream.ReadExactly(header);
+                    Assert.AreEqual(16, BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(16, 4)), $"{iconName} 应使用游戏原始像素素材");
+                    Assert.AreEqual(16, BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(20, 4)), $"{iconName} 应使用游戏原始像素素材");
+                }
+                Assert.AreEqual(BitmapInterpolationMode.None, RenderOptions.GetBitmapInterpolationMode(themeTestIcon),
+                    "像素图标应关闭插值，避免缩小时变糊");
+
+                themeTestIcon.IconName = "retro-pc";
+                window.UpdateLayout();
+                originalThemedSource = themeTestIcon.Source;
+                try
+                {
+                    ThemeService.SetDarkMode(!previousDarkMode);
+                    Assert.IsNotNull(themeTestIcon.Source, "主题切换后图标资源仍须加载");
+                    Assert.IsTrue(ReferenceEquals(originalThemedSource, themeTestIcon.Source),
+                        "游戏图标在浅色和深色主题中应复用同一图像资源");
+                    Assert.IsTrue(maximizeIcon.Stroke is ISolidColorBrush chromeStroke && chromeStroke.Color == Colors.White,
+                        "专门绘制的标题栏图形应保持白色描边");
+                }
+                finally
+                {
+                    ThemeService.SetDarkMode(previousDarkMode);
+                }
+
+                window.WindowState = WindowState.Maximized;
+                window.UpdateLayout();
+                Assert.IsFalse(maximizeIcon.IsVisible, "最大化后应显示还原图标");
+                Assert.IsTrue(restoreIcon.IsVisible, "最大化后应显示还原图标");
+                window.WindowState = WindowState.Normal;
+                window.UpdateLayout();
+                Assert.IsTrue(maximizeIcon.IsVisible, "还原窗口后应恢复最大化图标");
+                Assert.IsFalse(restoreIcon.IsVisible);
+
                 var iconCanvases = buttons
                     .SelectMany(button => button.GetVisualDescendants().OfType<Grid>())
                     .Where(grid => Math.Abs(grid.Bounds.Width - 24) < 0.01 &&
@@ -72,16 +233,20 @@ public sealed class AvaloniaUiSmokeTests
                 Assert.AreEqual(3, iconCanvases.Count, "三个按钮必须各自使用统一的 24×24 图标画布");
 
                 var minimizeButton = buttons.Single(button => button.Classes.Contains("min"));
-                var minimizeGlyph = minimizeButton.GetVisualDescendants().OfType<Rectangle>().Single();
-                var minimizeCanvas = minimizeGlyph.GetVisualAncestors().OfType<Grid>()
+                var minimizeIcon = minimizeButton.GetVisualDescendants()
+                    .OfType<Rectangle>()
+                    .Single();
+                Assert.AreEqual(12d, minimizeIcon.Bounds.Width, 0.01);
+                Assert.AreEqual(2d, minimizeIcon.Bounds.Height, 0.01);
+                var minimizeCanvas = minimizeIcon.GetVisualAncestors().OfType<Grid>()
                     .Single(grid => Math.Abs(grid.Bounds.Width - 24) < 0.01 &&
                                     Math.Abs(grid.Bounds.Height - 24) < 0.01);
-                var minimizeGlyphCenter = minimizeGlyph.TranslatePoint(
-                    new Point(minimizeGlyph.Bounds.Width / 2, minimizeGlyph.Bounds.Height / 2),
+                var minimizeIconCenter = minimizeIcon.TranslatePoint(
+                    new Point(minimizeIcon.Bounds.Width / 2, minimizeIcon.Bounds.Height / 2),
                     minimizeCanvas);
-                Assert.IsNotNull(minimizeGlyphCenter);
-                Assert.AreEqual(12d, minimizeGlyphCenter!.Value.Y, 0.01,
-                    "最小化横线的图形中心必须与 24×24 图标画布中心重合");
+                Assert.IsNotNull(minimizeIconCenter);
+                Assert.AreEqual(12d, minimizeIconCenter!.Value.Y, 0.01,
+                    "最小化图标中心必须与 24×24 图标画布中心重合");
 
                 var resources = Application.Current!.Resources;
                 var previousAnimations = ThemeService.AnimationsEnabled;
@@ -161,16 +326,21 @@ public sealed class AvaloniaUiSmokeTests
                     Assert.AreEqual(3, canvases.Count,
                         $"{renderScale:P0} 下三个图形均应保留 24×24 画布");
                     var minimizeButton = buttons.Single(button => button.Classes.Contains("min"));
-                    var minimizeGlyph = minimizeButton.GetVisualDescendants().OfType<Rectangle>().Single();
-                    var minimizeCanvas = minimizeGlyph.GetVisualAncestors().OfType<Grid>()
+                    var minimizeIcon = minimizeButton.GetVisualDescendants()
+                        .OfType<Rectangle>()
+                        .Single();
+                    Assert.AreEqual(12d, minimizeIcon.Bounds.Width, 0.01);
+                    Assert.IsTrue(minimizeIcon.Bounds.Height >= 1.5 && minimizeIcon.Bounds.Height <= 2.5,
+                        $"{renderScale:P0} 下最小化短横线应保持可见厚度，不得退化为点");
+                    var minimizeCanvas = minimizeIcon.GetVisualAncestors().OfType<Grid>()
                         .Single(grid => Math.Abs(grid.Bounds.Width - 24) < 0.01 &&
                                         Math.Abs(grid.Bounds.Height - 24) < 0.01);
-                    var glyphCenter = minimizeGlyph.TranslatePoint(
-                        new Point(minimizeGlyph.Bounds.Width / 2, minimizeGlyph.Bounds.Height / 2),
+                    var iconCenter = minimizeIcon.TranslatePoint(
+                        new Point(minimizeIcon.Bounds.Width / 2, minimizeIcon.Bounds.Height / 2),
                         minimizeCanvas);
-                    Assert.IsNotNull(glyphCenter);
-                    Assert.IsTrue(Math.Abs(glyphCenter!.Value.Y - minimizeCanvas.Bounds.Height / 2) <= 0.5,
-                        $"{renderScale:P0} 下最小化图形中心偏差不能超过半个 DIP");
+                    Assert.IsNotNull(iconCenter);
+                    Assert.IsTrue(Math.Abs(iconCenter!.Value.Y - minimizeCanvas.Bounds.Height / 2) <= 0.5,
+                        $"{renderScale:P0} 下最小化图标中心偏差不能超过半个 DIP");
 
                     var centers = buttons
                         .Select(button => button.TranslatePoint(
@@ -264,7 +434,7 @@ public sealed class AvaloniaUiSmokeTests
 
         session.Dispatch(() =>
         {
-            var previousTransparency = ThemeService.TransparencyEnabled;
+            var previousTransparency = ThemeService.BackgroundTransparencyPercent;
             var previousPrimaryColor = ThemeService.CustomPrimaryColorHex;
             var resources = Application.Current!.Resources;
             var window = new MainWindow();
@@ -286,8 +456,8 @@ public sealed class AvaloniaUiSmokeTests
                 Assert.IsFalse(windowBackdrop.IsHitTestVisible,
                     "主题背景铺层不应挡住主窗口内容的鼠标命中");
 
-                ThemeService.SetTransparencyEnabled(false);
-                applyTransparency!.Invoke(window, [false]);
+                ThemeService.SetBackgroundTransparencyPercent(0);
+                applyTransparency!.Invoke(window, [0]);
                 Assert.AreEqual((byte)0xFF,
                     ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
                     "关闭透明效果时主窗口背景应回到不透明");
@@ -308,14 +478,14 @@ public sealed class AvaloniaUiSmokeTests
                     window.TransparencyLevelHint.ToArray());
                 var disabledDiagnostic = DebugConsoleService.Instance.Snapshot()
                     .LastOrDefault(entry => entry.Text.Contains(
-                        "[WindowTransparency] 设置已关闭",
+                        "[WindowTransparency] 背景透明度 0%",
                         StringComparison.Ordinal));
                 Assert.IsNotNull(disabledDiagnostic, "关闭透明效果时应记录平台实际透明级别");
                 StringAssert.Contains(disabledDiagnostic!.Text, "requested=[None]");
                 StringAssert.Contains(disabledDiagnostic.Text, $"actual={window.ActualTransparencyLevel}");
 
-                ThemeService.SetTransparencyEnabled(true);
-                applyTransparency.Invoke(window, [true]);
+                ThemeService.SetBackgroundTransparencyPercent(100);
+                applyTransparency.Invoke(window, [100]);
                 Assert.AreEqual((byte)0x66,
                     ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
                     "主窗口底色必须足够透明，让 Acrylic 材质可见");
@@ -335,6 +505,14 @@ public sealed class AvaloniaUiSmokeTests
                     ((SolidColorBrush)windowResources["SurfaceBrush"]!).Color.A,
                     "主页面输入框与表面容器应使用半透明画刷");
 
+                ThemeService.SetBackgroundTransparencyPercent(50);
+                applyTransparency.Invoke(window, [50]);
+                Assert.AreEqual((byte)0xB3,
+                    ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
+                    "50% 背景透明度应处于完全不透明和最大透明效果之间");
+                ThemeService.SetBackgroundTransparencyPercent(100);
+                applyTransparency.Invoke(window, [100]);
+
                 // 某些窗口后端在 Opened/透明级别变更时会短暂回报 None；
                 // 这不应把已开启的主页面半透明画刷错误切回不透明。
                 var openedField = typeof(MainWindow).GetField(
@@ -342,7 +520,7 @@ public sealed class AvaloniaUiSmokeTests
                     System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
                 Assert.IsNotNull(openedField);
                 openedField!.SetValue(window, true);
-                applyTransparency.Invoke(window, [true]);
+                applyTransparency.Invoke(window, [100]);
                 Assert.AreEqual((byte)0x66,
                     ((SolidColorBrush)windowResources["WindowBackgroundBrush"]!).Color.A,
                     "已打开窗口即使暂时报告透明级别 None，也必须保留主页面半透明画刷");
@@ -350,6 +528,9 @@ public sealed class AvaloniaUiSmokeTests
                 Assert.AreEqual((byte)0xFF,
                     ((SolidColorBrush)resources["CardBrush"]!).Color.A,
                     "主窗口透明效果不得让 Debug/确认弹窗等其它窗口的卡片意外透明");
+                Assert.AreEqual((byte)0xFF,
+                    ((SolidColorBrush)resources["PanelBackgroundBrush"]!).Color.A,
+                    "主窗口透明效果不得改变其它窗口使用的全局面板画刷");
 
                 var shellGrid = (Grid)window.Content!;
                 var pageHost = shellGrid.Children.OfType<Grid>()
@@ -372,7 +553,7 @@ public sealed class AvaloniaUiSmokeTests
                     window.TransparencyLevelHint.ToArray());
                 var enabledDiagnostic = DebugConsoleService.Instance.Snapshot()
                     .LastOrDefault(entry => entry.Text.Contains(
-                        "[WindowTransparency] 设置已开启",
+                        "[WindowTransparency] 背景透明度 100%",
                         StringComparison.Ordinal));
                 Assert.IsNotNull(enabledDiagnostic, "启用透明效果时应记录平台实际透明级别");
                 StringAssert.Contains(enabledDiagnostic!.Text, "requested=[AcrylicBlur, Transparent]");
@@ -390,7 +571,7 @@ public sealed class AvaloniaUiSmokeTests
             }
             finally
             {
-                ThemeService.SetTransparencyEnabled(previousTransparency);
+                ThemeService.SetBackgroundTransparencyPercent(previousTransparency);
                 ThemeService.TrySetCustomPrimaryColor(previousPrimaryColor, out _);
                 window.Close();
             }

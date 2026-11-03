@@ -2698,11 +2698,15 @@ public sealed class ModpackInstallService
 
         try
         {
+            // 清单文件优先，但远端目录不可用时不应无限阻塞已有实例/缓存回退。
+            // 仅限制地址解析；实际下载仍使用用户的取消令牌，不限制大文件下载时长。
+            using var lookupTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            lookupTimeout.CancelAfter(TimeSpan.FromSeconds(10));
             var downloadUrl = await _remoteCatalogService.ResolveCurseforgeFileDownloadUrlAsync(
                 smapiProjectId,
                 fileId,
                 string.Empty,
-                ct);
+                lookupTimeout.Token);
             if (!IsLikelyDirectDownloadUrl(downloadUrl))
             {
                 onProgress?.Invoke(new ModpackInstallProgress
@@ -2735,7 +2739,7 @@ public sealed class ModpackInstallService
                 TryNormalizeSmapiArchive);
             return zipPath;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }

@@ -3,6 +3,9 @@ using System.IO;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace SVL.Avalonia.Services;
@@ -14,10 +17,15 @@ public sealed class LauncherUpdateService
     private static readonly string GitHubApiUrl = $"https://api.github.com/repos/{GitHubRepo}/releases?per_page=10";
     private static readonly string GiteeApiUrl = $"https://gitee.com/api/v5/repos/{GiteeRepo}/releases?per_page=100&sort=created&direction=desc";
 
-    private readonly HttpClient _httpClient = new()
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> DownloadLocks = new(StringComparer.Ordinal);
+    private readonly HttpClient _httpClient;
+    private readonly string _downloadDirectory;
+
+    public LauncherUpdateService(HttpClient? httpClient = null, string? downloadDirectory = null)
     {
-        Timeout = TimeSpan.FromSeconds(25)
-    };
+        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
+        _downloadDirectory = downloadDirectory ?? Path.Combine(Path.GetTempPath(), "SVL", "launcher-update");
+    }
 
     private LauncherReleaseInfo? _cachedRelease;
     private DateTime _lastCheckTime;
@@ -26,6 +34,21 @@ public sealed class LauncherUpdateService
     private string _cachedSource = "-";
 
     public Version CurrentVersion => ResolveCurrentVersion();
+
+    public static bool IncludesPrerelease(string? channel) =>
+        !string.IsNullOrWhiteSpace(channel) &&
+        (channel.Contains("预览", StringComparison.OrdinalIgnoreCase) ||
+         channel.Contains("preview", StringComparison.OrdinalIgnoreCase) ||
+         channel.Contains("prerelease", StringComparison.OrdinalIgnoreCase));
+
+    public static bool PrefersGitee(string? source) =>
+        !string.IsNullOrWhiteSpace(source) && source.Contains("Gitee", StringComparison.OrdinalIgnoreCase);
+
+    public static LauncherReleaseAsset? SelectPreferredAsset(LauncherReleaseInfo release) =>
+        release.Assets
+            .Where(asset => !asset.Name.Contains("requires_dotnet", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(asset => OperatingSystem.IsWindows() && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .FirstOrDefault();
 
     /// <summary>
     /// 下载指定资产到本地临时文件，报告进度（0-100）与已下载字节数。
@@ -41,64 +64,90 @@ public sealed class LauncherUpdateService
             throw new ArgumentException("资产下载地址无效", nameof(asset));
         }
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "SVL", "launcher-update");
-        Directory.CreateDirectory(tempDir);
-        var localPath = Path.Combine(tempDir, asset.Name);
+        if (string.IsNullOrWhiteSpace(asset.Name) || Path.GetFileName(asset.Name) != asset.Name ||
+            !Uri.TryCreate(asset.BrowserDownloadUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            throw new ArgumentException("更新资源名称或地址无效", nameof(asset));
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, asset.BrowserDownloadUrl);
-        if (asset.BrowserDownloadUrl.Contains("github", StringComparison.OrdinalIgnoreCase))
+        Directory.CreateDirectory(_downloadDirectory);
+        var id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(asset.BrowserDownloadUrl)))[..16];
+        var localPath = Path.Combine(_downloadDirectory, $"{id}-{asset.Name}");
+        var gate = DownloadLocks.GetOrAdd(localPath, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
         {
-            request.Headers.Add("User-Agent", "SVL-Avalonia/1.0");
-        }
-
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = asset.Size > 0 ? asset.Size : (response.Content.Headers.ContentLength ?? 0);
-        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var fileStream = File.Create(localPath);
-
-        var buffer = new byte[81920];
-        long downloadedBytes = 0;
-        int lastReportedPercent = -1;
-        int read;
-
-        while ((read = await contentStream.ReadAsync(buffer, cancellationToken)) > 0)
-        {
-            await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-            downloadedBytes += read;
-
-            if (progress != null && totalBytes > 0)
+            if (asset.Size > 0 && File.Exists(localPath) && new FileInfo(localPath).Length == asset.Size &&
+                await MatchesSha256Async(localPath, asset.Sha256, cancellationToken))
             {
-                var percent = (int)(downloadedBytes * 100 / totalBytes);
-                if (percent != lastReportedPercent)
+                progress?.Report((100, asset.Size, asset.Size));
+                return localPath;
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, asset.BrowserDownloadUrl);
+            if (asset.BrowserDownloadUrl.Contains("github", StringComparison.OrdinalIgnoreCase))
+                request.Headers.Add("User-Agent", "SVL-Avalonia/1.0");
+
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            var totalBytes = asset.Size > 0 ? asset.Size : (response.Content.Headers.ContentLength ?? 0);
+            var temporaryPath = localPath + "." + Guid.NewGuid().ToString("N") + ".part";
+            try
+            {
+                long downloadedBytes = 0;
+                await using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+                await using (var fileStream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
-                    lastReportedPercent = percent;
-                    progress.Report((percent, downloadedBytes, totalBytes));
+                    var buffer = new byte[81920];
+                    var lastReportedPercent = -1;
+                    int read;
+                    while ((read = await contentStream.ReadAsync(buffer, cancellationToken)) > 0)
+                    {
+                        await fileStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                        downloadedBytes += read;
+                        if (totalBytes > 0 && downloadedBytes > totalBytes)
+                            throw new InvalidDataException("更新文件超过声明的长度");
+                        if (progress != null && totalBytes > 0)
+                        {
+                            var percent = (int)Math.Min(99, downloadedBytes * 100 / totalBytes);
+                            if (percent != lastReportedPercent)
+                            {
+                                lastReportedPercent = percent;
+                                progress.Report((percent, downloadedBytes, totalBytes));
+                            }
+                        }
+                    }
+                    await fileStream.FlushAsync(cancellationToken);
                 }
+                if (downloadedBytes <= 0 || (totalBytes > 0 && downloadedBytes != totalBytes))
+                    throw new InvalidDataException($"更新文件不完整（已下载 {downloadedBytes}，预期 {totalBytes} 字节）");
+                if (!await MatchesSha256Async(temporaryPath, asset.Sha256, cancellationToken))
+                    throw new InvalidDataException("更新文件的 SHA-256 校验失败");
+                File.Move(temporaryPath, localPath, overwrite: true);
+                progress?.Report((100, downloadedBytes, totalBytes));
+                return localPath;
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
             }
         }
-
-        progress?.Report((100, downloadedBytes, totalBytes));
-        return localPath;
+        finally { gate.Release(); }
     }
 
-    /// <summary>启动已下载的更新包（Windows .exe / macOS .dmg / Linux .zip）。</summary>
+    private static async Task<bool> MatchesSha256Async(string path, string? expected, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(expected)) return true;
+        var normalized = expected.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ? expected[7..] : expected;
+        if (normalized.Length != 64 || normalized.Any(ch => !Uri.IsHexDigit(ch))) return false;
+        await using var stream = File.OpenRead(path);
+        var actual = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken));
+        return string.Equals(actual, normalized, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>准备 Windows 单文件更新；调用方在成功启动辅助进程后应关闭当前程序。</summary>
     public void StartUpdateInstaller(string localFilePath)
     {
-        if (!File.Exists(localFilePath))
-        {
-            throw new FileNotFoundException("更新文件不存在", localFilePath);
-        }
-
-        var startInfo = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = localFilePath,
-            UseShellExecute = true
-        };
-
-        // Windows .exe 与 macOS .dmg 可直接用 ShellExecute 打开；Linux 依赖文件管理器
-        System.Diagnostics.Process.Start(startInfo);
+        LauncherUpdateApplier.Start(localFilePath, _downloadDirectory);
     }
 
     public async Task<LauncherUpdateCheckResult> CheckForUpdateAsync(bool includePrerelease, bool preferGitee, CancellationToken cancellationToken = default)
@@ -242,7 +291,8 @@ public sealed class LauncherUpdateService
                     {
                         Name = assetName,
                         BrowserDownloadUrl = downloadUrl,
-                        Size = ReadInt64(assetElement, "size")
+                        Size = ReadInt64(assetElement, "size"),
+                        Sha256 = ReadString(assetElement, "digest", "sha256") ?? string.Empty
                     });
                 }
             }
@@ -351,6 +401,14 @@ public sealed class LauncherUpdateService
             return false;
         }
 
+        if (assetName.Contains("requires_dotnet", StringComparison.OrdinalIgnoreCase)) return false;
+        var arch = RuntimeInformation.ProcessArchitecture.ToString();
+        foreach (var knownArch in new[] { "x64", "x86", "arm64", "arm32" })
+        {
+            if (assetName.Contains(knownArch, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(arch, knownArch, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+
         if (OperatingSystem.IsWindows())
         {
             return assetName.Contains("Windows_", StringComparison.OrdinalIgnoreCase) ||
@@ -360,13 +418,11 @@ public sealed class LauncherUpdateService
         if (OperatingSystem.IsMacOS())
         {
             return assetName.Contains("osx_", StringComparison.OrdinalIgnoreCase) ||
-                   assetName.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase) ||
-                   assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+                   assetName.Contains("macOS_", StringComparison.OrdinalIgnoreCase);
         }
 
-        var arch = RuntimeInformation.ProcessArchitecture.ToString();
         return assetName.Contains("linux_", StringComparison.OrdinalIgnoreCase) ||
-               assetName.Contains(arch, StringComparison.OrdinalIgnoreCase);
+               assetName.Contains("linux-", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsDebugBuild

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Formats.Tar;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -39,7 +40,7 @@ public sealed record SteamGameVersionOption(string DisplayName, string? Manifest
 
 /// <summary>
 /// SteamCMD 集成服务：下载/安装 SteamCMD，登录 Steam 账号，通过 download_depot 下载
-/// Stardew Valley 游戏文件（AppID 413150 / Windows DepotID 413151），支持按 Manifest ID
+/// Stardew Valley 游戏文件（AppID 413150），根据当前系统选择对应 Depot，支持按 Manifest ID
 /// 选择特定历史版本。下载走 HttpDownloadService（享受多线程与缓存）。
 /// 参考：https://developer.valvesoftware.com/wiki/SteamCMD
 /// </summary>
@@ -47,35 +48,146 @@ public sealed partial class SteamCmdService
 {
     public const int StardewAppId = 413150;
     public const int StardewWindowsDepotId = 413151;
+    public const int StardewMacDepotId = 413152;
+    public const int StardewLinuxDepotId = 413153;
 
-    private const string SteamCmdZipUrl = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip";
+    private const string SteamCmdInstallerRoot = "https://steamcdn-a.akamaihd.net/client/installer/";
 
     private readonly HttpDownloadService _httpDownloadService;
+    private readonly string _traceLogPath;
+    private bool _preparedForLogin;
 
-    public SteamCmdService(HttpDownloadService httpDownloadService)
+    public SteamCmdService(HttpDownloadService httpDownloadService, string? steamCmdDirectory = null, string? traceLogPath = null)
     {
         _httpDownloadService = httpDownloadService;
+        _traceLogPath = traceLogPath ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SVL", "Avalonia", "logs", "steam-trace.log");
+        var root = steamCmdDirectory ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SVL", "Avalonia", "steamcmd");
+        SteamCmdDirectory = steamCmdDirectory != null ? root : ResolveInstallDirectory(root, GetCurrentPlatform());
     }
 
-    public string SteamCmdDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "SVL", "Avalonia", "steamcmd");
+    public string SteamCmdDirectory { get; }
 
     public string SteamCmdExecutablePath => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
         ? Path.Combine(SteamCmdDirectory, "steamcmd.exe")
         : Path.Combine(SteamCmdDirectory, "steamcmd.sh");
 
-    public bool IsSteamCmdInstalled => File.Exists(SteamCmdExecutablePath);
+    public bool IsSteamCmdInstalled => IsCompleteInstallation(SteamCmdDirectory, GetCurrentPlatform());
 
-    /// <summary>download_depot 的内容输出目录（steamcmd 目录下 steamapps/content）。</summary>
-    public string GetDepotContentPath(int depotId = StardewWindowsDepotId)
+    internal static string ResolveInstallDirectory(string legacyRoot, OSPlatform platform)
     {
-        return Path.Combine(SteamCmdDirectory, "steamapps", "content", $"app_{StardewAppId}", $"depot_{depotId}");
+        if (platform == OSPlatform.Windows || IsCompleteInstallation(legacyRoot, platform)) return legacyRoot;
+        if (platform == OSPlatform.OSX) return Path.Combine(legacyRoot, "macos");
+        if (platform == OSPlatform.Linux) return Path.Combine(legacyRoot, "linux");
+        throw new PlatformNotSupportedException("当前系统不支持安装 SteamCMD");
     }
+
+    private static bool IsCompleteInstallation(string directory, OSPlatform platform)
+    {
+        if (platform == OSPlatform.Windows) return File.Exists(Path.Combine(directory, "steamcmd.exe"));
+        if (!File.Exists(Path.Combine(directory, "steamcmd.sh"))) return false;
+        if (platform == OSPlatform.OSX)
+            return File.Exists(Path.Combine(directory, "steamcmd")) ||
+                   File.Exists(Path.Combine(directory, "Steam.AppBundle", "Steam", "Contents", "MacOS", "steamcmd"));
+        return platform == OSPlatform.Linux &&
+               (File.Exists(Path.Combine(directory, "linux32", "steamcmd")) ||
+                File.Exists(Path.Combine(directory, "linuxarm64", "steamcmd")));
+    }
+
+    internal static string GetInstallerFileName(OSPlatform platform)
+    {
+        if (platform == OSPlatform.Windows) return "steamcmd.zip";
+        if (platform == OSPlatform.OSX) return "steamcmd_osx.tar.gz";
+        if (platform == OSPlatform.Linux) return "steamcmd_linux.tar.gz";
+        throw new PlatformNotSupportedException("当前系统不支持安装 SteamCMD");
+    }
+
+    private static OSPlatform GetCurrentPlatform() => OperatingSystem.IsWindows() ? OSPlatform.Windows :
+        OperatingSystem.IsMacOS() ? OSPlatform.OSX : OperatingSystem.IsLinux() ? OSPlatform.Linux :
+        throw new PlatformNotSupportedException("当前系统不支持安装 SteamCMD");
+
+    /// <summary>查找当前平台已存在的 download_depot 内容目录。</summary>
+    public string GetDepotContentPath() => GetDepotContentPath(GetDepotId(GetCurrentPlatform()));
+
+    public string GetDepotContentPath(int depotId)
+    {
+        var candidates = GetDepotContentCandidates(SteamCmdDirectory, depotId, GetCurrentPlatform());
+        return candidates.FirstOrDefault(HasDepotContents) ?? candidates[0];
+    }
+
+    internal static IReadOnlyList<string> GetDepotContentCandidates(string steamCmdDirectory, int depotId, OSPlatform platform)
+    {
+        string Under(string root) => Path.Combine(root, "steamapps", "content", $"app_{StardewAppId}", $"depot_{depotId}");
+        var candidates = new List<string> { Under(steamCmdDirectory) };
+        if (platform == OSPlatform.Linux)
+        {
+            // SteamCMD 的 Linux 启动脚本可能从架构目录运行真正的客户端，
+            // 此时 depot 位于 linux32/steamapps 而不是安装目录的 steamapps。
+            candidates.Add(Under(Path.Combine(steamCmdDirectory, "linux32")));
+            candidates.Add(Under(Path.Combine(steamCmdDirectory, "linux64")));
+            candidates.Add(Under(Path.Combine(steamCmdDirectory, "linuxarm64")));
+        }
+        return candidates;
+    }
+
+    private static bool HasDepotContents(string path)
+    {
+        try { return Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any(); }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    internal static string? ResolveCompletedDepotPath(
+        string output, IReadOnlyList<string> candidates, string? expectedManifest, out string error)
+    {
+        var matches = DepotCompletionRegex().Matches(output ?? string.Empty);
+        if (matches.Count == 0)
+        {
+            error = "SteamCMD 未报告游戏文件下载完成，已有下载文件已保留，请查看 SteamCMD 日志";
+            return null;
+        }
+
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach (Match match in matches.Cast<Match>().Reverse())
+        {
+            var manifest = match.Groups["manifest"].Value;
+            if (!string.IsNullOrWhiteSpace(expectedManifest) &&
+                !string.Equals(expectedManifest.Trim(), manifest, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var reported = match.Groups["path"].Value;
+            if (!OperatingSystem.IsWindows()) reported = reported.Replace('\\', '/');
+            string fullReported;
+            try { fullReported = Path.GetFullPath(reported); }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { continue; }
+
+            foreach (var candidate in candidates)
+            {
+                if (string.Equals(Path.GetFullPath(candidate), fullReported, comparison) && HasDepotContents(candidate))
+                {
+                    error = string.Empty;
+                    return candidate;
+                }
+            }
+        }
+
+        error = "SteamCMD 报告的下载目录或 Manifest 与当前请求不匹配，已有下载文件已保留";
+        return null;
+    }
+
+    [GeneratedRegex("Depot download complete\\s*:\\s*\"(?<path>[^\"\\r\\n]+)\"(?:\\s*\\(manifest\\s+(?<manifest>[0-9]+)\\))?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DepotCompletionRegex();
 
     /// <summary>内置已知版本（Windows Depot 413151 的 Manifest ID，来源 SteamDB，作为兜底）。</summary>
     public static IReadOnlyList<SteamGameVersionOption> GetKnownVersions()
     {
+        // 历史 Manifest 属于 Windows Depot，不能用于其他系统。
+        if (!OperatingSystem.IsWindows()) return [new SteamGameVersionOption("最新版（当前分支）", null)];
         return
         [
             new SteamGameVersionOption("最新版（当前分支）", null),
@@ -92,7 +204,7 @@ public sealed partial class SteamCmdService
     }
 
     /// <summary>
-    /// 通过 SteamCMD 自动获取 Windows Depot 的所有可用版本分支（运行 app_info_print 并解析）。
+    /// 通过 SteamCMD 自动获取当前系统 Depot 的可用版本分支（运行 app_info_print 并解析）。
     /// 不用硬编码：分支与 Manifest 都取自 SteamCMD 实际输出。
     /// </summary>
     public async Task<IReadOnlyList<SteamGameVersionOption>> FetchAvailableVersionsAsync(
@@ -111,10 +223,14 @@ public sealed partial class SteamCmdService
             ? "+login anonymous"
             : $"+login {EscapeArgument(username.Trim())}";
         var args = $"{loginArg} +app_info_print {StardewAppId} +quit";
-        await RunSteamCmdAsync(args, log, null, cancellationToken);
-
-        var output = _lastOutput.ToString();
-        var versions = ParseDepotVersions(output, StardewWindowsDepotId);
+        // app_info_print 会输出数百行数据；完整内容仍用于解析，界面只显示状态和错误。
+        Action<string>? statusLog = log == null ? null : line =>
+        {
+            if (IsSteamMetadataStatusLine(line)) log(line);
+        };
+        var commandResult = await RunSteamCmdAsync(args, statusLog, null, cancellationToken);
+        var output = commandResult.Output;
+        var versions = ParseDepotVersions(output, GetDepotId(GetCurrentPlatform()));
         if (versions.Count > 0)
         {
             log?.Invoke($"已自动获取 {versions.Count} 个可用版本");
@@ -128,7 +244,7 @@ public sealed partial class SteamCmdService
     }
 
     /// <summary>从 SteamCMD app_info_print 输出中解析指定 Depot 各分支（public/legacy_* 等）的 Manifest ID。</summary>
-    private static List<SteamGameVersionOption> ParseDepotVersions(string output, int depotId)
+    internal static List<SteamGameVersionOption> ParseDepotVersions(string output, int depotId)
     {
         var result = new List<SteamGameVersionOption>();
         if (string.IsNullOrWhiteSpace(output))
@@ -136,29 +252,13 @@ public sealed partial class SteamCmdService
             return result;
         }
 
-        var depotToken = $"\"{depotId}\"";
-        var depotIdx = output.IndexOf(depotToken, StringComparison.OrdinalIgnoreCase);
-        if (depotIdx < 0)
-        {
-            return result;
-        }
-
-        var afterDepot = output.Substring(depotIdx);
-
-        // 只取当前 Depot 的块（到下一个 Depot 编号为止），避免混入其它平台的 depot
-        var nextDepotIdx = afterDepot.IndexOf($"\"{depotId + 1}\"", StringComparison.OrdinalIgnoreCase);
-        var depotBlock = nextDepotIdx > 0 ? afterDepot[..nextDepotIdx] : afterDepot;
-
-        var manifestIdx = depotBlock.IndexOf("\"manifests\"", StringComparison.OrdinalIgnoreCase);
-        if (manifestIdx < 0)
-        {
-            return result;
-        }
-
-        var block = depotBlock.Substring(manifestIdx);
+        // 按括号边界截取当前 Depot 和 manifests；不能依赖下一个 Depot ID 连续。
+        var depotBlock = FindVdfBlock(output, depotId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        var block = depotBlock == null ? null : FindVdfBlock(depotBlock, "manifests");
+        if (block == null) return result;
         var matches = System.Text.RegularExpressions.Regex.Matches(
             block,
-            @"""(\w+)""\s*\{\s*""gid""\s*""(\d+)""");
+            @"""([\w.-]+)""\s*\{[^{}]*?""gid""\s*""(\d+)""");
 
         // 从 "branches" 段解析各分支的官方描述（如 "The legacy 1.5.6 version of Stardew Valley."）
         var descriptions = ParseBranchDescriptions(output);
@@ -184,6 +284,38 @@ public sealed partial class SteamCmdService
         return result;
     }
 
+    private static string? FindVdfBlock(string text, string key)
+    {
+        var match = Regex.Match(text, "\\\"" + Regex.Escape(key) + "\\\"\\s*\\{");
+        if (!match.Success) return null;
+        var start = match.Index + match.Length - 1;
+        var depth = 0;
+        var quoted = false;
+        var escaped = false;
+        for (var i = start; i < text.Length; i++)
+        {
+            var ch = text[i];
+            if (quoted)
+            {
+                if (escaped) escaped = false;
+                else if (ch == '\\') escaped = true;
+                else if (ch == '"') quoted = false;
+            }
+            else if (ch == '"') quoted = true;
+            else if (ch == '{') depth++;
+            else if (ch == '}' && --depth == 0) return text.Substring(start, i - start + 1);
+        }
+        return null;
+    }
+
+    internal static int GetDepotId(OSPlatform platform)
+    {
+        if (platform == OSPlatform.Windows) return StardewWindowsDepotId;
+        if (platform == OSPlatform.OSX) return StardewMacDepotId;
+        if (platform == OSPlatform.Linux) return StardewLinuxDepotId;
+        throw new PlatformNotSupportedException("当前系统没有对应的星露谷物语 Steam Depot");
+    }
+
     /// <summary>解析 app_info_print 输出中 "branches" 段的 branch -> description 映射。</summary>
     private static Dictionary<string, string> ParseBranchDescriptions(string output)
     {
@@ -202,7 +334,7 @@ public sealed partial class SteamCmdService
         var branchesBlock = output.Substring(branchIdx);
         var matches = System.Text.RegularExpressions.Regex.Matches(
             branchesBlock,
-            @"""(\w+)""\s*\{[^}]*?""description""\s*""([^""]*)""");
+            @"""([\w.-]+)""\s*\{[^}]*?""description""\s*""([^""]*)""");
 
         foreach (System.Text.RegularExpressions.Match match in matches)
         {
@@ -235,7 +367,7 @@ public sealed partial class SteamCmdService
         return text[..max] + "…";
     }
 
-    /// <summary>确保 SteamCMD 已下载并解压（首次调用时下载官方 zip）。</summary>
+    /// <summary>下载当前系统的官方 SteamCMD 安装包，保留已有安装和账户数据。</summary>
     public async Task EnsureSteamCmdAsync(Action<string>? log = null, CancellationToken cancellationToken = default)
     {
         if (IsSteamCmdInstalled)
@@ -244,26 +376,56 @@ public sealed partial class SteamCmdService
             return;
         }
 
-        Directory.CreateDirectory(SteamCmdDirectory);
-        var zipPath = Path.Combine(SteamCmdDirectory, "steamcmd.zip");
+        var platform = GetCurrentPlatform();
+        var archiveName = GetInstallerFileName(platform);
+        var archiveUrl = SteamCmdInstallerRoot + archiveName;
+        if (platform != OSPlatform.Windows && (Directory.Exists(SteamCmdDirectory) || File.Exists(SteamCmdDirectory)))
+            throw new IOException($"SteamCMD 安装目录已存在，已保留原有文件：{SteamCmdDirectory}");
         log?.Invoke("正在下载 SteamCMD 安装包...");
-        await _httpDownloadService.DownloadAsync(SteamCmdZipUrl, zipPath, null, cancellationToken);
-
-        log?.Invoke("正在解压 SteamCMD...");
-        ZipFile.ExtractToDirectory(zipPath, SteamCmdDirectory, overwriteFiles: true);
-        TryDeleteFile(zipPath);
-
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (platform == OSPlatform.Windows)
         {
-            // Linux/macOS 需要可执行权限
+            // 兼容旧 Windows 安装目录和已缓存的 Steam 登录状态。
+            Directory.CreateDirectory(SteamCmdDirectory);
+            var archivePath = Path.Combine(SteamCmdDirectory, archiveName);
+            await _httpDownloadService.DownloadAsync(archiveUrl, archivePath, null, cancellationToken);
+            log?.Invoke("正在解压 SteamCMD...");
+            ZipFile.ExtractToDirectory(archivePath, SteamCmdDirectory, overwriteFiles: true);
+            TryDeleteFile(archivePath);
+        }
+        else
+        {
+            // Unix 归档包含可执行权限及框架符号链接，先解压到全新目录，
+            // 验证完整后再整体移动，避免覆盖旧版或残留安装中的用户文件。
+            var parent = Path.GetDirectoryName(SteamCmdDirectory)
+                         ?? throw new InvalidOperationException("无法确定 SteamCMD 安装目录");
+            Directory.CreateDirectory(parent);
+            var staging = Path.Combine(parent, ".svl-steamcmd-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(staging);
             try
             {
-                var chmod = Process.Start(new ProcessStartInfo("chmod", $"+x \"{SteamCmdExecutablePath}\""));
-                chmod?.WaitForExit(5000);
+                var archivePath = Path.Combine(staging, archiveName);
+                var payload = Path.Combine(staging, "payload");
+                await _httpDownloadService.DownloadAsync(archiveUrl, archivePath, null, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                log?.Invoke("正在解压 SteamCMD...");
+                ExtractUnixBootstrap(archivePath, payload);
+                if (!IsCompleteInstallation(payload, platform))
+                    throw new InvalidDataException("SteamCMD 安装包缺少当前平台的启动脚本或程序");
+
+                EnsureExecutable(Path.Combine(payload, "steamcmd.sh"));
+                var nativeExecutable = platform == OSPlatform.OSX
+                    ? Path.Combine(payload, "steamcmd")
+                    : Path.Combine(payload, "linux32", "steamcmd");
+                EnsureExecutable(nativeExecutable);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (Directory.Exists(SteamCmdDirectory) || File.Exists(SteamCmdDirectory))
+                    throw new IOException($"SteamCMD 安装目录已存在，已保留原有文件：{SteamCmdDirectory}");
+                Directory.Move(payload, SteamCmdDirectory);
             }
-            catch
+            finally
             {
-                // ignore
+                // 仅清理本次创建的临时安装目录，不修改既有 SteamCMD 文件。
+                TryDeleteDirectory(staging);
             }
         }
 
@@ -273,6 +435,38 @@ public sealed partial class SteamCmdService
         }
 
         log?.Invoke("SteamCMD 安装完成");
+        if (platform == OSPlatform.OSX && RuntimeInformation.OSArchitecture == Architecture.Arm64)
+            log?.Invoke("SteamCMD 官方启动程序为 Intel 架构；Apple 芯片需要安装 Rosetta 2 才能启动。");
+    }
+
+    internal static void ExtractUnixBootstrap(string archivePath, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        using var file = File.OpenRead(archivePath);
+        using var gzip = new GZipStream(file, CompressionMode.Decompress);
+        TarFile.ExtractToDirectory(gzip, destination, overwriteFiles: false);
+    }
+
+    private static void EnsureExecutable(string path)
+    {
+        if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        var mode = File.GetUnixFileMode(path);
+        File.SetUnixFileMode(path, mode | UnixFileMode.UserExecute);
+    }
+
+    /// <summary>先完成 SteamCMD 自更新，避免首次更新占用账号验证的等待时间。</summary>
+    public async Task PrepareForLoginAsync(Action<string>? log = null, CancellationToken cancellationToken = default)
+    {
+        if (_preparedForLogin) return;
+        if (!IsSteamCmdInstalled) throw new InvalidOperationException("请先安装 SteamCMD");
+
+        log?.Invoke("[SteamCMD] 正在检查客户端更新，首次运行可能需要几分钟，请稍候...");
+        var result = await RunSteamCmdAsync("+quit", log, null, cancellationToken);
+        if (result.ExitCode != 0)
+            throw new IOException($"SteamCMD 更新或启动失败（退出码 {result.ExitCode}），请检查网络和上方日志后重试");
+
+        _preparedForLogin = true;
+        log?.Invoke("[SteamCMD] 客户端准备完成，开始账号验证。");
     }
 
     /// <summary>登录 Steam 账号（验证凭据并缓存 sentry，供后续 depot 下载复用）。</summary>
@@ -328,7 +522,9 @@ public sealed partial class SteamCmdService
             return new SteamCmdDepotResult(false, $"无法检查目标目录: {ex.Message}", null);
         }
 
-        var depotContentPath = GetDepotContentPath();
+        var depotId = GetDepotId(GetCurrentPlatform());
+        var depotContentCandidates = GetDepotContentCandidates(SteamCmdDirectory, depotId, GetCurrentPlatform());
+        string? depotContentPath = null;
         var cacheDir = GetGameCacheDir(manifestId);
 
         // 命中缓存：直接从缓存复制到目标目录，跳过 SteamCMD 下载。
@@ -348,12 +544,11 @@ public sealed partial class SteamCmdService
             }
         }
 
-        // 清理上次下载残留，避免旧文件混入
-        TryDeleteDirectory(depotContentPath);
-
+        // 保留 SteamCMD 已下载的 depot，让客户端自行验证并复用文件。
+        // 只有本次命令明确报告下载完成且 Manifest 匹配时才使用该目录。
         var depotCommand = string.IsNullOrWhiteSpace(manifestId)
-            ? $"download_depot {StardewAppId} {StardewWindowsDepotId}"
-            : $"download_depot {StardewAppId} {StardewWindowsDepotId} {manifestId.Trim()}";
+            ? $"download_depot {StardewAppId} {depotId}"
+            : $"download_depot {StardewAppId} {depotId} {manifestId.Trim()}";
 
         var versionLabel = string.IsNullOrWhiteSpace(manifestId) ? "最新版" : $"Manifest {manifestId.Trim()}";
         log?.Invoke($"开始下载 Stardew Valley 游戏文件（{versionLabel}）...");
@@ -382,11 +577,11 @@ public sealed partial class SteamCmdService
         });
 
         using var progressCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var monitor = StartDepotProgressMonitor(depotContentPath, () => totalBytes, onProgress, progressCts.Token);
+        var monitor = StartDepotProgressMonitor(depotContentCandidates, () => totalBytes, onProgress, progressCts.Token);
 
         try
         {
-            var exitCode = await RunSteamCmdAsync(
+            var commandResult = await RunSteamCmdAsync(
                 loginArg + $" +{depotCommand} +quit",
                 logWrapper,
                 onProgress,
@@ -399,15 +594,17 @@ public sealed partial class SteamCmdService
                 return new SteamCmdDepotResult(false, "已取消", null);
             }
 
-            if (exitCode != 0 && !Directory.Exists(depotContentPath))
+            if (commandResult.ExitCode != 0)
             {
-                return new SteamCmdDepotResult(false, $"SteamCMD 退出码异常: {exitCode}", null);
+                return new SteamCmdDepotResult(false, $"SteamCMD 退出码异常: {commandResult.ExitCode}", null);
             }
 
-            if (!Directory.Exists(depotContentPath) || Directory.GetFileSystemEntries(depotContentPath).Length == 0)
+            depotContentPath = ResolveCompletedDepotPath(commandResult.Output, depotContentCandidates, manifestId, out var depotError);
+            if (depotContentPath == null)
             {
-                return new SteamCmdDepotResult(false, "下载未产生任何文件（请确认已登录并拥有该游戏、Manifest ID 是否有效）", null);
+                return new SteamCmdDepotResult(false, depotError, null);
             }
+            log?.Invoke($"已确认 SteamCMD 游戏文件目录: {depotContentPath}");
         }
         finally
         {
@@ -427,18 +624,16 @@ public sealed partial class SteamCmdService
             log?.Invoke($"写入游戏缓存失败（忽略）: {cacheEx.Message}");
         }
 
-        // 移动到目标目录：不删除用户填写的保存目录，把 depot 内容合并进去（覆盖同名文件）。
-        // 用"复制+删除"而非 Directory.Move：SteamCMD 目录在 C:，用户保存目录可能在其它盘符，
-        // Directory.Move 跨卷会抛"跨设备"异常导致文件夹为空。
+        // 复制到目标目录，保留 SteamCMD 的 depot 以便后续重新验证或重试。
+        // 不使用 Directory.Move：SteamCMD 和用户的保存目录可能位于不同磁盘。
         try
         {
             Directory.CreateDirectory(targetPath);
             CopyDirectoryContents(depotContentPath, targetPath);
-            TryDeleteDirectory(depotContentPath);
         }
         catch (Exception ex)
         {
-            return new SteamCmdDepotResult(false, $"移动游戏文件失败: {ex.Message}", depotContentPath);
+            return new SteamCmdDepotResult(false, $"复制游戏文件失败: {ex.Message}", depotContentPath);
         }
 
         log?.Invoke($"游戏文件已保存到: {targetPath}");
@@ -450,7 +645,9 @@ public sealed partial class SteamCmdService
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "SVL", "Avalonia", "cache", "game");
 
-    private static string GetGameCacheDir(string? manifestId)
+    private static string GetGameCacheDir(string? manifestId) => GetGameCacheDir(manifestId, GetCurrentPlatform());
+
+    internal static string GetGameCacheDir(string? manifestId, OSPlatform platform)
     {
         var key = string.IsNullOrWhiteSpace(manifestId) ? "latest" : manifestId;
         var safe = new string(key.Where(char.IsLetterOrDigit).ToArray());
@@ -458,7 +655,11 @@ public sealed partial class SteamCmdService
         {
             safe = "latest";
         }
-        return Path.Combine(GameCacheRoot, safe);
+        // 保留 Windows 的旧缓存结构，其余平台必须隔离，避免命中 Windows 游戏文件。
+        if (platform == OSPlatform.Windows) return Path.Combine(GameCacheRoot, safe);
+        if (platform == OSPlatform.OSX) return Path.Combine(GameCacheRoot, "macos", safe);
+        if (platform == OSPlatform.Linux) return Path.Combine(GameCacheRoot, "linux", safe);
+        throw new PlatformNotSupportedException("当前系统没有对应的游戏缓存");
     }
 
     /// <summary>清理游戏下载缓存（供设置页调用）。</summary>
@@ -478,25 +679,44 @@ public sealed partial class SteamCmdService
     }
 
     /// <summary>把 sourceDir 的内容复制到 destDir（保留目录结构）。</summary>
-    private static void CopyDirectoryContents(string sourceDir, string destDir)
+    internal static void CopyDirectoryContents(string sourceDir, string destDir)
+    {
+        var root = Path.GetFullPath(sourceDir);
+        CopyDirectoryContentsCore(root, destDir, root);
+    }
+
+    private static void CopyDirectoryContentsCore(string sourceDir, string destDir, string sourceRoot)
     {
         Directory.CreateDirectory(destDir);
-
-        foreach (var subDir in Directory.GetDirectories(sourceDir))
+        foreach (var item in new DirectoryInfo(sourceDir).EnumerateFileSystemInfos())
         {
-            CopyDirectoryContents(subDir, Path.Combine(destDir, Path.GetFileName(subDir)));
-        }
-
-        foreach (var file in Directory.GetFiles(sourceDir))
-        {
-            var target = Path.Combine(destDir, Path.GetFileName(file));
-            File.Copy(file, target, overwrite: true);
+            var target = Path.Combine(destDir, item.Name);
+            if (!OperatingSystem.IsWindows() && item.LinkTarget is { } link)
+            {
+                // macOS app 中的 Frameworks 依赖相对符号链接；不要跟随或复制链接外的文件。
+                if (Path.IsPathRooted(link)) throw new InvalidDataException($"游戏文件包含绝对符号链接: {item.FullName}");
+                var resolved = Path.GetFullPath(link, sourceDir);
+                var relative = Path.GetRelativePath(sourceRoot, resolved);
+                if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                    throw new InvalidDataException($"游戏文件包含指向目录外的符号链接: {item.FullName}");
+                if (item is DirectoryInfo) Directory.CreateSymbolicLink(target, link);
+                else File.CreateSymbolicLink(target, link);
+            }
+            else if (item is DirectoryInfo directory)
+            {
+                CopyDirectoryContentsCore(directory.FullName, target, sourceRoot);
+            }
+            else
+            {
+                File.Copy(item.FullName, target, overwrite: true);
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target, File.GetUnixFileMode(item.FullName));
+            }
         }
     }
 
     /// <summary>监测 depot 下载目录的字节增量来估算下载进度（SteamCMD stdout 缓冲，实时进度不可靠）。</summary>
     private static Task StartDepotProgressMonitor(
-        string depotContentPath,
+        IReadOnlyList<string> depotContentPaths,
         Func<long?> getTotalBytes,
         Action<double>? onProgress,
         CancellationToken cancellationToken)
@@ -505,6 +725,23 @@ public sealed partial class SteamCmdService
         {
             try
             {
+                static long GetSize(string path)
+                {
+                    if (!Directory.Exists(path)) return 0;
+                    return Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                        .Sum(file =>
+                        {
+                            try { return new FileInfo(file).Length; }
+                            catch { return 0L; }
+                        });
+                }
+
+                // 已存在的 depot 不代表本次下载进度，避免复用旧文件时立即显示 99%。
+                var initialSizes = depotContentPaths.Select(path =>
+                {
+                    try { return GetSize(path); }
+                    catch { return 0L; }
+                }).ToArray();
                 // 等待拿到总大小（从日志 "Downloading depot ... (N files, X MB)" 解析）
                 long? total = null;
                 while (!cancellationToken.IsCancellationRequested)
@@ -527,16 +764,12 @@ public sealed partial class SteamCmdService
                     try
                     {
                         long size = 0;
-                        if (Directory.Exists(depotContentPath))
+                        for (var i = 0; i < depotContentPaths.Count; i++)
                         {
-                            size = Directory.EnumerateFiles(depotContentPath, "*", SearchOption.AllDirectories)
-                                .Sum(file =>
-                                {
-                                    try { return new FileInfo(file).Length; }
-                                    catch { return 0L; }
-                                });
+                            size = Math.Max(size, Math.Max(0, GetSize(depotContentPaths[i]) - initialSizes[i]));
                         }
-                        onProgress?.Invoke(Math.Clamp(size * 100.0 / totalSize, 0, 99));
+                        if (size > 0 || initialSizes.All(initial => initial == 0))
+                            onProgress?.Invoke(Math.Clamp(size * 100.0 / totalSize, 0, 99));
                     }
                     catch { }
 
@@ -628,16 +861,26 @@ public sealed partial class SteamCmdService
         Action<string>? log,
         CancellationToken cancellationToken)
     {
-        var exitCode = await RunSteamCmdAsync(args + " +quit", log, null, cancellationToken);
-        var output = _lastOutput.ToString();
+        var result = await RunSteamCmdAsync(args + " +quit", log, null, cancellationToken);
+        return ClassifyLoginResult(result.ExitCode, result.Output);
+    }
+
+    internal static SteamCmdLoginResult ClassifyLoginResult(int exitCode, string output)
+    {
+        if (output.Contains("rate limit", StringComparison.OrdinalIgnoreCase))
+            return new SteamCmdLoginResult(SteamCmdLoginStatus.Error, "登录尝试过于频繁，请稍后再试");
+
+        if (output.Contains("Invalid Password", StringComparison.OrdinalIgnoreCase))
+            return new SteamCmdLoginResult(SteamCmdLoginStatus.InvalidCredentials, "账号或密码错误");
 
         // 登录成功判定：新版本 SteamCMD 不再打印 "Logged in OK"，
         // 而是到达 "Waiting for client config" / "Waiting for user info" 即表示已通过认证。
         // 必须放在 "Steam Guard" 判定之前，否则成功登录时出现的 "Steam Guard code provided"
         // 会被误判为"需要验证码"。
-        if (output.Contains("Logged in OK", StringComparison.OrdinalIgnoreCase) ||
+        if (exitCode == 0 && !output.Contains("FAILED login", StringComparison.OrdinalIgnoreCase) &&
+            (output.Contains("Logged in OK", StringComparison.OrdinalIgnoreCase) ||
             output.Contains("Waiting for user info", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("Waiting for client config", StringComparison.OrdinalIgnoreCase))
+            output.Contains("Waiting for client config", StringComparison.OrdinalIgnoreCase)))
         {
             return SteamCmdLoginResult.Success();
         }
@@ -649,18 +892,6 @@ public sealed partial class SteamCmdService
             return new SteamCmdLoginResult(
                 SteamCmdLoginStatus.NeedsGuardCode,
                 "需要 Steam Guard 验证码（邮箱验证码或手机令牌），请填写后重试");
-        }
-
-        if (output.Contains("Invalid Password", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("FAILED login", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("Invalid Password", StringComparison.Ordinal))
-        {
-            return new SteamCmdLoginResult(SteamCmdLoginStatus.InvalidCredentials, "账号或密码错误");
-        }
-
-        if (output.Contains("rate limit", StringComparison.OrdinalIgnoreCase))
-        {
-            return new SteamCmdLoginResult(SteamCmdLoginStatus.Error, "登录尝试过于频繁，请稍后再试");
         }
 
         return new SteamCmdLoginResult(
@@ -676,17 +907,13 @@ public sealed partial class SteamCmdService
     /// </summary>
     private static readonly SemaphoreSlim SteamCmdLock = new(1, 1);
 
-    private static readonly string TraceLogPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "SVL", "Avalonia", "logs", "steam-trace.log");
-
     /// <summary>写入独立步骤追踪日志，用于定位登录闪退的崩溃点（即使进程被原生终止也会保留）。</summary>
-    private static void Trace(string msg)
+    private void Trace(string msg)
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(TraceLogPath)!);
-            File.AppendAllText(TraceLogPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}{Environment.NewLine}");
+            Directory.CreateDirectory(Path.GetDirectoryName(_traceLogPath)!);
+            File.AppendAllText(_traceLogPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}{Environment.NewLine}");
         }
         catch
         {
@@ -702,13 +929,18 @@ public sealed partial class SteamCmdService
             return args;
         }
 
-        // 只掩盖 +login 用户名后、且不是 "+" 命令的令牌（即密码/验证码）。
-        return System.Text.RegularExpressions.Regex.Replace(
-            args,
-            @"(\+login\s+\S+\s+)(?!\+)\S+(?:\s+\S+)?",
-            "$1****",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // 登录参数允许空格、引号和加号，整条命令隐藏才能保证不会泄漏。
+        return args.Contains("+login", StringComparison.OrdinalIgnoreCase)
+            ? "[含登录参数，已隐藏]"
+            : args;
     }
+
+    internal static bool IsOsTypeEnumerationAssertion(string line) => Regex.IsMatch(
+        line, @"Assertion Failed:\s*Missing String for EOSType\s*\(-?\d+\)", RegexOptions.IgnoreCase);
+
+    internal static bool IsSteamMetadataStatusLine(string line) => Regex.IsMatch(line,
+        @"\[SteamCMD\]|error|fail|invalid|timeout|timed out|rate limit|steam guard|two.factor|connecting|checking for|downloading update|update complete|assertion",
+        RegexOptions.IgnoreCase);
 
     /// <summary>运行 SteamCMD 命令，实时转发输出到 log，解析进度百分比。</summary>
     /// <remarks>
@@ -716,7 +948,9 @@ public sealed partial class SteamCmdService
     /// 此时父进程提前退出，实际命令（登录/下载）由子进程执行而未被本方法捕获。
     /// 因此在检测到自更新标记后会自动重跑一次，确保真实命令被执行并被捕获。
     /// </remarks>
-    private async Task<int> RunSteamCmdAsync(
+    private sealed record SteamCmdCommandResult(int ExitCode, string Output);
+
+    private async Task<SteamCmdCommandResult> RunSteamCmdAsync(
         string arguments,
         Action<string>? log,
         Action<double>? onProgress,
@@ -739,7 +973,7 @@ public sealed partial class SteamCmdService
 
                 if (!selfUpdated)
                 {
-                    return exitCode;
+                    return new SteamCmdCommandResult(exitCode, _lastOutput.ToString());
                 }
 
                 if (attempt == 0)
@@ -749,11 +983,11 @@ public sealed partial class SteamCmdService
                 else
                 {
                     log?.Invoke("[SteamCMD] 自更新后仍检测到更新标记，停止重试");
-                    return exitCode;
+                    return new SteamCmdCommandResult(exitCode, _lastOutput.ToString());
                 }
             }
 
-            return 1;
+            return new SteamCmdCommandResult(1, _lastOutput.ToString());
         }
         catch (OperationCanceledException)
         {
@@ -765,7 +999,7 @@ public sealed partial class SteamCmdService
             // 任何其它异常都不再向上冒泡，避免导致整个应用闪退
             Trace($"RunSteamCmd 异常: {ex.GetType().Name}: {ex.Message}");
             log?.Invoke($"[SteamCMD] 命令执行异常: {ex.Message}");
-            return 1;
+            return new SteamCmdCommandResult(1, _lastOutput.ToString());
         }
         finally
         {
@@ -837,11 +1071,14 @@ public sealed partial class SteamCmdService
 
         var outputLines = new List<string>();
         var syncLock = new object();
+        var displayLock = new object();
+        var lastDisplayed = new Dictionary<string, long>(StringComparer.Ordinal);
         var selfUpdated = false;
+        var osAssertionReported = 0;
 
         // SteamCMD 重定向 stdout 时会对输出做块缓冲，导致日志不是实时显示。
         // SteamCMD 同时会把自己写的控制台日志落盘（logs/console.log 等，实时写入）。
-        // 若存在该日志文件，就改从文件实时 tail，提供接近实时的日志；找不到则回退 stdout。
+        // 存在日志文件时同时 tail；stdout/stderr 仍需处理，以防旧日志文件不再更新。
         var logFile = ResolveSteamLogFile();
         var useFileLog = logFile != null;
 
@@ -854,9 +1091,25 @@ public sealed partial class SteamCmdService
                 return;
             }
 
+            if (IsOsTypeEnumerationAssertion(trimmed))
+            {
+                if (display && Interlocked.Exchange(ref osAssertionReported, 1) == 0)
+                    log?.Invoke("[SteamCMD] 已折叠重复的系统类型检查提示，正在等待客户端更新或登录结果。");
+                return;
+            }
+
             if (display)
             {
-                log?.Invoke(trimmed);
+                lock (displayLock)
+                {
+                    var now = Environment.TickCount64;
+                    if (!lastDisplayed.TryGetValue(trimmed, out var last) || now - last >= 2000)
+                    {
+                        if (lastDisplayed.Count >= 256) lastDisplayed.Clear();
+                        lastDisplayed[trimmed] = now;
+                        log?.Invoke(trimmed);
+                    }
+                }
             }
 
             var progressMatch = ProgressRegex().Match(trimmed);
@@ -920,8 +1173,8 @@ public sealed partial class SteamCmdService
                             _lastOutput.AppendLine(line);
                         }
 
-                        // 若已用日志文件 tail，则不重复转发 stdout（避免重复行）
-                        ProcessLine(line, !useFileLog);
+                        // 同时读取 stdout 和日志文件，避免旧日志文件存在时丢失真正的错误。
+                        ProcessLine(line, true);
                     }
                 }
 
@@ -934,7 +1187,7 @@ public sealed partial class SteamCmdService
                         outputLines.Add(tail);
                         _lastOutput.AppendLine(tail);
                     }
-                    ProcessLine(tail, !useFileLog);
+                    ProcessLine(tail, true);
                 }
             }
             catch (OperationCanceledException)
@@ -964,10 +1217,7 @@ public sealed partial class SteamCmdService
                         _lastOutput.AppendLine(line);
                     }
 
-                    if (!useFileLog)
-                    {
-                        log?.Invoke($"[stderr] {line.Trim()}");
-                    }
+                    ProcessLine(line, true);
                 }
             }
             catch (OperationCanceledException)

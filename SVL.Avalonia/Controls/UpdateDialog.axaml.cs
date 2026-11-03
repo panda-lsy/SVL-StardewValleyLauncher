@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using SVL.Avalonia.Models;
 using SVL.Avalonia.Services;
@@ -99,7 +100,12 @@ public partial class UpdateDialog : Window
             return;
         }
 
-        var asset = _releaseInfo.Assets[0];
+        var asset = LauncherUpdateService.SelectPreferredAsset(_releaseInfo);
+        if (asset == null)
+        {
+            ProgressText.Text = "没有适合当前平台的更新文件";
+            return;
+        }
         _downloadCts = new CancellationTokenSource();
         DownloadButton.IsEnabled = false;
         DownloadButton.Content = automatic ? "自动下载中..." : "下载中...";
@@ -125,7 +131,7 @@ public partial class UpdateDialog : Window
 
             ProgressText.Text = "下载完成";
             CancelDownloadButton.IsVisible = false;
-            DownloadButton.Content = "安装并重启";
+            DownloadButton.Content = OperatingSystem.IsWindows() ? "安装并重启" : "前往发布页安装";
 
             // 下载完成后点击同一按钮触发安装
             DownloadButton.IsEnabled = true;
@@ -157,9 +163,18 @@ public partial class UpdateDialog : Window
 
         try
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                Close(UpdateDialogAction.OpenRelease);
+                return;
+            }
             _updateService.StartUpdateInstaller(_downloadedFilePath);
-            // 启动安装程序后关闭启动器（安装程序会接管）
             Close(UpdateDialogAction.DownloadAndInstall);
+            if (global::Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                if (desktop.MainWindow is MainWindow mainWindow) mainWindow.CloseForExit();
+                else desktop.Shutdown();
+            }
         }
         catch (System.Exception ex)
         {

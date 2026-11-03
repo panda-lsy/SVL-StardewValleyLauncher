@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>SVL.Avalonia</AssemblyName>
     <RootNamespace>SVL.Avalonia</RootNamespace>
-    <ApplicationIcon>..\SVL.Desktop\Images\icon.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\Icons\icon.ico</ApplicationIcon>
     <Version>1.2.0.0</Version>
     <AssemblyVersion>1.2.0.0</AssemblyVersion>
     <FileVersion>1.2.0.0</FileVersion>
@@ -21,9 +21,9 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="SharpCompress" Version="0.49.1" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
-    <!-- Avalonia 11.2.8 brings an older vulnerable D-Bus protocol transitively;
-         pin the compatible maintained version without upgrading Avalonia major versions. -->
-    <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.1" />
+    <!-- Avalonia 11.2.8 uses the legacy D-Bus Connection API removed in 0.93.
+         Version 0.21.3 retains that API and includes the security fix backport. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +31,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets/**" />
+    <AvaloniaResource Include="Assets/**" Exclude="Assets/Icons/Generated/**;Assets/Icons/Pixel/**" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Stardew Valley Launcher
+Name[zh_CN]=Stardew Valley Launcher
+Comment=Stardew Valley launcher and mod manager
+Comment[zh_CN]=管理星露谷物语游戏、模组和整合包
+Exec=/usr/bin/svl %U
+Icon=svl
+Terminal=false
+Categories=Game;
+StartupWMClass=SVL.Avalonia

@@ -2771,15 +2771,29 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
                 continue;
             }
 
-            foreach (var manifestDirectory in manifestDirectories.Where(candidate => !manifestDirectories.Any(parent =>
-                !string.Equals(parent, candidate, StringComparison.OrdinalIgnoreCase) &&
-                IsPathUnderDirectory(candidate, parent))))
+            foreach (var manifestDirectory in KeepOutermostManifestDirectories(manifestDirectories))
             {
                 results.Add(manifestDirectory);
             }
         }
 
         return results;
+    }
+
+    private static List<string> KeepOutermostManifestDirectories(IEnumerable<string> directories)
+    {
+        var outermost = new List<string>();
+        foreach (var directory in directories
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(path => path.Length))
+        {
+            if (!outermost.Any(parent => IsPathUnderDirectory(directory, parent)))
+            {
+                outermost.Add(directory);
+            }
+        }
+
+        return outermost;
     }
 
     private static string? FindManifestPath(string directory)
@@ -2791,6 +2805,12 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
 
         try
         {
+            var directManifestPath = Path.Combine(directory, "manifest.json");
+            if (File.Exists(directManifestPath) && IsLikelyModManifest(directManifestPath))
+            {
+                return directManifestPath;
+            }
+
             var candidates = new[] { Path.Combine(directory, "manifest.json") }
                 .Concat(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
                 .Where(path => string.Equals(
@@ -4266,6 +4286,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     };
 
     private readonly Services.AppUserSettingsStore _settingsStore;
+    private readonly Services.InstanceLaunchSettingsStore _instanceLaunchSettingsStore;
+    private string _loadedInstanceSettingsPath = string.Empty;
+    private bool _loadingInstanceSettings;
+    private bool _pendingInstanceSettings;
+    private CancellationTokenSource? _instanceSettingsSaveCts;
     private readonly IGameInstallPathLocator _gameInstallPathLocator;
     private readonly Services.LocalizationService _localizationService;
     private readonly Services.ImageResourceService _imageResourceService;
@@ -4331,6 +4356,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     private ModTagConfig _modTagConfig = new();
     private string _currentModsPathForTagConfig = string.Empty;
     private int _modConflictScanVersion;
+    private int _modsReloadGeneration;
+    private int _modCollectionBatchDepth;
+    private readonly SemaphoreSlim _modsReloadGate = new(1, 1);
     private string _titleText = "版本设置";
     private string _descriptionText = "实例级配置。";
 
@@ -4505,6 +4533,15 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
     [ObservableProperty]
     private string _instanceCustomLaunchArguments = string.Empty;
+
+    [ObservableProperty]
+    private bool _instanceAutoConnectServer;
+
+    [ObservableProperty]
+    private string _instanceServerAddress = string.Empty;
+
+    [ObservableProperty]
+    private string _instanceSteamInviteCode = string.Empty;
 
     [ObservableProperty]
     private bool _isFavoriteInstance;
@@ -4887,6 +4924,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         Services.CommunityLocalizationService communityLocalizationService)
     {
         _settingsStore = settingsStore;
+        _instanceLaunchSettingsStore = new Services.InstanceLaunchSettingsStore(settingsStore);
         _gameInstallPathLocator = gameInstallPathLocator;
         _localizationService = localizationService;
         _imageResourceService = imageResourceService;
@@ -4903,21 +4941,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         Mods.CollectionChanged += (_, _) =>
         {
-            OnPropertyChanged(nameof(HasMods));
-            OnPropertyChanged(nameof(HasFilteredMods));
-            OnPropertyChanged(nameof(ShowEmptyModsHint));
-            OnPropertyChanged(nameof(ModsSummary));
-            OnPropertyChanged(nameof(EnabledModsCount));
-            OnPropertyChanged(nameof(DisabledModsCount));
-            OnPropertyChanged(nameof(UpdatableModsCount));
-            OnPropertyChanged(nameof(ModsTabText));
-            OnPropertyChanged(nameof(AllFilterText));
-            OnPropertyChanged(nameof(EnabledFilterText));
-            OnPropertyChanged(nameof(DisabledFilterText));
-            OnPropertyChanged(nameof(UpdatableFilterText));
-            OnPropertyChanged(nameof(HasUpdatableMods));
-            UpdateSelectionState();
-            OnPropertyChanged(nameof(CanDetectModConflicts));
+            if (Volatile.Read(ref _modCollectionBatchDepth) == 0)
+            {
+                RefreshModCollectionSummary();
+            }
         };
 
         ModConflicts.CollectionChanged += (_, _) =>
@@ -4928,14 +4955,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         BackupMods.CollectionChanged += (_, _) =>
         {
-            OnPropertyChanged(nameof(BackupModsCount));
-            OnPropertyChanged(nameof(HasMods));
-            OnPropertyChanged(nameof(ModsSummary));
-            OnPropertyChanged(nameof(HasFilteredMods));
-            OnPropertyChanged(nameof(ShowEmptyModsHint));
-            OnPropertyChanged(nameof(CurrentEmptyHintText));
-            OnPropertyChanged(nameof(BackupTabText));
-            UpdateSelectionState();
+            if (Volatile.Read(ref _modCollectionBatchDepth) == 0)
+            {
+                RefreshBackupCollectionSummary();
+            }
         };
 
         FilteredMods.CollectionChanged += (_, _) =>
@@ -4958,41 +4981,82 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         SelectedSection = "Overview";
     }
 
+    private void RefreshModCollectionSummary()
+    {
+        OnPropertyChanged(nameof(HasMods));
+        OnPropertyChanged(nameof(HasFilteredMods));
+        OnPropertyChanged(nameof(ShowEmptyModsHint));
+        OnPropertyChanged(nameof(ModsSummary));
+        OnPropertyChanged(nameof(EnabledModsCount));
+        OnPropertyChanged(nameof(DisabledModsCount));
+        OnPropertyChanged(nameof(UpdatableModsCount));
+        OnPropertyChanged(nameof(ModsTabText));
+        OnPropertyChanged(nameof(AllFilterText));
+        OnPropertyChanged(nameof(EnabledFilterText));
+        OnPropertyChanged(nameof(DisabledFilterText));
+        OnPropertyChanged(nameof(UpdatableFilterText));
+        OnPropertyChanged(nameof(HasUpdatableMods));
+        OnPropertyChanged(nameof(CanDetectModConflicts));
+        UpdateSelectionState();
+    }
+
+    private void RefreshBackupCollectionSummary()
+    {
+        OnPropertyChanged(nameof(BackupModsCount));
+        OnPropertyChanged(nameof(HasMods));
+        OnPropertyChanged(nameof(ModsSummary));
+        OnPropertyChanged(nameof(HasFilteredMods));
+        OnPropertyChanged(nameof(ShowEmptyModsHint));
+        OnPropertyChanged(nameof(CurrentEmptyHintText));
+        OnPropertyChanged(nameof(BackupTabText));
+        UpdateSelectionState();
+    }
+
     public void ReloadFromSettings(bool reloadModsWhenActive = false)
     {
-        var settings = _settingsStore.Load();
-        SelectedLaunchMode = string.IsNullOrWhiteSpace(settings.PreferredLaunchMode)
-            ? "自动"
-            : settings.PreferredLaunchMode;
-        EnableSafeLaunch = settings.EnableSafeLaunch;
-        InstanceName = settings.InstanceName;
-        InstanceDescription = settings.InstanceDescription;
-        RefreshDefaultModpackName(settings);
-
-        if (string.IsNullOrWhiteSpace(ModpackAuthor))
+        if (!FlushPendingInstanceSettings()) return;
+        _loadingInstanceSettings = true;
+        try
         {
-            ModpackAuthor = Environment.UserName;
+            var settings = _settingsStore.Load();
+            SelectedLaunchMode = string.IsNullOrWhiteSpace(settings.PreferredLaunchMode)
+                ? "自动"
+                : settings.PreferredLaunchMode;
+            EnableSafeLaunch = settings.EnableSafeLaunch;
+            InstanceName = settings.InstanceName;
+            InstanceDescription = settings.InstanceDescription;
+            RefreshDefaultModpackName(settings);
+
+            if (string.IsNullOrWhiteSpace(ModpackAuthor))
+                ModpackAuthor = Environment.UserName;
+
+            IsFavoriteInstance = settings.IsFavoriteInstance;
+            RefreshDetectedPathCore(updateStatus: false);
+            _loadedInstanceSettingsPath = ResolveCurrentInstancePath();
+            var launchSettings = _instanceLaunchSettingsStore.GetEffective(_loadedInstanceSettingsPath, settings);
+            GameWindowTitle = launchSettings.WindowTitle;
+            InstanceCustomLaunchArguments = launchSettings.CustomArguments;
+            InstanceAutoConnectServer = launchSettings.AutoConnectServer;
+            InstanceServerAddress = launchSettings.ServerAddress;
+            InstanceSteamInviteCode = launchSettings.SteamInviteCode;
+            OverrideSteamLaunchOptions = launchSettings.OverrideSteamLaunchOptions;
+            SteamLaunchOptions = launchSettings.SteamLaunchOptions;
+
+            if (string.IsNullOrWhiteSpace(SteamLaunchOptions))
+                SteamLaunchOptions = DefaultSteamLaunchOptions;
+
+            OnPropertyChanged(nameof(DefaultSteamLaunchOptions));
+            OnPropertyChanged(nameof(SteamLaunchOptionsPreview));
+            if (reloadModsWhenActive && IsModManageSection)
+                _ = ReloadModsAsync();
         }
-
-        GameWindowTitle = string.IsNullOrWhiteSpace(settings.GameWindowTitle) ? "<default>" : settings.GameWindowTitle;
-        InstanceCustomLaunchArguments = settings.InstanceCustomLaunchArguments;
-        IsFavoriteInstance = settings.IsFavoriteInstance;
-        OverrideSteamLaunchOptions = settings.OverrideSteamLaunchOptions;
-        SteamLaunchOptions = settings.SteamLaunchOptions;
-
-        RefreshDetectedPathCore(updateStatus: false);
-
-        if (string.IsNullOrWhiteSpace(SteamLaunchOptions))
+        catch (Exception ex)
         {
-            SteamLaunchOptions = DefaultSteamLaunchOptions;
+            Status = $"读取实例启动设置失败：{ex.Message}";
         }
-
-        OnPropertyChanged(nameof(DefaultSteamLaunchOptions));
-        OnPropertyChanged(nameof(SteamLaunchOptionsPreview));
-
-        if (reloadModsWhenActive && IsModManageSection)
+        finally
         {
-            ReloadMods();
+            _loadingInstanceSettings = false;
         }
     }
 
@@ -5124,6 +5188,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
     partial void OnSelectedSectionChanged(string value)
     {
+        if (!string.Equals(value, "Settings", StringComparison.Ordinal)) FlushPendingInstanceSettings();
         OnPropertyChanged(nameof(IsOverviewSection));
         OnPropertyChanged(nameof(IsAutoInstallSection));
         OnPropertyChanged(nameof(IsSettingsSection));
@@ -5133,7 +5198,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         if (string.Equals(value, "ModManage", StringComparison.Ordinal))
         {
             IsModManageSection = true;
-            ReloadMods();
+            _ = ReloadModsAsync();
             return;
         }
 
@@ -5183,24 +5248,32 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     partial void OnOverrideSteamLaunchOptionsChanged(bool value)
     {
         OnPropertyChanged(nameof(SteamLaunchOptionsPreview));
+        ScheduleInstanceSettingsSave();
     }
 
     partial void OnSteamLaunchOptionsChanged(string value)
     {
         OnPropertyChanged(nameof(SteamLaunchOptionsPreview));
+        ScheduleInstanceSettingsSave();
     }
 
     partial void OnInstanceCustomLaunchArgumentsChanged(string value)
     {
         OnPropertyChanged(nameof(DefaultSteamLaunchOptions));
         OnPropertyChanged(nameof(SteamLaunchOptionsPreview));
+        ScheduleInstanceSettingsSave();
     }
 
     partial void OnGameWindowTitleChanged(string value)
     {
         OnPropertyChanged(nameof(DefaultSteamLaunchOptions));
         OnPropertyChanged(nameof(SteamLaunchOptionsPreview));
+        ScheduleInstanceSettingsSave();
     }
+
+    partial void OnInstanceAutoConnectServerChanged(bool value) => ScheduleInstanceSettingsSave();
+    partial void OnInstanceServerAddressChanged(string value) => ScheduleInstanceSettingsSave();
+    partial void OnInstanceSteamInviteCodeChanged(string value) => ScheduleInstanceSettingsSave();
 
     partial void OnIsSmapiInstanceChanged(bool value)
     {
@@ -6219,7 +6292,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         }
 
         var imported = ImportModsFromLocalSource(sourcePath, modsPath, importZip);
-        ReloadMods();
+        await ReloadModsAsync();
         Status = imported > 0
             ? $"已从本地安装 {imported} 个 Mod"
             : "未检测到可安装的 Mod（请确认包含 manifest.json）";
@@ -6383,7 +6456,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         if (string.Equals(targetModsPath, currentModsPath, StringComparison.OrdinalIgnoreCase))
         {
-            ReloadMods();
+            await ReloadModsAsync();
         }
 
         Status = installed > 0
@@ -6461,7 +6534,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             }
         }
 
-        ReloadMods();
+        await ReloadModsAsync();
         Status = $"已恢复备份：{restored}/{selectedBackups.Count}";
     }
 
@@ -6585,7 +6658,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         var backupRoot = GetBackupRootPath(modsPath);
         Directory.CreateDirectory(backupRoot);
         var success = await TryRestoreBackupAsync(item, modsPath, backupRoot);
-        ReloadMods();
+        await ReloadModsAsync();
         Status = success ? "已恢复备份" : $"恢复失败：{item.DisplayName}";
         if (success)
         {
@@ -7278,7 +7351,25 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     }
 
     [RelayCommand]
-    private void ReloadMods()
+    private async Task ReloadModsAsync()
+    {
+        var generation = Interlocked.Increment(ref _modsReloadGeneration);
+        Interlocked.Increment(ref _modCollectionBatchDepth);
+        try
+        {
+            await ReloadModsCoreAsync(generation);
+        }
+        finally
+        {
+            if (Interlocked.Decrement(ref _modCollectionBatchDepth) == 0)
+            {
+                RefreshModCollectionSummary();
+                RefreshBackupCollectionSummary();
+            }
+        }
+    }
+
+    private async Task ReloadModsCoreAsync(int generation)
     {
         InvalidateModConflictResults();
 
@@ -7325,40 +7416,88 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             Services.InstanceRuntimePathResolver.Resolve(settings.PreferredInstancePath),
             "Mods");
         Directory.CreateDirectory(modsPath);
-        // 兼容旧版已安装数据：同一归档展开的父 Mod 与一级 ContentPack
-        // 可能被分别写成独立来源。先修复凭证，再加载层级和更新状态。
-        ModpackInstallService.RepairCompositeSourceCredentials(modsPath);
+        Status = "正在扫描 Mods 目录…";
+        RefreshModManageHint("正在读取 Mod 清单与来源信息");
 
-        var dependencyEntriesByPath = new Dictionary<string, List<(string UniqueId, string MinimumVersion, bool IsRequired, string Note)>>(StringComparer.OrdinalIgnoreCase);
-
-        var modDirectories = EnumerateCandidateModDirectories(modsPath)
-            .OrderBy(path =>
-            {
-                var folderName = Path.GetFileName(path);
-                return !string.IsNullOrWhiteSpace(folderName) &&
-                      IsDisabledFolderName(folderName)
-                    ? 1
-                    : 0;
-            })
-            .ThenBy(path =>
-            {
-                var folderName = Path.GetFileName(path);
-                if (string.IsNullOrWhiteSpace(folderName))
-                {
-                    return string.Empty;
-                }
-
-                return NormalizeFolderName(folderName);
-            }, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var modDirectory in modDirectories)
+        ModScanResult scanResult;
+        await _modsReloadGate.WaitAsync();
+        try
         {
-            var folderName = Path.GetFileName(modDirectory);
-            if (string.IsNullOrWhiteSpace(folderName))
+            scanResult = await Task.Run(() => ScanModDirectories(modsPath));
+        }
+        catch (Exception exception)
+        {
+            if (generation == Volatile.Read(ref _modsReloadGeneration))
             {
-                continue;
+                Status = $"加载 Mod 列表失败：{exception.Message}";
+                RefreshModManageHint(Status);
             }
 
+            return;
+        }
+        finally
+        {
+            _modsReloadGate.Release();
+        }
+
+        if (generation != Volatile.Read(ref _modsReloadGeneration))
+        {
+            return;
+        }
+
+        foreach (var item in scanResult.Items)
+        {
+            AttachModItem(item);
+            Mods.Add(item);
+        }
+
+        BuildModHierarchyWithScannedCredentials(modsPath, scanResult.SourceCredentialsByPath);
+        BuildDisplayDependenciesForMods(scanResult.DependencyEntriesByPath);
+
+        LoadAndApplyTags(modsPath);
+        foreach (var backupItem in scanResult.BackupItems)
+        {
+            AttachModItem(backupItem);
+            BackupMods.Add(backupItem);
+        }
+
+        ApplyTagFilter();
+        if (IsExportSection)
+        {
+            SyncExportModItemsFromCurrentMods();
+        }
+
+        Status = Mods.Count == 0
+            ? "当前实例 Mods 目录为空"
+            : $"已加载 {Mods.Count} 个 Mod（启用 {Mods.Count(item => item.IsEnabled)} / 禁用 {Mods.Count(item => !item.IsEnabled)}）";
+        RefreshModManageHint();
+    }
+
+    private static ModScanResult ScanModDirectories(string modsPath)
+    {
+        // 兼容旧版已安装数据：修复凭证、递归扫描目录以及读取 JSON 均在后台执行，
+        // 避免切入 Mod 管理页时阻塞 Avalonia UI 线程。
+        ModpackInstallService.RepairCompositeSourceCredentials(modsPath);
+
+        var items = new List<ModManageItem>();
+        var dependencyEntriesByPath = new Dictionary<string, List<(string UniqueId, string MinimumVersion, bool IsRequired, string Note)>>(StringComparer.OrdinalIgnoreCase);
+        var sourceCredentialsByPath = new Dictionary<string, LocalSourceMetadata?>(StringComparer.OrdinalIgnoreCase);
+
+        var modDirectories = EnumerateCandidateModDirectories(modsPath)
+            .Select(path => new
+            {
+                Path = path,
+                FolderName = Path.GetFileName(path)
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.FolderName))
+            .OrderBy(item => IsDisabledFolderName(item.FolderName!) ? 1 : 0)
+            .ThenBy(item => NormalizeFolderName(item.FolderName!), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var directory in modDirectories)
+        {
+            var modDirectory = directory.Path;
+            var folderName = directory.FolderName!;
             var isEnabled = !IsDisabledFolderName(folderName);
             var actualName = NormalizeFolderName(folderName);
 
@@ -7374,9 +7513,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             var nexusModsProjectId = string.Empty;
             var gitHubRepository = string.Empty;
             var localizationUpdatedAt = string.Empty;
-            var dependencyEntries = new List<(string UniqueId, string MinimumVersion, bool IsRequired, string Note)>();
+            var dependencies = new List<(string UniqueId, string MinimumVersion, bool IsRequired, string Note)>();
 
-            if (File.Exists(manifestPath))
+            if (!string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
             {
                 try
                 {
@@ -7390,7 +7529,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                         author = FirstNonEmpty(GetJsonStringFlexibleByCandidates(manifestRoot, "Author"), author);
                         description = FirstNonEmpty(GetJsonStringFlexibleByCandidates(manifestRoot, "Description"), description);
 
-                        ParseModDependencies(manifestRoot, dependencyEntries);
+                        ParseModDependencies(manifestRoot, dependencies);
                         TryResolveSourceFromUpdateKeys(
                             manifestRoot,
                             ref curseforgeProjectId,
@@ -7410,8 +7549,6 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             var isInheritedModpackSource = !isCompositeParent &&
                                            IsInheritedModpackSource(modDirectory, sourceCredential);
             var parentReference = sourceCredential?.ParentMod;
-            // 保留 manifest 的原始文本，不能只把汉化结果写进 DisplayName/Description；
-            // 否则用户切换回英文时已经没有可恢复的源站内容。
             var sourceDisplayName = displayName;
             var sourceDescription = description;
             ApplySourceCredentialToModItem(
@@ -7426,9 +7563,6 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 ref gitHubRepository,
                 ref localizationUpdatedAt);
 
-            // 部分发行包的 manifest 没有标准 Version 字段，或只在文件名中携带
-            // 版本号（例如“Content Patcher 2.9.0 2.9.0.zip”）。保留清单优先级，
-            // 再用来源凭证文件名和实际安装目录补齐，避免管理页/导出页长期显示未知版本。
             if (IsUnknownVersion(version))
             {
                 version = FirstNonEmpty(
@@ -7437,10 +7571,9 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     version);
             }
 
-            dependencyEntriesByPath[modDirectory] = dependencyEntries;
+            dependencyEntriesByPath[modDirectory] = dependencies;
+            sourceCredentialsByPath[NormalizeModPathKey(modDirectory)] = sourceCredential;
 
-            // 旧版复合 Mod 可能只有 svl-source.json 而没有自己的 manifest.json。
-            // 仍然把它作为分组头加载，避免子 Mod 被当成互不相关的顶层项目。
             if (isCompositeParent && string.IsNullOrWhiteSpace(manifestPath))
             {
                 displayName = FirstNonEmpty(sourceCredential?.ModName, displayName);
@@ -7492,35 +7625,24 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             };
 
             item.SetLocalizationLanguage(useLocalizedText: true);
-
             foreach (var tag in BuildFolderTagsForMod(modsPath, modDirectory, actualName))
             {
                 item.FolderTags.Add(tag);
             }
 
-            AttachModItem(item);
-            Mods.Add(item);
+            items.Add(item);
         }
 
-        BuildModHierarchy(modsPath);
-        BuildDisplayDependenciesForMods(dependencyEntriesByPath);
-
-        LoadAndApplyTags(modsPath);
-        LoadBackups(modsPath);
-        ApplyTagFilter();
-        SyncExportModItemsFromCurrentMods();
-
-        Status = Mods.Count == 0
-            ? "当前实例 Mods 目录为空"
-            : $"已加载 {Mods.Count} 个 Mod（启用 {Mods.Count(item => item.IsEnabled)} / 禁用 {Mods.Count(item => !item.IsEnabled)}）";
-        RefreshModManageHint();
+        var backupItems = ScanBackupItems(modsPath);
+        return new ModScanResult(items, dependencyEntriesByPath, sourceCredentialsByPath, backupItems);
     }
 
     private void ReloadExportModItems()
     {
         if (Mods.Count == 0 && TryGetCurrentModsPath(out var modsPath) && Directory.Exists(modsPath))
         {
-            ReloadMods();
+            _ = ReloadModsAsync();
+            return;
         }
 
         SyncExportModItemsFromCurrentMods();
@@ -9948,10 +10070,20 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         BackupMods.Clear();
 
+        foreach (var item in ScanBackupItems(modsPath))
+        {
+            AttachModItem(item);
+            BackupMods.Add(item);
+        }
+    }
+
+    private static List<ModManageItem> ScanBackupItems(string modsPath)
+    {
+        var items = new List<ModManageItem>();
         var backupRoot = GetBackupRootPath(modsPath);
         if (!Directory.Exists(backupRoot))
         {
-            return;
+            return items;
         }
 
         var snapshotDirs = Directory.GetDirectories(backupRoot)
@@ -9992,9 +10124,10 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     : "备份记录"
             };
 
-            AttachModItem(item);
-            BackupMods.Add(item);
+            items.Add(item);
         }
+
+        return items;
     }
 
     private static ModBackupRecord? TryReadBackupRecord(string backupDir)
@@ -10530,6 +10663,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         try
         {
+            var directManifestPath = Path.Combine(directory, "manifest.json");
+            if (File.Exists(directManifestPath) && IsLikelyModManifest(directManifestPath))
+            {
+                return directManifestPath;
+            }
+
             var candidates = new[] { Path.Combine(directory, "manifest.json") }
                 .Concat(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
                 .Where(path => string.Equals(
@@ -10835,20 +10974,39 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
     /// </summary>
     private void BuildModHierarchy(string modsPath)
     {
+        BuildModHierarchyWithScannedCredentials(modsPath, scannedCredentialsByPath: null);
+    }
+
+    private void BuildModHierarchyWithScannedCredentials(
+        string modsPath,
+        IReadOnlyDictionary<string, LocalSourceMetadata?>? scannedCredentialsByPath)
+    {
         var itemsByPath = Mods
             .Where(item => !string.IsNullOrWhiteSpace(item.FullPath))
             .GroupBy(item => NormalizeModPathKey(item.FullPath), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
-        var credentialsByPath = Mods
-            .Where(item => !string.IsNullOrWhiteSpace(item.FullPath))
-            .Select(item => new
+        var credentialsByPath = new Dictionary<string, LocalSourceMetadata>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in Mods)
+        {
+            if (string.IsNullOrWhiteSpace(item.FullPath))
             {
-                Path = NormalizeModPathKey(item.FullPath),
-                Credential = TryReadSourceCredential(item.FullPath)
-            })
-            .Where(item => item.Credential != null)
-            .ToDictionary(item => item.Path, item => item.Credential!, StringComparer.OrdinalIgnoreCase);
+                continue;
+            }
+
+            var path = NormalizeModPathKey(item.FullPath);
+            LocalSourceMetadata? credential;
+            if (scannedCredentialsByPath == null || !scannedCredentialsByPath.TryGetValue(path, out credential))
+            {
+                // 仅为层级恢复时临时创建的、扫描快照之外的父目录补读一次来源文件。
+                credential = TryReadSourceCredential(item.FullPath);
+            }
+
+            if (credential != null)
+            {
+                credentialsByPath[path] = credential;
+            }
+        }
 
         foreach (var item in Mods)
         {
@@ -10873,7 +11031,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 credential.ParentMod.RelativePath,
                 credential.ParentMod.Name,
                 credential.ParentMod.Id,
-                itemsByPath.Values);
+                itemsByPath);
             if (string.IsNullOrWhiteSpace(parentPath))
             {
                 continue;
@@ -10917,7 +11075,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     childReference.RelativePath,
                     childReference.Name,
                     childReference.UniqueId,
-                    itemsByPath.Values,
+                    itemsByPath,
                     parent.FullPath);
                 if (string.IsNullOrWhiteSpace(childPath) ||
                     !itemsByPath.TryGetValue(NormalizeModPathKey(childPath), out var child))
@@ -11100,7 +11258,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         string relativePath,
         string? expectedName,
         string? expectedUniqueId,
-        IEnumerable<ModManageItem> knownItems,
+        IReadOnlyDictionary<string, ModManageItem> knownItems,
         string? requiredParentPath = null)
     {
         var candidate = ResolveCompositeReferencePath(modsPath, relativePath);
@@ -11123,7 +11281,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         // 加载的 manifest 项中按 UniqueID，再按 Name 找回真实磁盘目录。
         var expectedId = (expectedUniqueId ?? string.Empty).Trim();
         var expectedDisplayName = (expectedName ?? string.Empty).Trim();
-        foreach (var item in knownItems)
+        foreach (var item in knownItems.Values)
         {
             if (string.IsNullOrWhiteSpace(item.FullPath) ||
                 !Directory.Exists(item.FullPath) ||
@@ -11215,18 +11373,14 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         string candidate,
         string? expectedName,
         string? expectedUniqueId,
-        IEnumerable<ModManageItem> knownItems)
+        IReadOnlyDictionary<string, ModManageItem> knownItems)
     {
         if (string.IsNullOrWhiteSpace(expectedName) && string.IsNullOrWhiteSpace(expectedUniqueId))
         {
             return true;
         }
 
-        var item = knownItems.FirstOrDefault(known =>
-            string.Equals(
-                NormalizeModPathKey(known.FullPath),
-                NormalizeModPathKey(candidate),
-                StringComparison.OrdinalIgnoreCase));
+        knownItems.TryGetValue(NormalizeModPathKey(candidate), out var item);
         if (item != null)
         {
             return (string.IsNullOrWhiteSpace(expectedUniqueId) ||
@@ -11292,11 +11446,16 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
 
         // 若外层目录自身已经是 Mod 根目录，则忽略其内部内容包的 manifest，
         // 以 SMAPI 的“一个顶层 Mod 一个 manifest 根”为准。
-        return manifestDirectories
-            .Where(directory => !manifestDirectories.Any(parent =>
-                !string.Equals(parent, directory, StringComparison.OrdinalIgnoreCase) &&
-                IsPathUnderDirectory(directory, parent)))
-            .ToList();
+        var outermost = new List<string>();
+        foreach (var directory in manifestDirectories.OrderBy(path => path.Length))
+        {
+            if (!outermost.Any(parent => IsPathUnderDirectory(directory, parent)))
+            {
+                outermost.Add(directory);
+            }
+        }
+
+        return outermost;
     }
 
     /// <summary>
@@ -12630,17 +12789,83 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         OnPropertyChanged(nameof(SelectedModDetails));
     }
 
+    private void ScheduleInstanceSettingsSave()
+    {
+        if (_loadingInstanceSettings || !IsSettingsSection) return;
+        _pendingInstanceSettings = true;
+        _instanceSettingsSaveCts?.Cancel();
+        var source = new CancellationTokenSource();
+        _instanceSettingsSaveCts = source;
+        Status = "实例设置已更改，正在自动保存";
+        _ = SaveInstanceSettingsAfterDelayAsync(source);
+    }
+
+    private async Task SaveInstanceSettingsAfterDelayAsync(CancellationTokenSource source)
+    {
+        try
+        {
+            await Task.Delay(1000, source.Token);
+            if (global::Avalonia.Application.Current != null && !global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+                await global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => FlushPendingInstanceSettings());
+            else
+                FlushPendingInstanceSettings();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[InstanceSettings] 自动保存失败: {ex.Message}"); }
+        finally
+        {
+            if (ReferenceEquals(_instanceSettingsSaveCts, source)) _instanceSettingsSaveCts = null;
+            source.Dispose();
+        }
+    }
+
+    public bool FlushPendingInstanceSettings()
+    {
+        _instanceSettingsSaveCts?.Cancel();
+        _instanceSettingsSaveCts = null;
+        return !_pendingInstanceSettings || PersistInstanceLaunchSettings();
+    }
+
+    private bool PersistInstanceLaunchSettings()
+    {
+        if (string.IsNullOrWhiteSpace(_loadedInstanceSettingsPath))
+        {
+            Status = "未选择有效的游戏版本，无法保存实例设置";
+            return false;
+        }
+
+        try
+        {
+            var settings = _instanceLaunchSettingsStore.GetEffective(_loadedInstanceSettingsPath, _settingsStore.Load());
+            settings.WindowTitle = string.IsNullOrWhiteSpace(GameWindowTitle) ? "<default>" : GameWindowTitle.Trim();
+            settings.CustomArguments = InstanceCustomLaunchArguments?.Trim() ?? string.Empty;
+            settings.AutoConnectServer = InstanceAutoConnectServer;
+            settings.ServerAddress = InstanceServerAddress?.Trim() ?? string.Empty;
+            settings.SteamInviteCode = InstanceSteamInviteCode?.Trim() ?? string.Empty;
+            settings.OverrideSteamLaunchOptions = OverrideSteamLaunchOptions;
+            settings.SteamLaunchOptions = SteamLaunchOptions?.Trim() ?? string.Empty;
+            _instanceLaunchSettingsStore.Save(_loadedInstanceSettingsPath, settings);
+            _pendingInstanceSettings = false;
+            Status = "实例设置已自动保存";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Status = $"保存实例设置失败：{ex.Message}";
+            return false;
+        }
+    }
+
     [RelayCommand]
     private void SaveInstanceSettings()
     {
+        if (!FlushPendingInstanceSettings()) return;
+        // 保存概览中的个性化信息时，不应为原本继承全局值的实例创建启动设置。
+        if (IsSettingsSection && !PersistInstanceLaunchSettings()) return;
         var settings = _settingsStore.Load();
         settings.InstanceName = string.IsNullOrWhiteSpace(InstanceName) ? "Default Instance" : InstanceName.Trim();
         settings.InstanceDescription = InstanceDescription?.Trim() ?? string.Empty;
-        settings.GameWindowTitle = string.IsNullOrWhiteSpace(GameWindowTitle) ? "<default>" : GameWindowTitle.Trim();
-        settings.InstanceCustomLaunchArguments = InstanceCustomLaunchArguments?.Trim() ?? string.Empty;
         settings.IsFavoriteInstance = IsFavoriteInstance;
-        settings.OverrideSteamLaunchOptions = OverrideSteamLaunchOptions;
-        settings.SteamLaunchOptions = SteamLaunchOptions?.Trim() ?? string.Empty;
         _settingsStore.Save(settings);
 
         RefreshInstanceRuntimeInfo();
@@ -12730,10 +12955,11 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         OverrideSteamLaunchOptions = true;
         SteamLaunchOptions = options;
 
-        var settings = _settingsStore.Load();
-        settings.OverrideSteamLaunchOptions = true;
-        settings.SteamLaunchOptions = options;
-        _settingsStore.Save(settings);
+        if (!FlushPendingInstanceSettings() || !PersistInstanceLaunchSettings())
+        {
+            await _dialogService.ShowMessageAsync("实例设置保存失败", Status);
+            return;
+        }
 
         var restartWarning = string.Empty;
         if (steamClosedByLauncher)
@@ -14346,7 +14572,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         else
         {
             // 自定义图标优先级高于系统预设图标
-            var customIcon = Services.InstanceIconResolver.ResolveIconPath(path, IsSmapiInstance);
+            var customIcon = Services.InstanceIconResolver.ResolveDisplayIconPath(path, IsSmapiInstance);
             if (!string.IsNullOrWhiteSpace(customIcon))
             {
                 SetInstanceIconSource(customIcon);
@@ -15312,6 +15538,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
         public long UpdateFileId { get; set; }
     }
 
+    private sealed record ModScanResult(
+        List<ModManageItem> Items,
+        Dictionary<string, List<(string UniqueId, string MinimumVersion, bool IsRequired, string Note)>> DependencyEntriesByPath,
+        Dictionary<string, LocalSourceMetadata?> SourceCredentialsByPath,
+        List<ModManageItem> BackupItems);
+
     private sealed class LocalSourceMetadata
     {
         [JsonPropertyName("platform")]
@@ -16148,6 +16380,8 @@ public partial class ModManageItem : ObservableObject
 
     public string EnableStateText => IsEnabled ? "已启用" : "已禁用";
 
+    public string ToggleActionText => IsEnabled ? "禁用" : "启用";
+
     public string BackupTimeText => BackupTime is DateTime time ? time.ToString("yyyy-MM-dd HH:mm") : "未知";
 
     public string PrimaryStateText => IsBackupItem ? "备份" : EnableStateText;
@@ -16218,6 +16452,7 @@ public partial class ModManageItem : ObservableObject
     partial void OnIsEnabledChanged(bool value)
     {
         OnPropertyChanged(nameof(EnableStateText));
+        OnPropertyChanged(nameof(ToggleActionText));
         OnPropertyChanged(nameof(PrimaryStateText));
     }
 

@@ -23,6 +23,8 @@ public sealed class LegacyConfigurationMigrationService
     private readonly string _legacyRoot;
     private readonly string? _legacyInstancesPath;
     private readonly string _markerPath;
+    private readonly string _instanceSettingsMarkerPath;
+    private readonly InstanceLaunchSettingsStore _instanceLaunchSettingsStore;
 
     public LegacyConfigurationMigrationService(
         AppUserSettingsStore settingsStore,
@@ -43,6 +45,8 @@ public sealed class LegacyConfigurationMigrationService
         _markerPath = Path.Combine(
             Path.GetDirectoryName(_settingsStore.GetSettingsPath()) ?? _legacyRoot,
             MigrationMarkerFileName);
+        _instanceSettingsMarkerPath = Path.Combine(Path.GetDirectoryName(_markerPath)!, ".legacy-instance-launch-settings-v1.json");
+        _instanceLaunchSettingsStore = new InstanceLaunchSettingsStore(_settingsStore);
     }
 
     public LegacyConfigurationMigrationResult Migrate()
@@ -51,7 +55,7 @@ public sealed class LegacyConfigurationMigrationService
         // 例如首次启动时旧实例文件尚未落到旧程序目录，下一次启动应继续探测；
         // 同样，旧 WPF 运行期间新增的实例也应能被补迁移。导入逻辑本身是幂等的，
         // 这里只在“没有新增来源且已记录文件都未变化”时跳过。
-        if (File.Exists(_markerPath) &&
+        if (File.Exists(_markerPath) && File.Exists(_instanceSettingsMarkerPath) &&
             !HasLegacySourcesChangedSinceMarker() &&
             HasMigrationTargets())
         {
@@ -70,12 +74,17 @@ public sealed class LegacyConfigurationMigrationService
             sourceFiles.Add(appConfigPath);
             try
             {
-                using var document = JsonDocument.Parse(ReadTextFileWithBom(appConfigPath));
-                settingsChanged |= ImportLegacyAppSettings(
-                    document.RootElement,
-                    currentSettings,
-                    hadCurrentSettings,
-                    result);
+                // 旧程序随后修改 app.json 时不能重新覆盖用户在新版中的选择，
+                // 包括恰好与默认值相同的设置；目标文件丢失时仍允许恢复。
+                if (!hadCurrentSettings || !WasSourcePreviouslyMigrated(appConfigPath))
+                {
+                    using var document = JsonDocument.Parse(ReadTextFileWithBom(appConfigPath));
+                    settingsChanged |= ImportLegacyAppSettings(
+                        document.RootElement,
+                        currentSettings,
+                        hadCurrentSettings,
+                        result);
+                }
             }
             catch (Exception ex)
             {
@@ -117,7 +126,8 @@ public sealed class LegacyConfigurationMigrationService
                     "apiKey",
                     "NexusModsApiKey",
                     "nexusModsApiKey");
-                if (!string.IsNullOrWhiteSpace(legacyApiKey) &&
+                if ((!hadCurrentSettings || !WasSourcePreviouslyMigrated(legacyNexusConfigPath)) &&
+                    !string.IsNullOrWhiteSpace(legacyApiKey) &&
                     string.IsNullOrWhiteSpace(currentSettings.NexusApiKey))
                 {
                     currentSettings.NexusApiKey = DecryptLegacySecret(legacyApiKey.Trim());
@@ -159,13 +169,48 @@ public sealed class LegacyConfigurationMigrationService
             }
         }
 
+        try
+        {
+            var previousMigrationCompleted = File.Exists(_markerPath) && hadCurrentSettings;
+            var instanceSettings = new List<KeyValuePair<string, InstanceLaunchSettings>>();
+            foreach (var item in legacyInstances)
+            {
+                if (string.IsNullOrWhiteSpace(item.GamePath) || !Directory.Exists(item.GamePath.Trim().Trim('"'))) continue;
+                var runtimePath = ResolveLegacyInstanceRuntimePath(item);
+                if (item.EnableIsolation && !item.Tags.Contains("Base", StringComparer.OrdinalIgnoreCase) &&
+                    string.Equals(NormalizePath(runtimePath), NormalizePath(item.GamePath), StringComparison.OrdinalIgnoreCase) &&
+                    !IsVersionScopedPath(item.GamePath))
+                    continue; // 隔离版本目录缺失时不能把其偏好错误写到 Base。
+
+                var useCurrentSettings = previousMigrationCompleted &&
+                    !string.IsNullOrWhiteSpace(currentSettings.PreferredInstancePath) &&
+                    string.Equals(NormalizePath(runtimePath), NormalizePath(currentSettings.PreferredInstancePath), StringComparison.OrdinalIgnoreCase);
+                var options = useCurrentSettings ? InstanceLaunchSettings.FromGlobal(currentSettings) : new InstanceLaunchSettings
+                {
+                    WindowTitle = string.IsNullOrWhiteSpace(item.WindowTitle) ? currentSettings.GameWindowTitle : item.WindowTitle.Trim(),
+                    CustomArguments = item.CustomArguments.Trim(),
+                    AutoConnectServer = item.AutoConnectServer,
+                    ServerAddress = item.ServerAddress.Trim(),
+                    SteamInviteCode = item.SteamInviteCode.Trim(),
+                    OverrideSteamLaunchOptions = item.OverrideSteamLaunchOptions,
+                    SteamLaunchOptions = item.SteamLaunchOptions.Trim()
+                };
+                instanceSettings.Add(new KeyValuePair<string, InstanceLaunchSettings>(runtimePath, options));
+            }
+            _instanceLaunchSettingsStore.ImportMissing(instanceSettings);
+        }
+        catch (Exception ex)
+        {
+            result.Errors.Add($"迁移实例启动设置失败: {ex.Message}");
+        }
+
         if (!string.IsNullOrWhiteSpace(legacyGamePath))
         {
             legacyInstances.Add(new LegacyInstanceRecord
             {
                 Name = Path.GetFileName(legacyGamePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
                 GamePath = legacyGamePath,
-                IsDefault = true
+                IsGamePathFallback = true
             });
         }
 
@@ -188,6 +233,11 @@ public sealed class LegacyConfigurationMigrationService
         if (sourceFiles.Count > 0 && result.Errors.Count == 0)
         {
             WriteMarker(sourceFiles, result);
+            if (result.Completed)
+            {
+                try { AtomicFileWriter.WriteUtf8(_instanceSettingsMarkerPath, "{\"version\":1}"); }
+                catch (Exception ex) { result.Errors.Add($"保存实例设置迁移标记失败: {ex.Message}"); result.Completed = false; }
+            }
         }
 
         result.HasSources = sourceFiles.Count > 0;
@@ -275,8 +325,16 @@ public sealed class LegacyConfigurationMigrationService
 
         changed |= ImportBool(root, "EnableAnimations", settings.EnableAnimations, defaults.EnableAnimations,
             value => settings.EnableAnimations = value, result, ref hadCurrentSettings);
-        changed |= ImportBool(root, "EnableTransparency", settings.EnableTransparency, defaults.EnableTransparency,
-            value => settings.EnableTransparency = value, result, ref hadCurrentSettings);
+        if (!hadCurrentSettings || !_settingsStore.HasStoredProperty(
+                nameof(AppUserSettings.BackgroundTransparencyPercent), nameof(AppUserSettings.EnableTransparency)))
+        {
+            changed |= ImportBool(root, "EnableTransparency", settings.EnableTransparency, defaults.EnableTransparency,
+                value =>
+                {
+                    settings.EnableTransparency = value;
+                    settings.BackgroundTransparencyPercent = value ? 100 : 0;
+                }, result, ref hadCurrentSettings);
+        }
         changed |= ImportBool(root, "AutoCheckUpdates", settings.EnableAutoUpdateCheck, defaults.EnableAutoUpdateCheck,
             value => settings.EnableAutoUpdateCheck = value, result, ref hadCurrentSettings);
         changed |= ImportBool(root, "AutoDownloadUpdate", settings.AutoDownloadUpdate, defaults.AutoDownloadUpdate,
@@ -395,6 +453,8 @@ public sealed class LegacyConfigurationMigrationService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var changed = false;
         LegacyInstanceRecord? preferred = null;
+        LegacyInstanceRecord? fallback = null;
+        LegacyInstanceRecord? gamePathFallback = null;
 
         foreach (var group in legacyInstances
                      .Where(item => !string.IsNullOrWhiteSpace(item.GamePath))
@@ -421,15 +481,13 @@ public sealed class LegacyConfigurationMigrationService
                 changed = true;
             }
 
-            var candidate = group.FirstOrDefault(item =>
-                                  item.IsDefault ||
-                                  (!string.IsNullOrWhiteSpace(item.Id) &&
-                                   defaultInstanceIds.Contains(item.Id)))
-                            ?? group.FirstOrDefault();
-            if (candidate != null && preferred == null)
-            {
-                preferred = candidate;
-            }
+            // 不能先把第一组的普通实例当作默认实例，否则后续组里的显式默认值会被忽略。
+            fallback ??= group.FirstOrDefault();
+            gamePathFallback ??= group.FirstOrDefault(item => item.IsGamePathFallback);
+            preferred ??= group.FirstOrDefault(item =>
+                !item.IsGamePathFallback &&
+                (item.IsDefault ||
+                 (!string.IsNullOrWhiteSpace(item.Id) && defaultInstanceIds.Contains(item.Id))));
 
             foreach (var item in group.Where(item => item.IsFavorite))
             {
@@ -451,6 +509,7 @@ public sealed class LegacyConfigurationMigrationService
             _instanceRegistryStore.SaveManualInstances(existing);
         }
 
+        preferred ??= gamePathFallback ?? fallback;
         if (preferred != null && string.IsNullOrWhiteSpace(settings.PreferredInstancePath))
         {
             settings.PreferredInstancePath = ResolveLegacyInstanceRuntimePath(preferred);
@@ -661,6 +720,34 @@ public sealed class LegacyConfigurationMigrationService
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => Path.GetFullPath(path))
             .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private bool WasSourcePreviouslyMigrated(string sourcePath)
+    {
+        try
+        {
+            if (!File.Exists(_markerPath))
+            {
+                return false;
+            }
+
+            using var document = JsonDocument.Parse(ReadTextFileWithBom(_markerPath));
+            if (!document.RootElement.TryGetProperty("Sources", out var sources) ||
+                sources.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            var fullPath = Path.GetFullPath(sourcePath);
+            return sources.EnumerateArray().Any(item =>
+                item.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(item.GetString()) &&
+                string.Equals(Path.GetFullPath(item.GetString()!), fullPath, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private bool HasLegacySourcesChangedSinceMarker()
@@ -1222,6 +1309,7 @@ public sealed class LegacyConfigurationMigrationService
         public string GamePath { get; init; } = string.Empty;
         public bool IsSMAPIInstance { get; init; }
         public bool IsDefault { get; init; }
+        public bool IsGamePathFallback { get; init; }
         public bool IsFavorite { get; init; }
         public bool EnableIsolation { get; init; }
         public string Description { get; init; } = string.Empty;

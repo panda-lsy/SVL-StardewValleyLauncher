@@ -44,7 +44,7 @@ public static class ThemeService
     private static Color? _customPrimaryColor;
     private static bool _isDarkMode;
     private static bool _followSystemTheme;
-    private static bool _transparencyEnabled = true;
+    private static int _backgroundTransparencyPercent = 25;
     private static bool _animationsEnabled = true;
     private static IPlatformSettings? _platformSettings;
     private static readonly Dictionary<string, Transitions> s_animationTransitions = new(StringComparer.Ordinal);
@@ -69,8 +69,11 @@ public static class ThemeService
         ? ToRgbHex(_customPrimaryColor.Value)
         : string.Empty;
 
-    /// <summary>当前是否启用主窗口透明/半透明背景。</summary>
-    public static bool TransparencyEnabled => _transparencyEnabled;
+    /// <summary>主窗口背景透明度；0 表示完全不透明。</summary>
+    public static int BackgroundTransparencyPercent => _backgroundTransparencyPercent;
+
+    /// <summary>兼容旧调用点：透明度大于 0 即视为启用透明效果。</summary>
+    public static bool TransparencyEnabled => _backgroundTransparencyPercent > 0;
 
     /// <summary>当前是否启用界面过渡动画。</summary>
     public static bool AnimationsEnabled => _animationsEnabled;
@@ -193,13 +196,24 @@ public static class ThemeService
     }
 
     /// <summary>
-    /// 设置主窗口透明效果。资源层始终保留不透明回退，避免不支持透明的窗口后端出现异常背景。
+    /// 设置主窗口背景透明度。资源层始终保留不透明回退，避免不支持透明的窗口后端出现异常背景。
     /// </summary>
-    public static void SetTransparencyEnabled(bool enabled)
+    public static void SetBackgroundTransparencyPercent(int percent)
     {
-        _transparencyEnabled = enabled;
+        _backgroundTransparencyPercent = Math.Clamp(percent, 0, 100);
         ApplyWindowBackgroundTransparency();
         ThemeChanged?.Invoke();
+    }
+
+    /// <summary>兼容旧二值设置；开启映射到此前的最大透明效果。</summary>
+    public static void SetTransparencyEnabled(bool enabled) => SetBackgroundTransparencyPercent(enabled ? 100 : 0);
+
+    /// <summary>将 0-100% 透明度映射到不透明至指定玻璃态 Alpha 的范围。</summary>
+    public static byte GetSurfaceAlphaForTransparency(byte maximumTransparencyAlpha, int percent)
+    {
+        var normalized = Math.Clamp(percent, 0, 100) / 100d;
+        var alpha = byte.MaxValue - (byte.MaxValue - maximumTransparencyAlpha) * normalized;
+        return (byte)Math.Clamp((int)Math.Round(alpha, MidpointRounding.AwayFromZero), 0, byte.MaxValue);
     }
 
     /// <summary>
@@ -365,23 +379,8 @@ public static class ThemeService
                 Color.FromArgb(0xFF, color.R, color.G, color.B));
         }
 
-        // 主界面优先请求不模糊的 Transparent，确实不支持时再回退 AcrylicBlur。
-        // 应用级资源保留可读的基础透明度；主窗口会在自己的资源作用域进一步
-        // 调低页面卡片/表面 Alpha，让主页面也能明显透出 Acrylic，弹窗不受影响。
-        ApplyBrushAlpha(resources, "WindowBackgroundBrush", _transparencyEnabled ? (byte)0x99 : (byte)0xFF);
-        ApplyBrushAlpha(resources, "HeaderBackgroundBrush", _transparencyEnabled ? (byte)0x99 : (byte)0xFF);
-        ApplyBrushAlpha(resources, "PanelBackgroundBrush", _transparencyEnabled ? (byte)0x00 : (byte)0xFF);
-    }
-
-    private static void ApplyBrushAlpha(global::Avalonia.Controls.IResourceDictionary resources, string key, byte alpha)
-    {
-        if (resources[key] is not SolidColorBrush brush || brush.Color.A == alpha)
-        {
-            return;
-        }
-
-        var color = brush.Color;
-        resources[key] = new SolidColorBrush(Color.FromArgb(alpha, color.R, color.G, color.B));
+        // 不修改 Application.Resources 中的主题背景画刷，否则独立弹窗也会变透明。
+        // 主窗口在自己的 Resources 作用域里按百分比应用 Alpha。
     }
 
     /// <summary>
@@ -838,7 +837,7 @@ public static class ThemeService
 
     public static void RestoreFromSettings(AppUserSettings settings)
     {
-        _transparencyEnabled = settings.EnableTransparency;
+        _backgroundTransparencyPercent = Math.Clamp(settings.BackgroundTransparencyPercent, 0, 100);
         _customPrimaryColor = TryParseCustomPrimaryColor(settings.PrimaryColor);
         _followSystemTheme = IsSystemThemeMode(settings.ThemeMode);
         ConfigurePlatformThemeMonitoring();

@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
 						 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+						 xmlns:controls="using:SVL.Avalonia.Controls"
 						 x:Class="SVL.Avalonia.Controls.DownloadFloatingButton"
 						 x:Name="Root">
 	<Grid Width="60" Height="60">
@@ -15,10 +16,7 @@
 						Padding="0"
 						Command="{Binding OpenQueueCommand, ElementName=Root}"
 						CommandParameter="{Binding PendingTaskCount, ElementName=Root}">
-			<Path Data="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"
-						Width="24"
-						Height="24"
-						Stretch="Uniform"  />
+			<controls:ThemeIcon IconName="download-alt" Width="24" Height="24" Stretch="Uniform" />
 		</Button>
 
 		<Border Width="20"

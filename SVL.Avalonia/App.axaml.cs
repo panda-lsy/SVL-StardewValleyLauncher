@@ -43,6 +43,7 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        GameCursorService.TryInstall(this);
         // 全局异常捕获：把未处理异常/未观察任务异常写到崩溃日志，便于定位登录闪退等。
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             LogUnhandled("Unhandled", args.ExceptionObject?.ToString());
@@ -79,10 +80,6 @@ public partial class App : Application
 
             var settings = settingsStore.Load();
             var enableDebugConsole = settings.DebugMode;
-
-#if DEBUG
-            enableDebugConsole = true;
-#endif
 
             if (enableDebugConsole)
             {
@@ -221,6 +218,12 @@ public partial class App : Application
         if (autoOpenDebugConsole)
         {
             await Dispatcher.UIThread.InvokeAsync(() => OpenDebugConsole(mainWindow));
+        }
+
+        if (Program.PreviousUpdateFailed)
+        {
+            await new DialogService().ShowMessageAsync("更新未完成",
+                "自动更新未能完成，已尝试保留或恢复旧版本。请查看日志目录中的 launcher-update.log。");
         }
 
         // 处理启动时收到的 NXM 链接：命令行传入的 + 单实例管道缓存的。

@@ -3,12 +3,15 @@ name: Package Avalonia
 on:
   push:
     branches:
-      - Dev-Avalonia
-      - Avalonia-Dev
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  # CI 测试产生的临时实例不应计入真实用户统计。
+  SVL_DISABLE_ANON_TELEMETRY: '1'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -54,13 +57,30 @@ jobs:
         run: dotnet restore SVL.Avalonia/SVL.Avalonia.csproj --runtime win-x64
 
       - name: Publish
-        run: dotnet publish SVL.Avalonia/SVL.Avalonia.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+        run: dotnet publish SVL.Avalonia/SVL.Avalonia.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore --output artifacts/win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+
+      - name: Prepare WPF upgrade executable
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content SVL.Avalonia/SVL.Avalonia.csproj -Raw
+          $version = @($project.Project.PropertyGroup.Version | Where-Object { $_ })[0]
+          if (-not $version) { throw 'Project version is missing.' }
+          New-Item -ItemType Directory -Force artifacts/legacy-upgrade | Out-Null
+          Copy-Item -LiteralPath artifacts/win-x64/SVL.Avalonia.exe -Destination "artifacts/legacy-upgrade/SVL.Desktop_v${version}_Release.exe"
 
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:
           name: SVL-Avalonia-win-x64
           path: artifacts/win-x64
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload WPF upgrade executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: SVL-Avalonia-WPF-upgrade-win-x64
+          path: artifacts/legacy-upgrade/*.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -105,11 +125,33 @@ jobs:
             $zip.Dispose()
           }
 
+      - name: Verify Ubuntu/Debian installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb=$(find artifacts -maxdepth 1 -name 'svl-launcher_*_amd64.deb' -print -quit)
+          test -n "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = 'svl-launcher'
+          test "$(dpkg-deb -f "$deb" Architecture)" = 'amd64'
+          dpkg-deb -x "$deb" "$RUNNER_TEMP/svl-deb-validation"
+          test -x "$RUNNER_TEMP/svl-deb-validation/usr/bin/svl"
+          test -L "$RUNNER_TEMP/svl-deb-validation/usr/bin/svl"
+          cmp "$RUNNER_TEMP/svl-deb-validation/usr/lib/svl/SVL.Avalonia" artifacts/SVL_v*_release_Linux_x64_publish/SVL.Avalonia
+          test -f "$RUNNER_TEMP/svl-deb-validation/usr/share/applications/svl.desktop"
+          test -f "$RUNNER_TEMP/svl-deb-validation/usr/share/icons/hicolor/256x256/apps/svl.png"
+          grep -Fx 'Name=Stardew Valley Launcher' "$RUNNER_TEMP/svl-deb-validation/usr/share/applications/svl.desktop"
+          grep -Fx 'Name[zh_CN]=Stardew Valley Launcher' "$RUNNER_TEMP/svl-deb-validation/usr/share/applications/svl.desktop"
+          if command -v desktop-file-validate >/dev/null; then
+            desktop-file-validate "$RUNNER_TEMP/svl-deb-validation/usr/share/applications/svl.desktop"
+          fi
+
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:
           name: SVL-Avalonia-linux-x64
-          path: artifacts/SVL_v*_release_Linux_x64.zip
+          path: |
+            artifacts/SVL_v*_release_Linux_x64.zip
+            artifacts/svl-launcher_*_amd64.deb
           if-no-files-found: error
           retention-days: 14
 
@@ -140,10 +182,14 @@ jobs:
             $apphost = Join-Path $bundle.FullName 'Contents/MacOS/SVL.Avalonia'
             if (-not (Test-Path -LiteralPath $plist -PathType Leaf)) { throw "Missing Info.plist: $plist" }
             if (-not (Test-Path -LiteralPath $apphost -PathType Leaf)) { throw "Missing macOS apphost: $apphost" }
+            & codesign --verify --deep --strict $bundle.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Invalid macOS app signature: $bundle" }
             & plutil -lint $plist
             if ($LASTEXITCODE -ne 0) { throw "Invalid Info.plist: $plist" }
             $scheme = & /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' $plist
             if ($LASTEXITCODE -ne 0 -or $scheme.Trim() -ne 'nxm') { throw "NXM URL scheme is missing: $plist" }
+            $name = & /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' $plist
+            if ($LASTEXITCODE -ne 0 -or $name.Trim() -ne 'Stardew Valley Launcher') { throw "Unexpected CFBundleDisplayName in ${plist}: $name" }
             $minimumSystemVersion = & /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' $plist
             if ($LASTEXITCODE -ne 0 -or $minimumSystemVersion.Trim() -ne '14.0') {
               throw "Unexpected macOS minimum system version in ${plist}: $minimumSystemVersion"
@@ -151,6 +197,33 @@ jobs:
           }
           $images = @(Get-ChildItem artifacts -File -Filter '*.dmg')
           if ($images.Count -ne 2) { throw "Expected 2 macOS disk images; found $($images.Count)." }
+          $expectedLayout = (Get-FileHash packaging/macos/installer-layout.dsstore -Algorithm SHA256).Hash
+          foreach ($image in $images) {
+            $mount = Join-Path ([IO.Path]::GetTempPath()) ("svl-dmg-test-" + [guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $mount | Out-Null
+            $mounted = $false
+            try {
+              & hdiutil attach -quiet -readonly -nobrowse -mountpoint $mount $image.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Failed to mount $image" }
+              $mounted = $true
+              $layout = Join-Path $mount '.DS_Store'
+              $background = Join-Path $mount '.background/installer.png'
+              $app = Join-Path $mount 'Stardew Valley Launcher.app'
+              $applications = Join-Path $mount 'Applications'
+              if (-not (Test-Path -LiteralPath $layout -PathType Leaf) -or
+                  -not (Test-Path -LiteralPath $background -PathType Leaf) -or
+                  -not (Test-Path -LiteralPath $app -PathType Container) -or
+                  -not (Test-Path -LiteralPath $applications)) { throw "Incomplete installer layout: $image" }
+              if ((Get-FileHash -LiteralPath $layout -Algorithm SHA256).Hash -ne $expectedLayout) {
+                throw "Unexpected Finder layout: $image"
+              }
+              & codesign --verify --deep --strict $app
+              if ($LASTEXITCODE -ne 0) { throw "Invalid app inside $image" }
+            } finally {
+              if ($mounted) { & hdiutil detach -quiet $mount }
+              if (-not $mounted -or $LASTEXITCODE -eq 0) { Remove-Item -LiteralPath $mount -Force }
+            }
+          }
 
       - name: Upload packages
         uses: actions/upload-artifact@v7

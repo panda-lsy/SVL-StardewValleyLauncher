@@ -141,31 +141,47 @@
 
   <Style Selector="Button.nav TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource NavTextBrush}" />
+    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
 
   <Style Selector="Button.nav">
+    <Setter Property="Height" Value="48" />
+    <Setter Property="MinHeight" Value="48" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Foreground" Value="{DynamicResource NavTextBrush}" />
     <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Padding" Value="12,0" />
     <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="Transitions" Value="{DynamicResource NavButtonTransitions}" />
   </Style>
 
   <Style Selector="Button.nav:pointerover">
-    <Setter Property="Background" Value="#33FFFFFF" />
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
   </Style>
 
   <Style Selector="Button.nav.selected">
-    <Setter Property="Background" Value="#33FFFFFF" />
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
 
   <Style Selector="Button.nav.back">
     <Setter Property="Padding" Value="0" />
-    <Setter Property="Width" Value="32" />
-    <Setter Property="Height" Value="32" />
-    <Setter Property="MinWidth" Value="32" />
+    <Setter Property="Width" Value="40" />
+    <Setter Property="Height" Value="48" />
+    <Setter Property="MinWidth" Value="40" />
+    <Setter Property="MinHeight" Value="48" />
+    <Setter Property="CornerRadius" Value="8" />
+  </Style>
+
+  <Style Selector="Button.nav.back:pointerover">
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
+  </Style>
+
+  <Style Selector="Button.nav.back:focus">
+    <Setter Property="BorderBrush" Value="{DynamicResource NavTextBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
   </Style>
 
   <Style Selector="Button.iconPickerOption">
@@ -204,10 +220,6 @@
 
   <Style Selector="Button.navButton:pointerover">
     <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
-  </Style>
-
-  <Style Selector="Button.navButton Path">
-    <Setter Property="Fill" Value="{DynamicResource DefaultTextForeground}" />
   </Style>
 
   <Style Selector="Button.navButton.selected">
@@ -256,7 +268,7 @@
     <Setter Property="VerticalAlignment" Value="Stretch" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
-    <Setter Property="CornerRadius" Value="16" />
+    <Setter Property="CornerRadius" Value="0" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Foreground" Value="White" />
@@ -264,19 +276,17 @@
   </Style>
 
   <Style Selector="Button.winCtrl:pointerover">
-    <Setter Property="Opacity" Value="0.92" />
-  </Style>
-
-  <Style Selector="Button.winCtrl.min:pointerover">
-    <Setter Property="Background" Value="#3381C784" />
-  </Style>
-
-  <Style Selector="Button.winCtrl.max:pointerover">
-    <Setter Property="Background" Value="#33FFCA28" />
+    <Setter Property="Background" Value="{DynamicResource CategorySelectedBg}" />
   </Style>
 
   <Style Selector="Button.winCtrl.close:pointerover">
-    <Setter Property="Background" Value="#44EF5350" />
+    <Setter Property="Background" Value="{DynamicResource NotificationErrorBackground}" />
+    <Setter Property="Foreground" Value="{DynamicResource NavTextBrush}" />
+  </Style>
+
+  <Style Selector="Button.winCtrl:focus">
+    <Setter Property="BorderBrush" Value="{DynamicResource NavTextBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
   </Style>
 
   <Style Selector="TextBlock.platformTag">
