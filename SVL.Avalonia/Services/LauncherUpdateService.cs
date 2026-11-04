@@ -451,8 +451,9 @@ public sealed class LauncherUpdateService
         RuntimeInformation.ProcessArchitecture.ToString());
 
     private static bool IsLegacyDebugAsset(string name) =>
-        name.Contains("debug", StringComparison.OrdinalIgnoreCase) ||
-        name.Contains("diagnostic", StringComparison.OrdinalIgnoreCase);
+        name.Contains("diagnostic", StringComparison.OrdinalIgnoreCase) ||
+        (name.Contains("debug", StringComparison.OrdinalIgnoreCase) &&
+         !name.Contains("debug_release", StringComparison.OrdinalIgnoreCase));
 
     internal static bool IsCompatibleAsset(string assetName, string platform, string arch)
     {

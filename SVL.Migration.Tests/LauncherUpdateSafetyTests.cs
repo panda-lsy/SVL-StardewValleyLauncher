@@ -46,13 +46,16 @@ public sealed class LauncherUpdateSafetyTests
 
     [DataTestMethod]
     [DataRow("SVL.Desktop_v1.2.1_Release.exe", "windows", "X64", true)]
+    [DataRow("SVL.Desktop_v1.2.0.0_Debug_Release.exe", "windows", "X64", true)]
     [DataRow("SVL.Desktop_v1.2.1_Debug.exe", "windows", "X64", false)]
     [DataRow("SVL_v1.2.1_Windows_x64_requires_dotnet10.exe", "windows", "X64", true)]
     [DataRow("SVL_v1.2.1_Windows_x64_requires_dotnet10_diagnostic.exe", "windows", "X64", false)]
     [DataRow("SVL_v1.2.1_release_macOS_arm64.dmg", "macos", "Arm64", true)]
+    [DataRow("SVL_v1.2.0.0_debug_release_macOS_arm64.dmg", "macos", "Arm64", true)]
     [DataRow("SVL_v1.2.1_release_macOS_arm64.dmg", "macos", "X64", false)]
     [DataRow("SVL_v1.2.1_debug_macOS_arm64.dmg", "macos", "Arm64", false)]
     [DataRow("SVL_v1.2.1_release_Linux_x64", "linux", "X64", true)]
+    [DataRow("SVL_v1.2.0.0_debug_release_Linux_x64.zip", "linux", "X64", true)]
     [DataRow("svl-launcher_1.2.1_amd64_requires_dotnet10.deb", "linux", "X64", true)]
     [DataRow("svl-launcher_1.2.1_amd64.deb", "linux", "Arm64", false)]
     [DataRow("SVL_v1.2.1_debug_Linux_x64.zip", "linux", "X64", false)]
@@ -71,6 +74,15 @@ public sealed class LauncherUpdateSafetyTests
         release.Assets.Add(new LauncherReleaseAsset { Name = "SVL_v1.2.1_Windows_x64_requires_dotnet10.exe" });
         Assert.AreEqual("SVL.Desktop_v1.2.1_Release.exe", LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.SelfContained, true)?.Name);
         Assert.AreEqual("SVL_v1.2.1_Windows_x64_requires_dotnet10.exe", LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.FrameworkDependent, true)?.Name);
+    }
+
+    [TestMethod]
+    public void PreferredAsset_ShouldAcceptTheCombinedReleaseTransitionFile()
+    {
+        var release = new LauncherReleaseInfo();
+        release.Assets.Add(new LauncherReleaseAsset { Name = "SVL.Desktop_v1.2.0.0_Debug.exe" });
+        release.Assets.Add(new LauncherReleaseAsset { Name = "SVL.Desktop_v1.2.0.0_Debug_Release.exe" });
+        Assert.AreEqual("SVL.Desktop_v1.2.0.0_Debug_Release.exe", LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.SelfContained, true)?.Name);
     }
 
     [TestMethod]
