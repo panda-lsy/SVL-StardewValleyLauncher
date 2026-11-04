@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SVL.Android.MobileMainView"
+             Background="#F5EDE0">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="20,28,20,32" Spacing="16" MaxWidth="620">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <Image Source="avares://SVL.Android/Assets/icon.png" Width="48" Height="48" />
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="SVL" FontSize="23" FontWeight="Bold" Foreground="#3A2B22" />
+          <TextBlock Text="Android 开发预览" FontSize="13" Foreground="#806C59" />
+        </StackPanel>
+      </StackPanel>
+
+      <Border Background="#FAF7EE" BorderBrush="#D4C4A8" BorderThickness="1" CornerRadius="12" Padding="18">
+        <StackPanel Spacing="12">
+          <TextBlock Text="在 Android 启动游戏" FontSize="21" Foreground="#3A2B22" TextWrapping="Wrap" />
+          <TextBlock Text="通过 Cinderbox 运行你拥有的 PC 版星露谷物语。可在运行器中导入游戏压缩包，或使用其 Steam 下载功能。" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
+          <Border Background="#F3E8CE" CornerRadius="8" Padding="12">
+            <TextBlock x:Name="RuntimeStatus" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
+          </Border>
+          <Button x:Name="OpenRunnerButton" Content="打开 Cinderbox" Background="#C66D3F" Foreground="White" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+          <Button x:Name="ReleaseButton" Content="查看 Cinderbox 下载页" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+          <Button x:Name="GuideButton" Content="查看安装与使用说明" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+          <TextBlock x:Name="ActionStatus" FontSize="13" Foreground="#8B5A3A" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Background="#FAF7EE" BorderBrush="#D4C4A8" BorderThickness="1" CornerRadius="12" Padding="18">
+        <StackPanel Spacing="8">
+          <TextBlock Text="当前支持范围" FontSize="17" Foreground="#3A2B22" />
+          <TextBlock Text="SVL 可检测并打开已安装的 Cinderbox。Steam 登录、下载、游戏导入及启动由 Cinderbox 完成。" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
+          <TextBlock Text="SVL 内置 Steam 下载、Mod 管理和整合包功能仍在适配中。" FontSize="14" Foreground="#806C59" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

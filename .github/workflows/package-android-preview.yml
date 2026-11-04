@@ -1,0 +1,53 @@
+name: Package Android preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'SVL.Android/**'
+      - 'SVL.Core.Platform/**'
+      - 'SVL.Avalonia/Assets/Icons/icon.png'
+      - '.github/workflows/package-android-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Build test-signed ARM64 APK
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.200'
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0'
+      - name: Install .NET Android workload
+        run: dotnet workload install android --skip-manifest-update
+      - name: Publish preview
+        run: >-
+          dotnet publish SVL.Android/SVL.Android.csproj -c Release
+          -f net10.0-android -p:RuntimeIdentifier=android-arm64
+          -p:AndroidPackageFormat=apk
+      - name: Verify test signature
+        run: >-
+          "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --verbose
+          SVL.Android/bin/Release/net10.0-android/android-arm64/publish/io.qzz.svl.launcher-Signed.apk
+      - name: Upload preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: SVL-Android-ARM64-preview-test-signed
+          path: SVL.Android/bin/Release/net10.0-android/android-arm64/publish/io.qzz.svl.launcher-Signed.apk
+          if-no-files-found: error
+          retention-days: 14
