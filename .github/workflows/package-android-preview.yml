@@ -30,7 +30,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
       - name: Install Android build tools
         run: sdkmanager 'platforms;android-36' 'build-tools;36.1.0'
       - name: Install .NET Android workload
