@@ -1,55 +1,82 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
+using SVL.Core.Platform.IO;
 using Button = Avalonia.Controls.Button;
 
 namespace SVL.Android;
 
 public sealed partial class MobileMainView : UserControl
 {
-    private readonly CinderboxBridge _bridge;
-    private TextBlock RuntimeStatusControl => this.FindControl<TextBlock>("RuntimeStatus")!;
+    private TextBlock LibraryStatusControl => this.FindControl<TextBlock>("LibraryStatus")!;
     private TextBlock ActionStatusControl => this.FindControl<TextBlock>("ActionStatus")!;
+    private Button ImportButtonControl => this.FindControl<Button>("ImportButton")!;
 
-    public MobileMainView() : this(new CinderboxBridge()) { }
+    private static string InstancesRoot => Path.Combine(
+        global::Android.App.Application.Context.FilesDir?.AbsolutePath
+            ?? throw new IOException("无法访问应用存储空间。"), "games");
 
-    internal MobileMainView(CinderboxBridge bridge)
+    public MobileMainView()
     {
-        _bridge = bridge;
         AvaloniaXamlLoader.Load(this);
-        this.FindControl<Button>("OpenRunnerButton")!.Click += OpenRunner;
-        this.FindControl<Button>("ReleaseButton")!.Click += OpenRelease;
-        this.FindControl<Button>("GuideButton")!.Click += OpenGuide;
-        RefreshRuntimeStatus();
+        ImportButtonControl.Click += ImportGame;
+        RefreshLibrary();
     }
 
-    internal void RefreshRuntimeStatus()
+    private void RefreshLibrary()
     {
-        var available = _bridge.IsAvailable();
-        RuntimeStatusControl.Text = available ? "已检测到 Cinderbox，可以打开运行器。" : "未检测到 Cinderbox，请先从其官方发布页下载安装。";
-        this.FindControl<Button>("OpenRunnerButton")!.IsEnabled = available;
-    }
-
-    private void OpenRunner(object? sender, RoutedEventArgs args)
-    {
-        if (_bridge.TryOpenRunner())
+        try
         {
-            ActionStatusControl.Text = string.Empty;
+            var root = InstancesRoot;
+            var count = Directory.Exists(root)
+                ? Directory.EnumerateDirectories(root, "game-*").Count(path => File.Exists(Path.Combine(path, "Stardew Valley.dll")))
+                : 0;
+            LibraryStatusControl.Text = $"已导入 {count} 个游戏文件实例。";
         }
-        else
+        catch (IOException)
         {
-            ActionStatusControl.Text = "无法打开运行器，请确认已安装且未被系统停用。";
-            RefreshRuntimeStatus();
+            LibraryStatusControl.Text = "无法读取游戏文件实例。";
         }
     }
 
-    private void OpenRelease(object? sender, RoutedEventArgs args)
+    private async void ImportGame(object? sender, RoutedEventArgs args)
     {
-        ActionStatusControl.Text = _bridge.TryOpenReleasePage() ? string.Empty : "无法打开浏览器，请检查设备上是否安装浏览器。";
-    }
+        ImportButtonControl.IsEnabled = false;
+        ActionStatusControl.Text = string.Empty;
+        try
+        {
+            var storage = TopLevel.GetTopLevel(this)?.StorageProvider;
+            if (storage is null || !storage.CanOpen)
+                throw new IOException("当前设备无法打开文件选择器。");
 
-    private void OpenGuide(object? sender, RoutedEventArgs args)
-    {
-        ActionStatusControl.Text = _bridge.TryOpenGuide() ? string.Empty : "无法打开浏览器，请检查设备上是否安装浏览器。";
+            var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "选择游戏 ZIP",
+                AllowMultiple = false,
+                FileTypeFilter = [new FilePickerFileType("ZIP 压缩包")
+                {
+                    Patterns = ["*.zip"],
+                    MimeTypes = ["application/zip", "application/x-zip-compressed", "application/octet-stream"]
+                }]
+            });
+            if (files.Count == 0) return;
+
+            using var file = files[0];
+            await using var source = await file.OpenReadAsync();
+            var progress = new Progress<string>(message => ActionStatusControl.Text = message);
+            var root = InstancesRoot;
+            await Task.Run(() => GameArchiveImporter.ImportZipAsync(source, root, progress));
+            RefreshLibrary();
+            ActionStatusControl.Text = "游戏文件导入完成；独立运行环境仍在开发中。";
+        }
+        catch (Exception ex)
+        {
+            ActionStatusControl.Text = "导入失败：" + ex.Message;
+        }
+        finally
+        {
+            ImportButtonControl.IsEnabled = true;
+        }
     }
 }

@@ -13,9 +13,4 @@ namespace SVL.Android;
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode)]
 public sealed class MainActivity : AvaloniaMainActivity<MobileApp>
 {
-    protected override void OnResume()
-    {
-        base.OnResume();
-        MobileApp.RefreshRuntimeStatus();
-    }
 }

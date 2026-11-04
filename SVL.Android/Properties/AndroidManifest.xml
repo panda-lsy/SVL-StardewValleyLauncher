@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
-  <!-- Android 11+ 只查询明确接入的运行器，不枚举设备上的其他应用。 -->
-  <queries>
-    <package android:name="com.game.cinderbox" />
-  </queries>
   <application android:label="Stardew Valley Launcher" android:icon="@drawable/icon" android:allowBackup="false" />
 </manifest>

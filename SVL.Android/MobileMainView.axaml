@@ -14,14 +14,12 @@
 
       <Border Background="#FAF7EE" BorderBrush="#D4C4A8" BorderThickness="1" CornerRadius="12" Padding="18">
         <StackPanel Spacing="12">
-          <TextBlock Text="在 Android 启动游戏" FontSize="21" Foreground="#3A2B22" TextWrapping="Wrap" />
-          <TextBlock Text="通过 Cinderbox 运行你拥有的 PC 版星露谷物语。可在运行器中导入游戏压缩包，或使用其 Steam 下载功能。" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
+          <TextBlock Text="导入游戏文件" FontSize="21" Foreground="#3A2B22" TextWrapping="Wrap" />
+          <TextBlock Text="选择包含正版 PC 版星露谷物语文件的 ZIP，SVL 将复制并检查文件，不会修改原压缩包。" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
           <Border Background="#F3E8CE" CornerRadius="8" Padding="12">
-            <TextBlock x:Name="RuntimeStatus" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
+            <TextBlock x:Name="LibraryStatus" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
           </Border>
-          <Button x:Name="OpenRunnerButton" Content="打开 Cinderbox" Background="#C66D3F" Foreground="White" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-          <Button x:Name="ReleaseButton" Content="查看 Cinderbox 下载页" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
-          <Button x:Name="GuideButton" Content="查看安装与使用说明" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+          <Button x:Name="ImportButton" Content="选择游戏 ZIP" Background="#C66D3F" Foreground="White" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
           <TextBlock x:Name="ActionStatus" FontSize="13" Foreground="#8B5A3A" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
@@ -29,8 +27,8 @@
       <Border Background="#FAF7EE" BorderBrush="#D4C4A8" BorderThickness="1" CornerRadius="12" Padding="18">
         <StackPanel Spacing="8">
           <TextBlock Text="当前支持范围" FontSize="17" Foreground="#3A2B22" />
-          <TextBlock Text="SVL 可检测并打开已安装的 Cinderbox。Steam 登录、下载、游戏导入及启动由 Cinderbox 完成。" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
-          <TextBlock Text="SVL 内置 Steam 下载、Mod 管理和整合包功能仍在适配中。" FontSize="14" Foreground="#806C59" TextWrapping="Wrap" />
+          <TextBlock Text="当前可导入 PC 版游戏并检查关键文件，文件保存在 SVL 的独立空间。" FontSize="14" Foreground="#5C493A" TextWrapping="Wrap" />
+          <TextBlock Text="独立游戏运行环境、Steam 下载和 Mod 管理仍在开发中；此版本暂不能启动游戏。" FontSize="14" Foreground="#806C59" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
     </StackPanel>
