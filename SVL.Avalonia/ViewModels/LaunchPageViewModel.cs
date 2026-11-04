@@ -690,7 +690,7 @@ public partial class LaunchPageViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[Launch] 处理游戏退出后的窗口行为失败: {ex.Message}");
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Launch] 处理游戏退出后的窗口行为失败: {ex.Message}");
                 }
                 finally
                 {

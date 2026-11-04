@@ -207,7 +207,7 @@ public sealed partial class SmapiVersionPickerViewModel : ObservableObject
         if (SelectedVersion != null)
         {
             SelectedVersion.TargetPath = SelectedPath;
-            Debug.WriteLine($"[SmapiVersionPicker] 用户选择安装 SMAPI {SelectedVersion.Version} ({SelectedVersion.Source}) 到 {SelectedPath}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiVersionPicker] 用户选择安装 SMAPI {SelectedVersion.Version} ({SelectedVersion.Source}) 到 {SelectedPath}");
             RequestClose?.Invoke(SelectedVersion);
         }
     }
@@ -241,7 +241,7 @@ public sealed partial class SmapiVersionPickerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[SmapiVersionPicker] 加载 SMAPI 版本失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiVersionPicker] 加载 SMAPI 版本失败: {ex.Message}");
             LoadingText = $"加载失败: {ex.Message}";
             success = false;
         }
@@ -308,7 +308,7 @@ public sealed partial class SmapiVersionPickerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[SmapiVersionPicker] CurseForge 加载失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiVersionPicker] CurseForge 加载失败: {ex.Message}");
             HasNextPage = false;
             LoadingText = $"CurseForge 加载失败，请切换到 GitHub 源";
             return false;

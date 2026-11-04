@@ -65,17 +65,17 @@ public partial class App : Application
             catch (Exception ex)
             {
                 // 旧配置迁移属于增强功能；文件权限/损坏不应阻止 Avalonia 主界面启动。
-                System.Diagnostics.Debug.WriteLine($"[Migration] 旧配置迁移失败，继续启动: {ex.Message}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Migration] 旧配置迁移失败，继续启动: {ex.Message}");
                 migration = new LegacyConfigurationMigrationResult();
             }
             if (migration.SettingsChanged || migration.ImportedInstanceCount > 0)
             {
-                System.Diagnostics.Debug.WriteLine(
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                     $"[Migration] 已迁移旧 WPF 配置：设置 {migration.ImportedSettingsCount} 项，实例 {migration.ImportedInstanceCount} 个");
             }
             foreach (var migrationError in migration.Errors)
             {
-                System.Diagnostics.Debug.WriteLine($"[Migration] {migrationError}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Migration] {migrationError}");
             }
 
             var settings = settingsStore.Load();
@@ -103,6 +103,13 @@ public partial class App : Application
             {
                 DataContext = mainVm
             };
+
+            mainVm.SettingsPage.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(SettingsPageViewModel.DebugMode))
+                    SetDebugConsoleEnabled(mainWindow, mainVm.SettingsPage.DebugMode);
+            };
+            mainVm.SettingsPage.DebugConsoleRequested += () => OpenDebugConsole(mainWindow);
 
             s_trayIconService = new TrayIconService(
                 () => ShowMainWindow(mainWindow),
@@ -270,9 +277,26 @@ public partial class App : Application
         };
 
         s_debugConsoleWindow = window;
-        window.Closed += (_, _) => s_debugConsoleWindow = null;
+        window.Closed += (_, _) =>
+        {
+            (window.DataContext as IDisposable)?.Dispose();
+            s_debugConsoleWindow = null;
+        };
         window.Show();
-        DebugConsoleService.Instance.Append("Debug console auto-opened at startup.", DebugLogLevel.Info);
+        DebugConsoleService.Instance.Append("调试窗口已打开。", DebugLogLevel.Info);
+    }
+
+    private static void SetDebugConsoleEnabled(Window owner, bool enabled)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => SetDebugConsoleEnabled(owner, enabled));
+            return;
+        }
+
+        DebugTraceBootstrapper.SetEnabled(enabled);
+        if (enabled) OpenDebugConsole(owner);
+        else s_debugConsoleWindow?.Close();
     }
 
     private static void ShowMainWindow(MainWindow mainWindow)
@@ -320,6 +344,8 @@ public partial class App : Application
 
     private static void OnMainWindowClosed(IClassicDesktopStyleApplicationLifetime desktop)
     {
+        s_debugConsoleWindow?.Close();
+        DebugTraceBootstrapper.SetEnabled(false);
         if (!s_isExiting)
         {
             s_isExiting = true;

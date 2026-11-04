@@ -84,7 +84,7 @@ internal static class GameCursorService
                 application.Resources[FavoriteCursorResource] = fallback;
             }
             catch { /* 平台无法创建任何指针时保留系统默认值。 */ }
-            Debug.WriteLine($"Unable to load the game cursor; using the system cursor: {exception.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"Unable to load the game cursor; using the system cursor: {exception.Message}");
             return false;
         }
     }

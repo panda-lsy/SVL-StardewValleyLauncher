@@ -631,7 +631,7 @@ public sealed class RemoteCatalogService
     private void LogDebug(string message)
     {
         DebugLogger?.Invoke(message);
-        Debug.WriteLine($"[RemoteCatalogService] {message}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[RemoteCatalogService] {message}");
     }
 
     public async Task<List<ModSearchResultItem>> SearchSmapiAsync(string keyword, string source = "全部")
@@ -4454,7 +4454,7 @@ public sealed class RemoteCatalogService
                 cancellationToken: cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                Debug.WriteLine($"[RemoteCatalogService] CurseForge SMAPI files request failed: {(int)response.StatusCode}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[RemoteCatalogService] CurseForge SMAPI files request failed: {(int)response.StatusCode}");
                 return result;
             }
 
@@ -4517,7 +4517,7 @@ public sealed class RemoteCatalogService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[RemoteCatalogService] GetSmapiVersionEntriesFromCurseForgeAsync failed: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[RemoteCatalogService] GetSmapiVersionEntriesFromCurseForgeAsync failed: {ex.Message}");
         }
 
         return result
@@ -4568,7 +4568,7 @@ public sealed class RemoteCatalogService
         // 时在 CurseForge 目录请求上等待很久，最后才得到同一个官方稳定版本。
         if (page <= 1)
         {
-            Debug.WriteLine("[RemoteCatalogService] GitHub returned no usable SMAPI release; trying official latest");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[RemoteCatalogService] GitHub returned no usable SMAPI release; trying official latest");
             var latest = await GetLatestSmapiVersionEntryAsync(cancellationToken);
             if (latest != null)
             {
@@ -4576,7 +4576,7 @@ public sealed class RemoteCatalogService
             }
         }
 
-        Debug.WriteLine("[RemoteCatalogService] Official latest unavailable; trying CurseForge fallback");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[RemoteCatalogService] Official latest unavailable; trying CurseForge fallback");
         var curseforgeResult = await GetSmapiVersionEntriesFromCurseForgeAsync(page, perPage, cancellationToken);
         if (curseforgeResult.Count > 0 || page > 1)
         {
@@ -4888,7 +4888,7 @@ public sealed class RemoteCatalogService
                 cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                Debug.WriteLine($"[RemoteCatalogService] GitHub SMAPI releases request failed: {(int)response.StatusCode}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[RemoteCatalogService] GitHub SMAPI releases request failed: {(int)response.StatusCode}");
                 return result;
             }
 
@@ -4896,7 +4896,7 @@ public sealed class RemoteCatalogService
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             if (doc.RootElement.ValueKind != JsonValueKind.Array)
             {
-                Debug.WriteLine("[RemoteCatalogService] GitHub SMAPI releases response was not an array");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[RemoteCatalogService] GitHub SMAPI releases response was not an array");
                 return result;
             }
 
@@ -4937,7 +4937,7 @@ public sealed class RemoteCatalogService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[RemoteCatalogService] GitHub SMAPI releases request failed: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[RemoteCatalogService] GitHub SMAPI releases request failed: {ex.Message}");
         }
 
         return result;
@@ -4998,7 +4998,7 @@ public sealed class RemoteCatalogService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[RemoteCatalogService] GitHub latest SMAPI request failed: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[RemoteCatalogService] GitHub latest SMAPI request failed: {ex.Message}");
             return null;
         }
     }

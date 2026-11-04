@@ -362,7 +362,9 @@
               <CheckBox Content="{Binding ShowNotificationsLabelText}" IsChecked="{Binding ShowNotifications}" />
               <CheckBox Content="{Binding ShowModTypeFilterNoticeLabelText}" IsChecked="{Binding ShowModTypeFilterDisabledNotice}" />
               <CheckBox Content="{Binding DebugModeLabelText}" IsChecked="{Binding DebugMode}" />
-              <TextBlock Text="调试模式在重启启动器后生效。" Opacity="0.68" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding DebugModeDescriptionText}" Opacity="0.68" TextWrapping="Wrap" />
+              <Button Content="{Binding OpenDebugConsoleText}" Command="{Binding OpenDebugConsoleCommand}"
+                      IsVisible="{Binding DebugMode}" HorizontalAlignment="Left" />
               <CheckBox Content="{Binding MinimizeOnStartupLabelText}" IsChecked="{Binding MinimizeToTrayOnStartup}" />
               <CheckBox Content="{Binding MinimizeOnCloseLabelText}" IsChecked="{Binding MinimizeToTrayOnClose}" />
             </StackPanel>

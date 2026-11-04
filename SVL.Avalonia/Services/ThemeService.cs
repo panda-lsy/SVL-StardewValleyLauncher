@@ -104,12 +104,12 @@ public static class ThemeService
         var resources = Application.Current?.Resources;
         if (resources == null)
         {
-            System.Diagnostics.Debug.WriteLine("[ThemeService] ERROR: Application.Current.Resources is NULL");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[ThemeService] ERROR: Application.Current.Resources is NULL");
             return;
         }
 
         ApplyThemeResources(theme.Colors);
-        System.Diagnostics.Debug.WriteLine($"[ThemeService] Applied theme '{theme.DisplayName}' ({theme.Colors.Count} resources)");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ThemeService] Applied theme '{theme.DisplayName}' ({theme.Colors.Count} resources)");
 
         _currentStyle = theme.Style;
         if (theme.Scheme.HasValue) _currentScheme = theme.Scheme.Value;
@@ -179,7 +179,7 @@ public static class ThemeService
 
         ApplyWindowBackgroundTransparency();
 
-        System.Diagnostics.Debug.WriteLine($"[ThemeService] Dark mode: {dark}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ThemeService] Dark mode: {dark}");
 
         ThemeChanged?.Invoke();
     }
@@ -820,18 +820,18 @@ public static class ThemeService
             {
                 var val = dict[key];
                 if (val is SolidColorBrush brush)
-                    System.Diagnostics.Debug.WriteLine($"[ThemeService]   {key} = #{brush.Color.A:X2}{brush.Color.R:X2}{brush.Color.G:X2}{brush.Color.B:X2}");
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ThemeService]   {key} = #{brush.Color.A:X2}{brush.Color.R:X2}{brush.Color.G:X2}{brush.Color.B:X2}");
                 else
-                    System.Diagnostics.Debug.WriteLine($"[ThemeService]   {key} = {val?.GetType().Name}");
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ThemeService]   {key} = {val?.GetType().Name}");
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"[ThemeService]   {key} = NOT FOUND");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ThemeService]   {key} = NOT FOUND");
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[ThemeService]   {key} = ERROR: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ThemeService]   {key} = ERROR: {ex.Message}");
         }
     }
 

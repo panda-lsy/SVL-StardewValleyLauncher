@@ -79,6 +79,7 @@ public sealed class LauncherUpdateService
         if (mode == LauncherRuntimeMode.Unknown) return null;
 
         return release.Assets
+            .Where(asset => !IsLegacyDebugAsset(asset.Name))
             .Where(asset => asset.Name.Contains("requires_dotnet", StringComparison.OrdinalIgnoreCase) ==
                             (mode == LauncherRuntimeMode.FrameworkDependent))
             .OrderBy(asset => isWindows && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
@@ -202,7 +203,16 @@ public sealed class LauncherUpdateService
             var fallbackApi = preferGitee ? GitHubApiUrl : GiteeApiUrl;
             var fallbackSource = preferGitee ? "GitHub" : "Gitee";
 
-            var release = await FetchLatestReleaseAsync(primaryApi, primarySource, includePrerelease, cancellationToken);
+            LauncherReleaseInfo? release;
+            try
+            {
+                release = await FetchLatestReleaseAsync(primaryApi, primarySource, includePrerelease, cancellationToken);
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                // 首选源离线或限流时仍应尝试另一个源。
+                release = null;
+            }
             var source = primarySource;
 
             if (release == null)
@@ -298,6 +308,13 @@ public sealed class LauncherUpdateService
                 PublishedAt = ReadDateTime(releaseElement, "published_at", "created_at"),
                 IsPrerelease = isPrerelease
             };
+
+            if (string.IsNullOrWhiteSpace(info.HtmlUrl))
+            {
+                var repository = string.Equals(source, "Gitee", StringComparison.Ordinal) ? GiteeRepo : GitHubRepo;
+                var host = string.Equals(source, "Gitee", StringComparison.Ordinal) ? "gitee.com" : "github.com";
+                info.HtmlUrl = $"https://{host}/{repository}/releases/tag/{Uri.EscapeDataString(tagName)}";
+            }
 
             string? updateTxtUrl = null;
             if (TryGetProperty(releaseElement, out var assetsElement, "assets") && assetsElement.ValueKind == JsonValueKind.Array)
@@ -428,29 +445,52 @@ public sealed class LauncherUpdateService
         return new Version(numbers[0], numbers[1], numbers[2], numbers[3]);
     }
 
-    private static bool IsCompatibleAsset(string assetName)
-    {
-        var buildToken = IsDebugBuild ? "Debug" : "Release";
-        if (!assetName.Contains(buildToken, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
+    private static bool IsCompatibleAsset(string assetName) => IsCompatibleAsset(
+        assetName,
+        OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux",
+        RuntimeInformation.ProcessArchitecture.ToString());
 
-        var arch = RuntimeInformation.ProcessArchitecture.ToString();
+    private static bool IsLegacyDebugAsset(string name) =>
+        name.Contains("debug", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("diagnostic", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsCompatibleAsset(string assetName, string platform, string arch)
+    {
+        if (string.IsNullOrWhiteSpace(assetName) || IsLegacyDebugAsset(assetName)) return false;
+
+        var hasReleaseMarker = assetName.Contains("release", StringComparison.OrdinalIgnoreCase);
+        var isWindowsLiteExe = platform.Equals("windows", StringComparison.OrdinalIgnoreCase) &&
+            assetName.StartsWith("SVL_v", StringComparison.OrdinalIgnoreCase) &&
+            assetName.Contains("Windows_", StringComparison.OrdinalIgnoreCase) &&
+            assetName.Contains("requires_dotnet", StringComparison.OrdinalIgnoreCase) &&
+            assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        var isLinuxDeb = platform.Equals("linux", StringComparison.OrdinalIgnoreCase) &&
+            assetName.StartsWith("svl-launcher_", StringComparison.OrdinalIgnoreCase) &&
+            assetName.EndsWith(".deb", StringComparison.OrdinalIgnoreCase);
+        if (!hasReleaseMarker && !isWindowsLiteExe && !isLinuxDeb) return false;
+
         foreach (var knownArch in new[] { "x64", "x86", "arm64", "arm32" })
         {
             if (assetName.Contains(knownArch, StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(arch, knownArch, StringComparison.OrdinalIgnoreCase)) return false;
         }
 
-        if (OperatingSystem.IsWindows())
+        if (assetName.Contains("amd64", StringComparison.OrdinalIgnoreCase) &&
+            !arch.Equals("x64", StringComparison.OrdinalIgnoreCase)) return false;
+        if (assetName.Contains("aarch64", StringComparison.OrdinalIgnoreCase) &&
+            !arch.Equals("arm64", StringComparison.OrdinalIgnoreCase)) return false;
+
+        if (platform.Equals("windows", StringComparison.OrdinalIgnoreCase))
         {
+            // 旧 WPF 升级 EXE 未在文件名标记架构，实际只提供 x64。
+            if (assetName.StartsWith("SVL.Desktop_", StringComparison.OrdinalIgnoreCase) &&
+                !arch.Equals("x64", StringComparison.OrdinalIgnoreCase)) return false;
             return (assetName.Contains("Windows_", StringComparison.OrdinalIgnoreCase) &&
                     assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) ||
                    assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
         }
 
-        if (OperatingSystem.IsMacOS())
+        if (platform.Equals("macos", StringComparison.OrdinalIgnoreCase))
         {
             return (assetName.Contains("osx_", StringComparison.OrdinalIgnoreCase) ||
                     assetName.Contains("macOS_", StringComparison.OrdinalIgnoreCase)) &&
@@ -458,22 +498,12 @@ public sealed class LauncherUpdateService
                     assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
         }
 
-        return (assetName.Contains("linux_", StringComparison.OrdinalIgnoreCase) ||
+        return isLinuxDeb || ((assetName.Contains("linux_", StringComparison.OrdinalIgnoreCase) ||
                 assetName.Contains("linux-", StringComparison.OrdinalIgnoreCase)) &&
                (assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
-                assetName.EndsWith(".deb", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool IsDebugBuild
-    {
-        get
-        {
-#if DEBUG
-            return true;
-#else
-            return false;
-#endif
-        }
+                assetName.EndsWith(".deb", StringComparison.OrdinalIgnoreCase) ||
+                assetName.EndsWith($"_Linux_{arch}", StringComparison.OrdinalIgnoreCase) ||
+                assetName.EndsWith($"_Linux_{arch}_requires_dotnet10", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static bool TryGetProperty(JsonElement element, out JsonElement value, params string[] keys)

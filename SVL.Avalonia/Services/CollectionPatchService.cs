@@ -111,13 +111,13 @@ public static class CollectionPatchService
                 var newData = ApplyBsdiffPatch(oldData, patchData);
                 WriteFileAtomically(sourcePath, newData);
                 applied++;
-                System.Diagnostics.Debug.WriteLine($"[CollectionPatch] 已应用: {modName}/{sourceRelativePath}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[CollectionPatch] 已应用: {modName}/{sourceRelativePath}");
             }
             catch (Exception ex)
             {
                 skipped++;
                 reasons.Add($"{sourceRelativePath}: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[CollectionPatch] 应用失败: {modName}/{sourceRelativePath}: {ex.Message}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[CollectionPatch] 应用失败: {modName}/{sourceRelativePath}: {ex.Message}");
             }
         }
 

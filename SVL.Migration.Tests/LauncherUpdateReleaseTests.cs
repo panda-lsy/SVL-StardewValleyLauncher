@@ -74,6 +74,41 @@ public sealed class LauncherUpdateReleaseTests
         }, CancellationToken.None);
     }
 
+    [TestMethod]
+    public async Task UnavailablePrimarySource_ShouldUseGiteeReleaseAndConstructItsPageUrl()
+    {
+        var service = new LauncherUpdateService(new HttpClient(new FallbackReleaseHandler()), null, LauncherRuntimeMode.FrameworkDependent);
+        var result = await service.CheckForUpdateAsync(includePrerelease: true, preferGitee: false);
+
+        Assert.IsTrue(result.Success, result.ErrorMessage);
+        Assert.IsTrue(result.HasUpdate);
+        Assert.AreEqual("Gitee", result.Source);
+        Assert.AreEqual("https://gitee.com/mc_shengxia/SVL-StardewValleyLauncher/releases/tag/v9999.0.0.0", result.ReleaseInfo.HtmlUrl);
+        Assert.IsNotNull(service.SelectPreferredAsset(result.ReleaseInfo));
+    }
+
+    private sealed class FallbackReleaseHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.Host.Contains("github", StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+
+            var platform = OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+            var arch = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+            var extension = OperatingSystem.IsMacOS() ? "dmg" : "zip";
+            var data = new[] { new
+            {
+                tag_name = "v9999.0.0.0", prerelease = true,
+                assets = new[] { new { name = $"SVL_v9999.0.0.0_release_{platform}_{arch}_requires_dotnet10.{extension}", browser_download_url = "https://example.test/asset" } }
+            } };
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
     private sealed class ReleaseHandler(string updateText) : HttpMessageHandler
     {
         public int UpdateLogRequests { get; private set; }
@@ -94,11 +129,7 @@ public sealed class LauncherUpdateReleaseTests
             var platform = OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux";
             var arch = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
             var extension = OperatingSystem.IsMacOS() ? "dmg" : "zip";
-#if DEBUG
-            const string configuration = "Debug";
-#else
             const string configuration = "Release";
-#endif
             var releases = new[]
             {
                 new

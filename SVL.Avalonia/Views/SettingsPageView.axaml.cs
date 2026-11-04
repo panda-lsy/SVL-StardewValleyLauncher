@@ -25,7 +25,7 @@ public partial class SettingsPageView : UserControl
         if (TryResolveSettingsDataContext(parentDataContext, out var directResolved))
         {
             DataContext = directResolved;
-            Debug.WriteLine("[SettingsPageView] DataContext resolved from direct parent.");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[SettingsPageView] DataContext resolved from direct parent.");
             return;
         }
 
@@ -35,12 +35,12 @@ public partial class SettingsPageView : UserControl
             if (TryResolveSettingsDataContext(ancestor.DataContext, out var resolved))
             {
                 DataContext = resolved;
-                Debug.WriteLine("[SettingsPageView] DataContext resolved from visual ancestors.");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[SettingsPageView] DataContext resolved from visual ancestors.");
                 return;
             }
         }
 
-        Debug.WriteLine("[SettingsPageView] Unable to resolve SettingsPageViewModel DataContext.");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[SettingsPageView] Unable to resolve SettingsPageViewModel DataContext.");
     }
 
     private static bool TryResolveSettingsDataContext(object? candidate, out SettingsPageViewModel? resolved)

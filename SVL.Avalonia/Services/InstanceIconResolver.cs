@@ -285,14 +285,14 @@ public static class InstanceIconResolver
         {
             if (string.IsNullOrWhiteSpace(instancePath) || !Directory.Exists(instancePath))
             {
-                System.Diagnostics.Debug.WriteLine($"[IconResolver] TryWriteDefaultSmapiIcon 跳过: instancePath 为空或不存在, path={instancePath}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[IconResolver] TryWriteDefaultSmapiIcon 跳过: instancePath 为空或不存在, path={instancePath}");
                 return false;
             }
 
             var iconStorageDir = ResolveStorageDirectory(instancePath);
             if (string.IsNullOrWhiteSpace(iconStorageDir))
             {
-                System.Diagnostics.Debug.WriteLine($"[IconResolver] TryWriteDefaultSmapiIcon 跳过: iconStorageDir 为空, path={instancePath}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[IconResolver] TryWriteDefaultSmapiIcon 跳过: iconStorageDir 为空, path={instancePath}");
                 return false;
             }
 
@@ -324,7 +324,7 @@ public static class InstanceIconResolver
                 // 专属图标生成，否则安装成功后仍会显示 Vanilla。
                 if (IsBundledIcon(existingIconPath, "Vanilla.png"))
                 {
-                    System.Diagnostics.Debug.WriteLine(
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                         $"[IconResolver] TryWriteDefaultSmapiIcon 忽略内置 Vanilla 预设: {existingIconPath}");
                     existingIconPath = string.Empty;
                 }
@@ -339,13 +339,13 @@ public static class InstanceIconResolver
                     // 这不是用户自定义图标，不能把它迁移成 SMAPI 图标，否则安装完成后
                     // 仍会显示 Vanilla。真正的用户图标仍然迁移并保留。
                     File.Copy(existingIconPath, targetPath, true);
-                    System.Diagnostics.Debug.WriteLine(
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                         $"[IconResolver] TryWriteDefaultSmapiIcon 已迁移旧版自定义图标: {existingIconPath} -> {targetPath}");
                 }
 
                 if (!string.IsNullOrWhiteSpace(existingIconPath))
                 {
-                    System.Diagnostics.Debug.WriteLine(
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                         $"[IconResolver] TryWriteDefaultSmapiIcon 跳过: 已有自定义图标, path={instancePath}, resolved={ResolveIconPath(instancePath, true)}");
                     return File.Exists(targetPath) || File.Exists(existingIconPath);
                 }
@@ -369,7 +369,7 @@ public static class InstanceIconResolver
             if (!File.Exists(targetPath) || new FileInfo(targetPath).Length <= 0)
             {
                 TryDeleteGeneratedSmapiIconMarker(instancePath);
-                System.Diagnostics.Debug.WriteLine(
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                     $"[IconResolver] TryWriteDefaultSmapiIcon 校验失败: target={targetPath}, exists={File.Exists(targetPath)}");
                 return false;
             }
@@ -382,14 +382,14 @@ public static class InstanceIconResolver
                                  Path.GetFullPath(resolvedPath),
                                  Path.GetFullPath(targetPath),
                                  StringComparison.OrdinalIgnoreCase);
-            System.Diagnostics.Debug.WriteLine(
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                 $"[IconResolver] TryWriteDefaultSmapiIcon {(isResolved ? "成功" : "校验失败")}: " +
                 $"target={targetPath}, exists={File.Exists(targetPath)}, resolved={resolvedPath}");
             return isResolved;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[IconResolver] TryWriteDefaultSmapiIcon 异常: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[IconResolver] TryWriteDefaultSmapiIcon 异常: {ex.Message}");
             return false;
         }
     }

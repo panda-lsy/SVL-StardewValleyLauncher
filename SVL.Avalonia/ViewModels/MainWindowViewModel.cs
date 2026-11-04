@@ -928,7 +928,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception ex)
         {
             // 外部链接处理失败不应影响启动器运行。
-            System.Diagnostics.Debug.WriteLine($"[MainWindowViewModel] 外部 NXM 链接处理失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[MainWindowViewModel] 外部 NXM 链接处理失败: {ex.Message}");
         }
 
         BringToFrontRequested?.Invoke();

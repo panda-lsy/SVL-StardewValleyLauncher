@@ -44,6 +44,35 @@ public sealed class LauncherUpdateSafetyTests
         Assert.AreEqual(LauncherRuntimeMode.Unknown, LauncherUpdateService.ParseRuntimeMode("other"));
     }
 
+    [DataTestMethod]
+    [DataRow("SVL.Desktop_v1.2.1_Release.exe", "windows", "X64", true)]
+    [DataRow("SVL.Desktop_v1.2.1_Debug.exe", "windows", "X64", false)]
+    [DataRow("SVL_v1.2.1_Windows_x64_requires_dotnet10.exe", "windows", "X64", true)]
+    [DataRow("SVL_v1.2.1_Windows_x64_requires_dotnet10_diagnostic.exe", "windows", "X64", false)]
+    [DataRow("SVL_v1.2.1_release_macOS_arm64.dmg", "macos", "Arm64", true)]
+    [DataRow("SVL_v1.2.1_release_macOS_arm64.dmg", "macos", "X64", false)]
+    [DataRow("SVL_v1.2.1_debug_macOS_arm64.dmg", "macos", "Arm64", false)]
+    [DataRow("SVL_v1.2.1_release_Linux_x64", "linux", "X64", true)]
+    [DataRow("svl-launcher_1.2.1_amd64_requires_dotnet10.deb", "linux", "X64", true)]
+    [DataRow("svl-launcher_1.2.1_amd64.deb", "linux", "Arm64", false)]
+    [DataRow("SVL_v1.2.1_debug_Linux_x64.zip", "linux", "X64", false)]
+    public void UpdateAssets_ShouldAlwaysSelectReleaseForTheCurrentPlatform(string name, string platform, string arch, bool expected)
+    {
+        Assert.AreEqual(expected, LauncherUpdateService.IsCompatibleAsset(name, platform, arch));
+    }
+
+    [TestMethod]
+    public void PreferredAsset_ShouldNeverSelectLegacyDebugCompatibilityFiles()
+    {
+        var release = new LauncherReleaseInfo();
+        release.Assets.Add(new LauncherReleaseAsset { Name = "SVL.Desktop_v1.2.1_Debug.exe" });
+        release.Assets.Add(new LauncherReleaseAsset { Name = "SVL.Desktop_v1.2.1_Release.exe" });
+        release.Assets.Add(new LauncherReleaseAsset { Name = "SVL_v1.2.1_debug_Windows_x64_requires_dotnet10.zip" });
+        release.Assets.Add(new LauncherReleaseAsset { Name = "SVL_v1.2.1_Windows_x64_requires_dotnet10.exe" });
+        Assert.AreEqual("SVL.Desktop_v1.2.1_Release.exe", LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.SelfContained, true)?.Name);
+        Assert.AreEqual("SVL_v1.2.1_Windows_x64_requires_dotnet10.exe", LauncherUpdateService.SelectPreferredAsset(release, LauncherRuntimeMode.FrameworkDependent, true)?.Name);
+    }
+
     [TestMethod]
     public void Replacement_ShouldKeepBackupAndRestoreWhenNewVersionCannotStart()
     {

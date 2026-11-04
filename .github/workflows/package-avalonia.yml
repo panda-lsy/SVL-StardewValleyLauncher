@@ -40,6 +40,9 @@ jobs:
       - name: Run tests
         run: dotnet test SVL.Migration.Tests/SVL.Migration.Tests.csproj --configuration Debug --no-restore
 
+      - name: Verify Release diagnostics and update selection
+        run: dotnet test SVL.Migration.Tests/SVL.Migration.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~RuntimeDebugLogTests|FullyQualifiedName~LauncherUpdateReleaseTests|FullyQualifiedName~LauncherUpdateSafetyTests|FullyQualifiedName~SettingsPersistenceTests"
+
   package:
     name: Package Windows x64
     needs: test
@@ -126,7 +129,6 @@ jobs:
           path: artifacts/bundled/SVL_v*_release_Windows_x64.zip
           if-no-files-found: error
           retention-days: 14
-
       - name: Upload WPF upgrade executable
         uses: actions/upload-artifact@v7
         with:
@@ -139,7 +141,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: SVL-Avalonia-win-x64-requires-dotnet10
-          path: artifacts/lightweight/*_requires_dotnet10.zip
+          path: |
+            artifacts/lightweight/*_requires_dotnet10.zip
+            artifacts/lightweight/standalone/*_requires_dotnet10.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -245,6 +249,7 @@ jobs:
           path: |
             artifacts/SVL_v*_release_Linux_x64.zip
             artifacts/svl-launcher_*_amd64.deb
+            artifacts/standalone/SVL_v*_release_Linux_x64
           if-no-files-found: error
           retention-days: 14
 
@@ -255,6 +260,7 @@ jobs:
           path: |
             artifacts/lightweight/*_requires_dotnet10.zip
             artifacts/lightweight/*_requires_dotnet10.deb
+            artifacts/lightweight/standalone/*_requires_dotnet10
           if-no-files-found: error
           retention-days: 14
 

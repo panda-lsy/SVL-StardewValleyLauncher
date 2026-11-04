@@ -160,7 +160,7 @@ public static class ModpackTypeDetector
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[ModpackTypeDetector] 解析 manifest.json 失败: {ex.Message}");
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModpackTypeDetector] 解析 manifest.json 失败: {ex.Message}");
                 }
 
                 return result;
@@ -175,7 +175,7 @@ public static class ModpackTypeDetector
         {
             result.Type = ModpackType.Unknown;
             result.ErrorMessage = $"检测失败: {ex.Message}";
-            Debug.WriteLine($"[ModpackTypeDetector] 检测整合包类型失败: {filePath} - {ex}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModpackTypeDetector] 检测整合包类型失败: {filePath} - {ex}");
             return result;
         }
     }
@@ -222,7 +222,7 @@ public static class ModpackTypeDetector
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ModpackTypeDetector] 解析 collection.json 失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModpackTypeDetector] 解析 collection.json 失败: {ex.Message}");
         }
     }
 
@@ -267,7 +267,7 @@ public static class ModpackTypeDetector
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ModpackTypeDetector] 解析 modpack.json 失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModpackTypeDetector] 解析 modpack.json 失败: {ex.Message}");
             result.ModpackName ??= Path.GetFileNameWithoutExtension(result.FilePath);
         }
     }
@@ -331,7 +331,7 @@ public static class ModpackTypeDetector
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ModpackTypeDetector] 解压归档失败: {archivePath} - {ex}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModpackTypeDetector] 解压归档失败: {archivePath} - {ex}");
             CleanupTempDirectory(tempDir);
             return false;
         }
@@ -582,7 +582,7 @@ public static class ModpackTypeDetector
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ModpackTypeDetector] 清理临时目录失败: {tempDir} - {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModpackTypeDetector] 清理临时目录失败: {tempDir} - {ex.Message}");
         }
     }
 
@@ -624,7 +624,7 @@ public static class ModpackTypeDetector
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ModpackTypeDetector] 查找整合包图标失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModpackTypeDetector] 查找整合包图标失败: {ex.Message}");
             return null;
         }
     }

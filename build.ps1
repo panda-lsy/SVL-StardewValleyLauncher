@@ -1,8 +1,8 @@
 ﻿<#
 .SYNOPSIS
-SVL 跨平台打包脚本（Windows/macOS/Linux，Debug/Release 发布）
+SVL 跨平台打包脚本（Windows/macOS/Linux，Release 发布）
 .PARAMETER Config
-Debug | Release | all（默认 all，同时构建 Debug + Release）
+仅生成 Release 发布包；调试窗口在启动器设置中启用。
 .PARAMETER Targets
 windows | linux | macos | all（默认 all）
 .PARAMETER OutputDirectory
@@ -11,11 +11,10 @@ windows | linux | macos | all（默认 all）
 构建需要用户预装对应架构 .NET 10 Runtime 的较小程序包。
 .EXAMPLE
 .\build.ps1 -Config Release -Targets windows
-.\build.ps1 -Config Debug -Targets windows -OutputDirectory $env:TEMP\SVL-Debug
-.\build.ps1 -Config all -Targets all
+.\build.ps1 -Config Release -Targets all
 #>
 param(
-    [string]$Config = "all",
+    [string]$Config = "Release",
     [string]$Targets = "all",
     [string]$OutputDirectory = "",
     [switch]$FrameworkDependent
@@ -76,11 +75,9 @@ $HostOs = if ($IsMacOS) { "macos" } elseif ($IsLinux) { "linux" } else { "window
 function Resolve-ConfigList {
     param([string]$c)
     switch -Regex ($c.ToLowerInvariant()) {
-        '^(all|both)$' { return @("Debug", "Release") }
-        '^debug$' { return @("Debug") }
         '^release$' { return @("Release") }
         default {
-            Write-Host "[error] 无效配置: $c（可选: Debug | Release | all）"
+            Write-Host "[error] 发布包只支持 Release；调试窗口可在启动器设置中启用。"
             exit 1
         }
     }
@@ -172,6 +169,11 @@ function Build-Windows {
     if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
     Compress-Archive -Path (Join-Path $payloadDir "*") -DestinationPath $zipPath -CompressionLevel Optimal -Force
     Write-Host "[ok] $Rid -> $zipPath"
+    if ($FrameworkDependent -and $Rid -eq "win-x64") {
+        $standaloneDir = Join-Path $outBase "standalone"
+        New-Item -ItemType Directory -Path $standaloneDir -Force | Out-Null
+        Copy-Item -LiteralPath $mainExe -Destination (Join-Path $standaloneDir "SVL_v${PackageVersion}_Windows_${archName}_requires_dotnet10.exe") -Force
+    }
 }
 
 function Build-Linux {
@@ -232,9 +234,13 @@ exec "$script_dir/__APPHOST__" "$@"
     Compress-Archive -Path (Join-Path $payloadDir "*") -DestinationPath $zipPath -CompressionLevel Optimal -Force
     Write-Host "[ok] $Rid -> $zipPath"
 
+    $standaloneDir = Join-Path $outBase "standalone"
+    New-Item -ItemType Directory -Path $standaloneDir -Force | Out-Null
+    Copy-Item -LiteralPath $mainApp -Destination (Join-Path $standaloneDir $artifactName) -Force
+
     if ($HostOs -eq "linux" -and $Rid -eq "linux-x64") {
         if (Get-Command dpkg-deb -ErrorAction SilentlyContinue) {
-            $debVersion = if ($PublishConfig -eq "Debug") { "${PackageVersion}~debug" } else { $PackageVersion }
+            $debVersion = $PackageVersion
             $debMode = if ($FrameworkDependent) { "framework-dependent" } else { "self-contained" }
             & sh (Join-Path $RootDir "scripts/package-linux-deb.sh") $zipPath $outBase $debVersion $debMode
             if ($LASTEXITCODE -ne 0) { throw "Linux DEB 打包失败" }

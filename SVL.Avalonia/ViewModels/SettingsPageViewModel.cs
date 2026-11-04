@@ -66,6 +66,20 @@ public partial class SettingsPageViewModel : ObservableObject
     private string _debugModeLabelText = "启用调试模式";
 
     [ObservableProperty]
+    private string _debugModeDescriptionText = "启用后立即打开调试窗口，启动时也会自动打开。";
+
+    [ObservableProperty]
+    private string _openDebugConsoleText = "打开调试窗口";
+
+    public event Action? DebugConsoleRequested;
+
+    [RelayCommand]
+    private void OpenDebugConsole()
+    {
+        if (DebugMode) DebugConsoleRequested?.Invoke();
+    }
+
+    [ObservableProperty]
     private string _minimizeOnStartupLabelText = "启动时最小化到托盘";
 
     [ObservableProperty]
@@ -733,6 +747,8 @@ public partial class SettingsPageViewModel : ObservableObject
         ShowNotificationsLabelText = _localizationService.Get("Settings.Other.ShowNotifications");
         ShowModTypeFilterNoticeLabelText = _localizationService.Get("Settings.Other.TypeFilterNotice");
         DebugModeLabelText = _localizationService.Get("Settings.Other.DebugMode");
+        DebugModeDescriptionText = _localizationService.Get("Settings.Other.DebugMode.Description");
+        OpenDebugConsoleText = _localizationService.Get("Settings.Other.DebugMode.Open");
         MinimizeOnStartupLabelText = _localizationService.Get("Settings.Other.MinimizeOnStartup");
         MinimizeOnCloseLabelText = _localizationService.Get("Settings.Other.MinimizeOnClose");
         ThemeModeLabelText = _localizationService.Get("Settings.ThemeMode");
@@ -870,7 +886,7 @@ public partial class SettingsPageViewModel : ObservableObject
 
     partial void OnSelectedThemeStyleChanged(string value)
     {
-        System.Diagnostics.Debug.WriteLine($"[Settings] Theme style changed to: {value}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Settings] Theme style changed to: {value}");
         ApplySelectedTheme();
         StatusMessage = $"配色方案切换为：{value}（已自动保存）";
         ScheduleAutoSave();
@@ -884,17 +900,17 @@ public partial class SettingsPageViewModel : ObservableObject
     private void ApplySelectedTheme()
     {
         var themes = ThemeService.GetAvailableThemes();
-        System.Diagnostics.Debug.WriteLine($"[Settings] Looking for theme: '{SelectedThemeStyle}' among {themes.Count} themes");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Settings] Looking for theme: '{SelectedThemeStyle}' among {themes.Count} themes");
         foreach (var theme in themes)
         {
             if (string.Equals(theme.DisplayName, SelectedThemeStyle, StringComparison.Ordinal))
             {
-                System.Diagnostics.Debug.WriteLine($"[Settings] Match found! Applying '{theme.DisplayName}'...");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Settings] Match found! Applying '{theme.DisplayName}'...");
                 ThemeService.ApplyTheme(theme);
                 return;
             }
         }
-        System.Diagnostics.Debug.WriteLine($"[Settings] WARNING: No matching theme for '{SelectedThemeStyle}'");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Settings] WARNING: No matching theme for '{SelectedThemeStyle}'");
     }
 
     partial void OnSelectedUiLanguageChanged(string value)
@@ -939,8 +955,8 @@ public partial class SettingsPageViewModel : ObservableObject
     partial void OnDebugModeChanged(bool value)
     {
         StatusMessage = value
-            ? "已启用调试模式，重启后生效（正在自动保存）"
-            : "已禁用调试模式，重启后生效（正在自动保存）";
+            ? "已启用调试模式（正在自动保存）"
+            : "已禁用调试模式（正在自动保存）";
         ScheduleAutoSave();
     }
 
@@ -1505,7 +1521,7 @@ public partial class SettingsPageViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Settings] 自动保存调度失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Settings] 自动保存调度失败: {ex.Message}");
         }
         finally
         {
@@ -1844,7 +1860,7 @@ public partial class SettingsPageViewModel : ObservableObject
         catch (Exception ex)
         {
             UpdateStatusText = $"后台下载更新失败：{ex.Message}";
-            System.Diagnostics.Debug.WriteLine($"[Update] {UpdateStatusText}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Update] {UpdateStatusText}");
         }
     }
 

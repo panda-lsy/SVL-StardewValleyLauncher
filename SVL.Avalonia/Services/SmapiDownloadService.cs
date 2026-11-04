@@ -122,7 +122,7 @@ public sealed class SmapiDownloadService
             }
 
             // 缓存文件损坏，删除后走重新下载流程
-            Debug.WriteLine("[SmapiDownloadService] 缓存文件损坏，删除后重新下载");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[SmapiDownloadService] 缓存文件损坏，删除后重新下载");
             TryDeleteFile(zipPath);
         }
 
@@ -149,7 +149,7 @@ public sealed class SmapiDownloadService
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[SmapiDownloadService] 复制 Nexus 缓存失败: {ex.Message}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiDownloadService] 复制 Nexus 缓存失败: {ex.Message}");
                 TryDeleteFile(zipPath);
             }
         }
@@ -178,7 +178,7 @@ public sealed class SmapiDownloadService
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"[SmapiDownloadService] 归档 NXM 缓存失败: {ex.Message}");
+                        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiDownloadService] 归档 NXM 缓存失败: {ex.Message}");
                     }
                 }
 
@@ -223,7 +223,7 @@ public sealed class SmapiDownloadService
             // 下载完成后校验 zip 完整性，损坏文件删除且不缓存（避免下次命中损坏缓存）
             if (!IsValidSmapiArchive(zipPath))
             {
-                Debug.WriteLine("[SmapiDownloadService] 下载的 zip 文件损坏，已删除");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[SmapiDownloadService] 下载的 zip 文件损坏，已删除");
                 TryDeleteFile(zipPath);
                 return null;
             }
@@ -237,7 +237,7 @@ public sealed class SmapiDownloadService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[SmapiDownloadService] 下载失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiDownloadService] 下载失败: {ex.Message}");
             return null;
         }
     }
@@ -367,7 +367,7 @@ public sealed class SmapiDownloadService
                 {
                     // 回调已匹配但 CDN 解析/下载失败时，让 DownloadZipAsync 继续尝试
                     // 可用的 DownloadUrl，而不是把等待异常直接升级为 UI 崩溃。
-                    Debug.WriteLine($"[SmapiDownloadService] NXM 回调下载失败: {ex.Message}");
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiDownloadService] NXM 回调下载失败: {ex.Message}");
                     return null;
                 }
             }
@@ -493,7 +493,7 @@ public sealed class SmapiDownloadService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[SmapiDownloadService] 复制来源缓存失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiDownloadService] 复制来源缓存失败: {ex.Message}");
         }
 
         TryDeleteFile(destinationPath);
@@ -512,7 +512,7 @@ public sealed class SmapiDownloadService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[SmapiDownloadService] SMAPI 安装包校验失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiDownloadService] SMAPI 安装包校验失败: {ex.Message}");
             return false;
         }
     }
@@ -528,7 +528,7 @@ public sealed class SmapiDownloadService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[SmapiDownloadService] 删除文件失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[SmapiDownloadService] 删除文件失败: {ex.Message}");
         }
     }
 }

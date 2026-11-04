@@ -73,7 +73,7 @@ public sealed class TrayIconService : IDisposable
         catch (Exception ex)
         {
             // 没有桌面托盘实现时（例如 CI/headless）由主窗口正常显示兜底。
-            System.Diagnostics.Debug.WriteLine($"[Tray] 注册系统托盘失败，回退为窗口模式: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Tray] 注册系统托盘失败，回退为窗口模式: {ex.Message}");
             DisposeResources();
             return false;
         }

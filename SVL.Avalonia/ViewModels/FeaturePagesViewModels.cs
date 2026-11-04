@@ -1700,7 +1700,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
         SelectedDownloadOption = string.Empty;
         IsRequiredDependenciesExpanded = true;
 
-        Debug.WriteLine($"[ModDetails] SetResource source={ResourceSource}, id={ResourceIdText}, name={DisplayResourceName}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] SetResource source={ResourceSource}, id={ResourceIdText}, name={DisplayResourceName}");
 
         RaiseResourceHeaderState();
     }
@@ -1735,7 +1735,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
         IsLoadingDetails = true;
         DetailsStatus = "正在加载详情...";
         OnPropertyChanged(nameof(DetailsStatus));
-        Debug.WriteLine($"[ModDetails] LoadDetails start identity={identity}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] LoadDetails start identity={identity}");
 
         try
         {
@@ -1787,7 +1787,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
         {
             FullIconUrl = IconUrl;
         }
-        Debug.WriteLine($"[ModDetails] Icon: IconUrl='{IconUrl}', FullIconUrl='{FullIconUrl}', DisplayIconUrl='{DisplayIconUrl}', HasDisplayIcon={HasDisplayIcon}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] Icon: IconUrl='{IconUrl}', FullIconUrl='{FullIconUrl}', DisplayIconUrl='{DisplayIconUrl}', HasDisplayIcon={HasDisplayIcon}");
         _currentResourceId = identity.ResourceId <= 0 ? _currentResourceId : identity.ResourceId.ToString();
         _currentSourceToken = identity.Source switch
         {
@@ -1885,7 +1885,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
         }
         IsRequiredDependenciesExpanded = true;
 
-        Debug.WriteLine($"[ModDetails] LoadDetails done source={ResourceSource}, versions={VersionOptions.Count}, downloads={DownloadOptions.Count}, deps={DependencyItems.Count}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] LoadDetails done source={ResourceSource}, versions={VersionOptions.Count}, downloads={DownloadOptions.Count}, deps={DependencyItems.Count}");
 
         RaiseResourceHeaderState();
         }
@@ -1898,7 +1898,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
 
             DetailsStatus = $"详情加载失败: {ex.Message}";
             OnPropertyChanged(nameof(DetailsStatus));
-            Debug.WriteLine($"[ModDetails] LoadDetails failed: {ex}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] LoadDetails failed: {ex}");
         }
         finally
         {
@@ -2363,7 +2363,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
         {
             VersionGroups.Clear();
             GameVersionFilters.Clear();
-            Debug.WriteLine("[ModDetails] RebuildVersionGroups: no versions");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine("[ModDetails] RebuildVersionGroups: no versions");
             return;
         }
 
@@ -2385,7 +2385,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
             }
 
             var key = ClassifyVersionStrategy(version);
-            Debug.WriteLine($"[ModDetails] Version '{version.Substring(0, Math.Min(60, version.Length))}' => {key}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] Version '{version.Substring(0, Math.Min(60, version.Length))}' => {key}");
             if (!grouped.TryGetValue(key, out var bucket))
             {
                 bucket = [];
@@ -2411,7 +2411,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
             });
         }
 
-        Debug.WriteLine($"[ModDetails] RebuildVersionGroups: {VersionOptions.Count} versions => {_allVersionGroups.Count} groups: {string.Join(", ", _allVersionGroups.Select(g => $"{g.GroupTitle}({g.Items.Count})"))}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] RebuildVersionGroups: {VersionOptions.Count} versions => {_allVersionGroups.Count} groups: {string.Join(", ", _allVersionGroups.Select(g => $"{g.GroupTitle}({g.Items.Count})"))}");
         RebuildGameVersionFilters();
         ApplyVersionGroupFilter();
     }
@@ -2562,7 +2562,7 @@ public sealed partial class ModDetailsPageViewModel : FeaturePageViewModelBase
         // 检测 Mod 是否已安装，更新安装按钮文本（安装/升级/回退/重新安装）
         UpdateInstallActionTexts(parsedItems);
 
-        Debug.WriteLine($"[ModDetails] RebuildVersionDownloadGroups selected={SelectedGameVersion}, groups={VersionDownloadGroups.Count}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[ModDetails] RebuildVersionDownloadGroups selected={SelectedGameVersion}, groups={VersionDownloadGroups.Count}");
     }
 
     /// <summary>
@@ -7044,7 +7044,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                     out var rollbackError);
                 if (!rolledBack)
                 {
-                    System.Diagnostics.Debug.WriteLine(
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                         $"[VersionSettings] 恢复备份事务回滚失败: {rollbackError}");
                     Status = string.IsNullOrWhiteSpace(existingBackupPath)
                         ? $"恢复失败，已保留现场目录：{targetName}"
@@ -12811,7 +12811,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 FlushPendingInstanceSettings();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[InstanceSettings] 自动保存失败: {ex.Message}"); }
+        catch (Exception ex) { global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[InstanceSettings] 自动保存失败: {ex.Message}"); }
         finally
         {
             if (ReferenceEquals(_instanceSettingsSaveCts, source)) _instanceSettingsSaveCts = null;
@@ -13114,7 +13114,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
                 instanceName,
                 updateExisting: isUpdate,
                 cancellationToken: installCts.Token,
-                logger: msg => System.Diagnostics.Debug.WriteLine($"[VersionSettings][SMAPI] {msg}"));
+                logger: msg => global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[VersionSettings][SMAPI] {msg}"));
 
             if (installResult.IsSuccess)
             {
@@ -13182,7 +13182,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             }
 
             Status = $"SMAPI {actionText}失败: {ex.Message}";
-            System.Diagnostics.Debug.WriteLine($"[VersionSettings] 更改 SMAPI 版本失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[VersionSettings] 更改 SMAPI 版本失败: {ex.Message}");
         }
         finally
         {
@@ -13522,12 +13522,12 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             Directory.Move(versionRoot, deferredPath);
 
             _ = Task.Run(() => DeleteDeferredVersionDirectory(deferredPath));
-            Debug.WriteLine($"[VersionSettings] 版本目录已移入后台清理队列: {deferredPath}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[VersionSettings] 版本目录已移入后台清理队列: {deferredPath}");
             return true;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[VersionSettings] 无法延后清理版本目录: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[VersionSettings] 无法延后清理版本目录: {ex.Message}");
             return false;
         }
     }
@@ -13563,7 +13563,7 @@ public sealed partial class VersionSettingsPageViewModel : FeaturePageViewModelB
             Thread.Sleep(Math.Min(1000, 150 + attempt * 25));
         }
 
-        Debug.WriteLine($"[VersionSettings] 版本目录仍未能移入回收站: {deferredPath}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[VersionSettings] 版本目录仍未能移入回收站: {deferredPath}");
     }
 
     /// <summary>判断路径是否为 junction 或 symbolic link。</summary>

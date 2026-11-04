@@ -148,8 +148,19 @@ public sealed class SettingsPersistenceTests
                 store.Save(new AppUserSettings { PreferredInstancePath = "preserved-instance" });
                 var viewModel = CreateViewModel(store);
 
+                var debugChanges = 0;
+                var openRequests = 0;
+                viewModel.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(SettingsPageViewModel.DebugMode)) debugChanges++;
+                };
+                viewModel.DebugConsoleRequested += () => openRequests++;
+
                 viewModel.DebugMode = true;
-                StringAssert.Contains(viewModel.StatusMessage, "重启后生效");
+                StringAssert.Contains(viewModel.StatusMessage, "已启用调试模式");
+                Assert.AreEqual(1, debugChanges, "开关应立即通知窗口控制器");
+                viewModel.OpenDebugConsoleCommand.Execute(null);
+                Assert.AreEqual(1, openRequests, "关闭窗口后应能从设置重新打开");
                 await Task.Delay(1400);
                 Assert.IsTrue(store.Load().DebugMode, "调试开关应在防抖后保存");
                 StringAssert.Contains(viewModel.StatusMessage, "已自动保存");

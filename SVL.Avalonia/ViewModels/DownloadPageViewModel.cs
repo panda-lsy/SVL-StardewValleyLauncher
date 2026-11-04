@@ -1624,7 +1624,7 @@ public partial class DownloadPageViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanGoToNextModPage))]
     private async Task GoToNextModPage()
     {
-        System.Diagnostics.Debug.WriteLine($"[Download] GoToNextModPage: CanGo={CanGoToNextModPage}, Page={CurrentModPage}, Total={TotalModPages}");
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Download] GoToNextModPage: CanGo={CanGoToNextModPage}, Page={CurrentModPage}, Total={TotalModPages}");
         if (!CanGoToNextModPage)
         {
             return;
@@ -4542,7 +4542,7 @@ public partial class DownloadPageViewModel : ObservableObject
 
                     TotalModPages = _modHasMore ? CurrentModPage + 1 : CurrentModPage;
                     SetCachedModResults(BuildModCacheKey(queryHint, isHotModsLoad, CurrentModPage), results, _modHasMore);
-                    System.Diagnostics.Debug.WriteLine($"[Download] Mods loaded: page={CurrentModPage}, items={results.Count}, hasMore={_modHasMore}, totalModPages={TotalModPages}, canGoNext={CurrentModPage < TotalModPages}");
+                    global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[Download] Mods loaded: page={CurrentModPage}, items={results.Count}, hasMore={_modHasMore}, totalModPages={TotalModPages}, canGoNext={CurrentModPage < TotalModPages}");
                     break;
 
                 case DownloadCategory.Modpacks:

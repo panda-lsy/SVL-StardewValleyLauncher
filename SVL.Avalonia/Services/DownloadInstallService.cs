@@ -175,7 +175,7 @@ public sealed class DownloadInstallService
                     {
                         // 无法判断该目录是半成品还是已移动的用户原版时，保留它
                         // 供备份页/用户人工处理，不做不可恢复的物理删除。
-                        System.Diagnostics.Debug.WriteLine(
+                        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                             $"[DownloadInstallService] 保留缺少更新链的备份目录: {backupPath}");
                     }
 

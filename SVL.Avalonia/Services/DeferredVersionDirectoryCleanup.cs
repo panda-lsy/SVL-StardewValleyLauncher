@@ -47,7 +47,7 @@ public static class DeferredVersionDirectoryCleanup
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[DeferredCleanup] 扫描版本清理目录失败: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[DeferredCleanup] 扫描版本清理目录失败: {ex.Message}");
             return 0;
         }
     }
@@ -78,16 +78,16 @@ public static class DeferredVersionDirectoryCleanup
             ClearAttributes(path);
             if (!RecycleBinService.TryMoveToRecycleBin(path, out var recycleMessage))
             {
-                Debug.WriteLine($"[DeferredCleanup] 暂时无法将版本目录移入回收站: {path}, {recycleMessage}");
+                global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[DeferredCleanup] 暂时无法将版本目录移入回收站: {path}, {recycleMessage}");
                 return false;
             }
 
-            Debug.WriteLine($"[DeferredCleanup] 已将延后删除版本目录移入回收站: {path}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[DeferredCleanup] 已将延后删除版本目录移入回收站: {path}");
             return true;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[DeferredCleanup] 暂时无法清理 {path}: {ex.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"[DeferredCleanup] 暂时无法清理 {path}: {ex.Message}");
             return false;
         }
     }

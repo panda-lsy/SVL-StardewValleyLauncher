@@ -184,16 +184,35 @@ internal sealed class DebugTraceListener : System.Diagnostics.TraceListener
 
 public static class DebugTraceBootstrapper
 {
-    private static int _initialized;
+    private static readonly object Gate = new();
+    private static DebugTraceListener? s_listener;
 
-    public static void Initialize()
+    public static void Initialize() => SetEnabled(true);
+
+    public static void SetEnabled(bool enabled)
     {
-        if (Interlocked.Exchange(ref _initialized, 1) == 1)
+        lock (Gate)
         {
-            return;
+            if (enabled)
+            {
+                if (s_listener is null)
+                {
+                    System.Diagnostics.Trace.AutoFlush = true;
+                    s_listener = new DebugTraceListener();
+                    System.Diagnostics.Trace.Listeners.Add(s_listener);
+                }
+                SVL.Core.Platform.Diagnostics.RuntimeDebugLog.SetEnabled(true);
+            }
+            else
+            {
+                SVL.Core.Platform.Diagnostics.RuntimeDebugLog.SetEnabled(false);
+                if (s_listener is not null)
+                {
+                    System.Diagnostics.Trace.Listeners.Remove(s_listener);
+                    s_listener.Dispose();
+                    s_listener = null;
+                }
+            }
         }
-
-        System.Diagnostics.Trace.AutoFlush = true;
-        System.Diagnostics.Trace.Listeners.Add(new DebugTraceListener());
     }
 }

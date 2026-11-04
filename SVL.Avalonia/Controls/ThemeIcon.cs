@@ -132,7 +132,7 @@ public sealed class ThemeIcon : Image
         catch (Exception exception)
         {
             Source = null;
-            Debug.WriteLine($"Failed to load pixel icon '{assetUri}': {exception.Message}");
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine($"Failed to load pixel icon '{assetUri}': {exception.Message}");
         }
     }
 }

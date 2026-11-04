@@ -5212,7 +5212,7 @@ public sealed class ModpackInstallService
             sourceFileId: fileId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (existingDirectories.Count > 0)
         {
-            System.Diagnostics.Debug.WriteLine(
+            global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
                 $"[Modpack] 复用已安装的 CurseForge Mod project={projectId}, file={fileId}");
             // 兼容旧版本已经安装的条目：即使无需重新解压，也要把旧的
             // sourceKind=modpack 升级为逐 Mod 的 modpack-entry，并补齐压缩包
@@ -5335,7 +5335,7 @@ public sealed class ModpackInstallService
             }
         }
 
-        System.Diagnostics.Debug.WriteLine(
+        global::SVL.Core.Platform.Diagnostics.RuntimeDebugLog.WriteLine(
             $"[Modpack] CurseForge Mod 下载失败 project={projectId}, file={fileId}: {lastError?.Message}");
         return (
             false,

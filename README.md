@@ -131,12 +131,9 @@ dotnet run --project SVL.Avalonia/SVL.Avalonia.csproj
 
 ### 打包发布
 
-使用根目录的统一打包脚本，支持 Windows/Linux/macOS 的 Debug/Release 配置：
+使用根目录的统一打包脚本发布 Windows/Linux/macOS Release 版本；需要排查问题时，可在应用设置中开启“调试模式”并打开调试窗口，无需单独下载 Debug 版：
 
 ```powershell
-# Windows x64 Debug 单文件
-.\build.ps1 -Config Debug -Targets windows
-
 # Windows x64 Release
 .\build.ps1 -Config Release -Targets windows
 
@@ -167,9 +164,9 @@ macOS SteamCMD 官方启动包是 Intel 架构，需要 Rosetta 2。
 
 各平台默认包自带运行时；轻量包名称带
 `requires_dotnet10`，需要安装对应架构的 .NET 10 Runtime，不能作为旧版的直接更新文件。
-自包含构建还生成 `SVL.Desktop_v{版本号}_{Debug|Release}.exe`：旧版更新器要求发布资产
-是真正的单文件 EXE，不能将 ZIP 改名为 EXE。要让旧版在线更新找到该文件，仍须将对应
-EXE 附加到发布页；Actions 工件不会自动成为 Release 资产。
+自包含构建还生成 `SVL.Desktop_v{版本号}_Release.exe`：旧版更新器要求发布资产
+是真正的单文件 EXE，不能将 ZIP 改名为 EXE。Actions 工件不会自动成为 Release 资产。
+已有 Debug 预览版需要先手动切换到 Release，才能继续接收后续只提供 Release 的更新。
 
 新版会显示当前包体类型并优先读取 Release 中的 `update.txt`；检查更新时只选择同类型
 的安装包。Windows 支持应用内替换，macOS 和 Linux 当前需前往发布页手动安装。无法识别

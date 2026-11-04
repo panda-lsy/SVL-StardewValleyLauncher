@@ -6,7 +6,7 @@ using System.Text;
 
 namespace SVL.Avalonia.ViewModels;
 
-public partial class DebugConsoleViewModel : ObservableObject
+public partial class DebugConsoleViewModel : ObservableObject, IDisposable
 {
     private readonly DebugConsoleService _consoleService;
 
@@ -50,6 +50,12 @@ public partial class DebugConsoleViewModel : ObservableObject
         }
 
         RefreshFiltered();
+    }
+
+    public void Dispose()
+    {
+        _consoleService.LineAdded -= HandleLineAdded;
+        _consoleService.Cleared -= HandleCleared;
     }
 
     partial void OnShowDebugChanged(bool value) => RefreshFiltered();
